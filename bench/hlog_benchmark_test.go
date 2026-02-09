@@ -5,6 +5,7 @@ import (
 	"io"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/happytoolin/hlog"
 )
@@ -108,4 +109,57 @@ func BenchmarkJSONEncodingReference(b *testing.B) {
 	for b.Loop() {
 		_, _ = io.Discard.Write(payload)
 	}
+}
+
+func BenchmarkNonHTTPManualLifecycle(b *testing.B) {
+	ctx := context.Background()
+	sink := discardSink{}
+
+	fieldProfiles := map[string]map[string]any{
+		"small": {
+			"job.type":    "cleanup",
+			"job.id":      "job_1",
+			"job.success": true,
+			"duration_ms": int64(10),
+			"retry":       false,
+			"attempt":     1,
+		},
+		"medium": buildBenchmarkFields(15),
+		"large":  buildBenchmarkFields(40),
+	}
+
+	for name, fields := range fieldProfiles {
+		b.Run(name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				e := hlog.NewEvent()
+				e.AddMap(fields)
+				snapshot := e.Snapshot()
+				sink.Write(ctx, hlog.LevelInfo, "job_completed", snapshot.Fields)
+			}
+		})
+	}
+}
+
+func BenchmarkNonHTTPBackgroundJob(b *testing.B) {
+	sink := discardSink{}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		ctx, _ := hlog.NewContext(context.Background())
+		hlog.Add(ctx, "job.id", "job_8472")
+		hlog.Add(ctx, "worker", "payments")
+		hlog.Add(ctx, "attempt", 1)
+		hlog.Add(ctx, "duration_ms", 13)
+		hlog.Add(ctx, "scheduled_at", time.Now().UTC().Truncate(time.Second))
+		hlog.Commit(ctx, sink, hlog.LevelInfo)
+	}
+}
+
+func buildBenchmarkFields(n int) map[string]any {
+	fields := make(map[string]any, n)
+	for i := 0; i < n; i++ {
+		fields["k"+strconv.Itoa(i)] = i
+	}
+	return fields
 }

@@ -179,6 +179,16 @@ go run ./router-fiberv3
 
 ```bash
 just bench
+just bench-core
+just bench-nonhttp
+just bench-adapters
+just bench-integrations
+just bench-fiberv3-middleware
+just bench-middleware-overhead
+just bench-normal-logging
+just bench-router-comparison
+just bench-save-all baseline
+just bench-compare-all baseline current
 ```
 
 ## License
