@@ -1,0 +1,70 @@
+<svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Sampler Chain</title>
+  <desc id="desc">Sampling decision chain from request input to keep/drop output.</desc>
+  <defs>
+    <linearGradient id="frameStroke" x1="0" y1="0" x2="1200" y2="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F60" stop-opacity="0.42" />
+      <stop offset="0.5" stop-color="#F60" stop-opacity="0.2" />
+      <stop offset="1" stop-color="#F60" stop-opacity="0.4" />
+    </linearGradient>
+    <linearGradient id="flowStroke" x1="120" y1="260" x2="1090" y2="260" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F60" stop-opacity="0.8" />
+      <stop offset="1" stop-color="#F60" stop-opacity="0.6" />
+    </linearGradient>
+    <filter id="lineGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur" />
+      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+    </filter>
+    <radialGradient id="vignette" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(600 260) rotate(90) scale(340 680)">
+      <stop offset="0.72" stop-color="#F2F2F0" stop-opacity="0" />
+      <stop offset="1" stop-color="#F60" stop-opacity="0.18" />
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="520" fill="#F2F2F0" />
+  <rect x="8" y="8" width="1184" height="504" fill="none" stroke="url(#frameStroke)" stroke-width="1.5" />
+
+  <text x="60" y="76" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="42" font-weight="700" fill="#F60">Sampler Chain</text>
+  <text x="60" y="104" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="17" fill="#F60" fill-opacity="0.82">Rule evaluation decides whether an event is written.</text>
+
+  <path d="M180 290H300" stroke="url(#flowStroke)" stroke-width="3" stroke-linecap="round" filter="url(#lineGlow)" />
+  <path d="M780 290H900" stroke="url(#flowStroke)" stroke-width="3" stroke-linecap="round" filter="url(#lineGlow)" />
+
+  <g transform="translate(60 186)">
+    <rect width="120" height="208" rx="12" fill="#F2F2F0" stroke="#F60" stroke-opacity="0.58" stroke-width="1.6" />
+    <text x="60" y="60" text-anchor="middle" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#F60">INPUT</text>
+    <text x="60" y="92" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="13" fill="#F60">request</text>
+    <text x="60" y="112" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="13" fill="#F60">context</text>
+    <circle cx="120" cy="104" r="3.5" fill="#F60" />
+  </g>
+
+  <g transform="translate(300 142)">
+    <rect width="480" height="296" rx="12" fill="#F2F2F0" stroke="#F60" stroke-opacity="0.62" stroke-width="1.8" />
+    <rect width="480" height="40" rx="12" fill="#F60" fill-opacity="0.1" />
+    <text x="18" y="27" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#F60">CHAIN RULES</text>
+
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="16" fill="#F60">
+      <rect x="18" y="58" width="444" height="58" rx="8" fill="#F60" fill-opacity="0.08" stroke="#F60" stroke-opacity="0.22" />
+      <text x="32" y="93">1. has_error == true        -> keep</text>
+
+      <rect x="18" y="128" width="444" height="58" rx="8" fill="#F60" fill-opacity="0.08" stroke="#F60" stroke-opacity="0.22" />
+      <text x="32" y="163">2. path == "/admin"         -> keep</text>
+
+      <rect x="18" y="198" width="444" height="58" rx="8" fill="#F60" fill-opacity="0.08" stroke="#F60" stroke-opacity="0.22" />
+      <text x="32" y="233">3. rate(5%)                 -> keep/drop</text>
+    </g>
+  </g>
+
+  <g transform="translate(900 170)">
+    <rect width="240" height="240" rx="12" fill="#F60" fill-opacity="0.08" stroke="#F60" stroke-opacity="0.72" stroke-width="1.8" />
+    <rect width="240" height="40" rx="12" fill="#F60" fill-opacity="0.14" />
+    <text x="18" y="27" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#F60">DECISION</text>
+    <text x="20" y="92" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="18" font-weight="600" fill="#F60">KEEP</text>
+    <text x="20" y="116" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#F60" fill-opacity="0.8">write structured event</text>
+    <line x1="20" y1="146" x2="220" y2="146" stroke="#F60" stroke-opacity="0.35" />
+    <text x="20" y="186" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="18" fill="#F60" fill-opacity="0.55">DROP</text>
+    <text x="20" y="210" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#F60" fill-opacity="0.55">skip event write</text>
+  </g>
+
+  <rect width="1200" height="520" fill="url(#vignette)" />
+</svg>

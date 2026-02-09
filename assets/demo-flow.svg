@@ -1,0 +1,85 @@
+<svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">happycontext request flow</title>
+  <desc id="desc">Request lifecycle: start, enrich, finalize, write.</desc>
+  <defs>
+    <linearGradient id="frameStroke" x1="0" y1="0" x2="1200" y2="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F60" stop-opacity="0.42" />
+      <stop offset="0.5" stop-color="#F60" stop-opacity="0.2" />
+      <stop offset="1" stop-color="#F60" stop-opacity="0.4" />
+    </linearGradient>
+    <linearGradient id="lineMain" x1="260" y1="286" x2="900" y2="286" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F60" stop-opacity="0.9" />
+      <stop offset="1" stop-color="#F60" stop-opacity="0.62" />
+    </linearGradient>
+    <filter id="lineGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur" />
+      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+    </filter>
+    <radialGradient id="vignette" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(600 260) rotate(90) scale(340 680)">
+      <stop offset="0.72" stop-color="#F2F2F0" stop-opacity="0" />
+      <stop offset="1" stop-color="#F60" stop-opacity="0.18" />
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="520" fill="#F2F2F0" />
+  <rect x="8" y="8" width="1184" height="504" fill="none" stroke="url(#frameStroke)" stroke-width="1.5" />
+
+  <text x="60" y="76" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="42" font-weight="700" fill="#F60">Request Lifecycle</text>
+  <text x="60" y="104" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="17" fill="#F60" fill-opacity="0.82">A single request moves through one event context.</text>
+
+  <path d="M260 288C360 258 440 314 540 288C640 262 720 314 820 288C856 284 878 288 900 288" stroke="url(#lineMain)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" filter="url(#lineGlow)" />
+
+  <g transform="translate(60 142)">
+    <rect width="200" height="300" rx="12" fill="#F2F2F0" stroke="#F60" stroke-opacity="0.58" stroke-width="1.6" />
+    <rect width="200" height="38" rx="12" fill="#F60" fill-opacity="0.1" />
+    <text x="16" y="25" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#F60">01 START</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="13" fill="#F60">
+      <text x="16" y="78">ctx, ev := hc.New()</text>
+      <text x="16" y="108">hc.Add("method", ...)</text>
+      <text x="16" y="138">hc.Add("route", ...)</text>
+      <text x="16" y="168">hc.Add("req_id", ...)</text>
+    </g>
+  </g>
+
+  <g transform="translate(340 142)">
+    <rect width="200" height="300" rx="12" fill="#F2F2F0" stroke="#F60" stroke-opacity="0.58" stroke-width="1.6" />
+    <rect width="200" height="38" rx="12" fill="#F60" fill-opacity="0.1" />
+    <text x="16" y="25" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#F60">02 ENRICH</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="13" fill="#F60">
+      <text x="16" y="78">hc.Add("user_id", ...)</text>
+      <text x="16" y="108">hc.AddMap(fields)</text>
+      <text x="16" y="138">hc.Error(err)</text>
+      <text x="16" y="168">hc.Warn(warn)</text>
+    </g>
+  </g>
+
+  <g transform="translate(620 142)">
+    <rect width="200" height="300" rx="12" fill="#F2F2F0" stroke="#F60" stroke-opacity="0.58" stroke-width="1.6" />
+    <rect width="200" height="38" rx="12" fill="#F60" fill-opacity="0.1" />
+    <text x="16" y="25" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#F60">03 FINALIZE</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="13" fill="#F60">
+      <text x="16" y="78">hc.Add("status", ...)</text>
+      <text x="16" y="108">hc.Add("dur_ms", ...)</text>
+      <text x="16" y="138">sampler.Decide(ev)</text>
+      <text x="16" y="168">event complete</text>
+    </g>
+  </g>
+
+  <g transform="translate(900 142)">
+    <rect width="240" height="300" rx="12" fill="#F60" fill-opacity="0.08" stroke="#F60" stroke-opacity="0.72" stroke-width="1.8" />
+    <rect width="240" height="38" rx="12" fill="#F60" fill-opacity="0.14" />
+    <text x="16" y="25" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#F60">04 WRITE</text>
+    <rect x="16" y="58" width="208" height="220" rx="8" fill="#F2F2F0" stroke="#F60" stroke-opacity="0.3" />
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="12" fill="#F60">
+      <text x="28" y="86">{</text>
+      <text x="38" y="106">"msg": "request_done",</text>
+      <text x="38" y="124">"status": 200,</text>
+      <text x="38" y="142">"duration_ms": 12,</text>
+      <text x="38" y="160">"route": "/orders/:id"</text>
+      <text x="28" y="178">}</text>
+      <text x="28" y="210">sink.Write(event)</text>
+    </g>
+  </g>
+
+  <rect width="1200" height="520" fill="url(#vignette)" />
+</svg>
