@@ -62,9 +62,15 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	_ = http.ListenAndServe(":8080", mw(mux))
+_ = http.ListenAndServe(":8080", mw(mux))
 }
 ```
+
+Other quick starts:
+
+- `net/http + zap` and `net/http + zerolog` are in `## More Examples`
+- `gin`, `echo`, `fiber v2`, and `fiber v3` (with `slog`) are in `## More Examples`
+- Runnable reference apps are in `cmd/examples`
 
 Example output:
 
@@ -112,7 +118,230 @@ Notes:
 
 ## More Examples
 
-Runnable examples are available in `cmd/examples`:
+<details>
+<summary>1. net/http + slog</summary>
+
+```go
+package main
+
+import (
+	"log/slog"
+	"net/http"
+	"os"
+
+	"github.com/happytoolin/happycontext"
+	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	stdhc "github.com/happytoolin/happycontext/integration/std"
+)
+
+func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	sink := slogadapter.New(logger)
+	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		hc.Add(r.Context(), "router", "net/http")
+		w.WriteHeader(http.StatusOK)
+	})
+
+	_ = http.ListenAndServe(":8101", mw(mux))
+}
+```
+</details>
+
+<details>
+<summary>2. gin + slog</summary>
+
+```go
+package main
+
+import (
+	"log/slog"
+	"os"
+
+	"github.com/gin-gonic/gin"
+	"github.com/happytoolin/happycontext"
+	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	ginhc "github.com/happytoolin/happycontext/integration/gin"
+)
+
+func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	sink := slogadapter.New(logger)
+
+	r := gin.New()
+	r.Use(ginhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	r.GET("/users/:id", func(c *gin.Context) {
+		hc.Add(c.Request.Context(), "router", "gin")
+		c.Status(200)
+	})
+
+	_ = r.Run(":8102")
+}
+```
+</details>
+
+<details>
+<summary>3. fiber v2 + slog</summary>
+
+```go
+package main
+
+import (
+	"log/slog"
+	"os"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/happytoolin/happycontext"
+	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	fiberhc "github.com/happytoolin/happycontext/integration/fiber"
+)
+
+func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	sink := slogadapter.New(logger)
+
+	app := fiber.New()
+	app.Use(fiberhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Get("/users/:id", func(c *fiber.Ctx) error {
+		hc.Add(c.UserContext(), "router", "fiber-v2")
+		return c.SendStatus(200)
+	})
+
+	_ = app.Listen(":8104")
+}
+```
+</details>
+
+<details>
+<summary>4. fiber v3 + slog</summary>
+
+```go
+package main
+
+import (
+	"log/slog"
+	"os"
+
+	"github.com/gofiber/fiber/v3"
+	"github.com/happytoolin/happycontext"
+	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	fiberv3hc "github.com/happytoolin/happycontext/integration/fiberv3"
+)
+
+func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	sink := slogadapter.New(logger)
+
+	app := fiber.New()
+	app.Use(fiberv3hc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Get("/users/:id", func(c fiber.Ctx) error {
+		hc.Add(c.Context(), "router", "fiber-v3")
+		return c.SendStatus(200)
+	})
+
+	_ = app.Listen(":8105")
+}
+```
+</details>
+
+<details>
+<summary>5. echo + slog</summary>
+
+```go
+package main
+
+import (
+	"log/slog"
+	"os"
+
+	"github.com/happytoolin/happycontext"
+	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	echohc "github.com/happytoolin/happycontext/integration/echo"
+	"github.com/labstack/echo/v4"
+)
+
+func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	sink := slogadapter.New(logger)
+
+	e := echo.New()
+	e.Use(echohc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	e.GET("/users/:id", func(c echo.Context) error {
+		hc.Add(c.Request().Context(), "router", "echo")
+		return c.NoContent(200)
+	})
+
+	_ = e.Start(":8103")
+}
+```
+</details>
+
+<details>
+<summary>6. net/http + zap</summary>
+
+```go
+package main
+
+import (
+	"net/http"
+
+	"github.com/happytoolin/happycontext"
+	zapadapter "github.com/happytoolin/happycontext/adapter/zap"
+	stdhc "github.com/happytoolin/happycontext/integration/std"
+	"go.uber.org/zap"
+)
+
+func main() {
+	logger := zap.NewExample()
+	sink := zapadapter.New(logger)
+	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		hc.Add(r.Context(), "example", "adapter-zap")
+		w.WriteHeader(http.StatusOK)
+	})
+
+	_ = http.ListenAndServe(":8092", mw(mux))
+}
+```
+</details>
+
+<details>
+<summary>7. net/http + zerolog</summary>
+
+```go
+package main
+
+import (
+	"net/http"
+	"os"
+
+	"github.com/happytoolin/happycontext"
+	zerologadapter "github.com/happytoolin/happycontext/adapter/zerolog"
+	stdhc "github.com/happytoolin/happycontext/integration/std"
+	"github.com/rs/zerolog"
+)
+
+func main() {
+	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
+	sink := zerologadapter.New(&logger)
+	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		hc.Add(r.Context(), "example", "adapter-zerolog")
+		w.WriteHeader(http.StatusOK)
+	})
+
+	_ = http.ListenAndServe(":8093", mw(mux))
+}
+```
+</details>
+
+Runnable commands are also available in `cmd/examples`:
 
 ```bash
 cd cmd/examples
