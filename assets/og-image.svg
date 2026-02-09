@@ -1,0 +1,126 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">happycontext</title>
+  <desc id="desc">Minimal banner with soft grid, smooth signal lines, and subtle depth.</desc>
+  <defs>
+    <linearGradient id="lineMain" x1="60" y1="430" x2="1140" y2="210" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7EE0C3" />
+      <stop offset="1" stop-color="#8FB9FF" />
+    </linearGradient>
+    <linearGradient id="lineSub" x1="60" y1="485" x2="1140" y2="330" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#72DCC0" stop-opacity="0.48" />
+      <stop offset="1" stop-color="#8FB9FF" stop-opacity="0.4" />
+    </linearGradient>
+    <filter id="lineGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4.5" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <linearGradient id="frameStroke" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C8D6F3" stop-opacity="0.42" />
+      <stop offset="0.5" stop-color="#C8D6F3" stop-opacity="0.2" />
+      <stop offset="1" stop-color="#C8D6F3" stop-opacity="0.4" />
+    </linearGradient>
+    <linearGradient id="cornerGlow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#BFD4FF" stop-opacity="0.58" />
+      <stop offset="1" stop-color="#BFD4FF" stop-opacity="0" />
+    </linearGradient>
+    <radialGradient id="vignette" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(600 315) rotate(90) scale(420 760)">
+      <stop offset="0.72" stop-color="#000" stop-opacity="0" />
+      <stop offset="1" stop-color="#000" stop-opacity="0.28" />
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#0F1A35" />
+  <rect x="8" y="8" width="1184" height="614" fill="none" stroke="url(#frameStroke)" stroke-width="1.5" />
+  <rect x="16" y="16" width="1168" height="598" fill="none" stroke="#E2EAFF" stroke-opacity="0.12" stroke-width="1" />
+  <path d="M28 28H148V30H30V148H28V28Z" fill="url(#cornerGlow)" />
+  <path d="M1172 28V148H1170V30H1052V28H1172Z" fill="url(#cornerGlow)" />
+  <path d="M28 602V482H30V600H148V602H28Z" fill="url(#cornerGlow)" />
+  <path d="M1172 602H1052V600H1170V482H1172V602Z" fill="url(#cornerGlow)" />
+  <path d="M60 430C198 374 302 510 430 436C558 362 628 248 760 268C900 289 985 196 1140 210" pathLength="1000" stroke="url(#lineMain)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" filter="url(#lineGlow)" stroke-dasharray="1000 0">
+    <animate attributeName="stroke-dasharray" values="0 1000; 1000 0" dur="12s" fill="freeze" />
+    <animate attributeName="opacity" values="0.9; 1" dur="12s" fill="freeze" />
+  </path>
+  <path d="M60 485C208 440 292 548 430 492C562 438 642 334 772 348C904 362 1006 304 1140 322" pathLength="1000" stroke="url(#lineSub)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1000 0">
+    <animate attributeName="stroke-dasharray" values="0 1000; 1000 0" dur="16s" begin="0.9s" fill="freeze" />
+    <animate attributeName="opacity" values="0.6; 0.85" dur="16s" begin="0.9s" fill="freeze" />
+  </path>
+  <g fill="#BCEBDD" opacity="0.9">
+    <circle cx="430" cy="436" r="4.2">
+      <animate attributeName="r" values="3.6; 4.8" dur="2.0s" begin="0s" fill="freeze" />
+      <animate attributeName="opacity" values="0.65; 1" dur="2.0s" begin="0s" fill="freeze" />
+    </circle>
+    <circle cx="760" cy="268" r="4.2">
+      <animate attributeName="r" values="3.6; 4.8" dur="2.0s" begin="0.35s" fill="freeze" />
+      <animate attributeName="opacity" values="0.65; 1" dur="2.0s" begin="0.35s" fill="freeze" />
+    </circle>
+    <circle cx="985" cy="196" r="4.2">
+      <animate attributeName="r" values="3.6; 4.8" dur="2.0s" begin="0.7s" fill="freeze" />
+      <animate attributeName="opacity" values="0.65; 1" dur="2.0s" begin="0.7s" fill="freeze" />
+    </circle>
+  </g>
+  <g fill="#ECF2FF">
+    <text x="72" y="200" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="78" font-weight="700" letter-spacing="-1.3">happycontext</text>
+    <text x="72" y="252" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="30" font-weight="400" fill-opacity="0.84">One structured event per request</text>
+  </g>
+  <g font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+    <text x="72" y="538" fill="#7F93BA" font-size="12" font-weight="600" letter-spacing="1.6">LOGGERS</text>
+    <text x="72" y="566" fill="#AFC0E2" fill-opacity="0.95" font-size="22">slog</text>
+    <text x="150" y="566" fill="#8FA3CC" font-size="20">•</text>
+    <text x="174" y="566" fill="#AFC0E2" fill-opacity="0.95" font-size="22">zap</text>
+    <text x="242" y="566" fill="#8FA3CC" font-size="20">•</text>
+    <text x="266" y="566" fill="#AFC0E2" fill-opacity="0.95" font-size="22">zerolog</text>
+    <line x1="390" y1="534" x2="390" y2="574" stroke="#B9C9EA" stroke-opacity="0.3" stroke-width="1">
+      <animate attributeName="stroke-opacity" values="0.22;0.45;0.22" dur="2.6s" repeatCount="indefinite" />
+    </line>
+    <text x="418" y="538" fill="#7F93BA" font-size="12" font-weight="600" letter-spacing="1.6">INTEGRATIONS</text>
+    <text x="418" y="566" fill="#AFC0E2" fill-opacity="0.95" font-size="22">net/http</text>
+    <text x="532" y="566" fill="#8FA3CC" font-size="20">•</text>
+    <text x="556" y="566" fill="#AFC0E2" fill-opacity="0.95" font-size="22">gin</text>
+    <text x="606" y="566" fill="#8FA3CC" font-size="20">•</text>
+    <text x="630" y="566" fill="#AFC0E2" fill-opacity="0.95" font-size="22">echo</text>
+    <text x="696" y="566" fill="#8FA3CC" font-size="20">•</text>
+    <text x="720" y="566" fill="#AFC0E2" fill-opacity="0.95" font-size="22">fiber</text>
+  </g>
+  <g transform="translate(660 56)">
+    <rect width="500" height="338" rx="14" fill="#091224" fill-opacity="0.82" stroke="#BFD0F0" stroke-opacity="0.18" />
+    <rect x="0" y="0" width="500" height="34" rx="14" fill="#0F1D38" fill-opacity="0.9" />
+    <circle cx="18" cy="15" r="4.2" fill="#67DABF" />
+    <circle cx="34" cy="15" r="4.2" fill="#8BB7FF" />
+    <circle cx="50" cy="15" r="4.2" fill="#B1C6EE" />
+    <text x="64" y="21" fill="#D6E3FF" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="12">request.go</text>
+    <text x="18" y="62" fill="#DCE8FF" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="15">ctx := r.Context()
+      <set attributeName="opacity" to="0" begin="0s" dur="0.001s" fill="freeze" />
+      <animate attributeName="opacity" values="0;1" dur="0.22s" begin="0.2s" fill="freeze" />
+    </text>
+    <text x="18" y="92" fill="#9DE8D1" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="15">hc.Add(ctx, "user_id", "u_8472")
+      <set attributeName="opacity" to="0" begin="0s" dur="0.001s" fill="freeze" />
+      <animate attributeName="opacity" values="0;1" dur="0.22s" begin="0.45s" fill="freeze" />
+    </text>
+    <text x="18" y="122" fill="#9DE8D1" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="15">hc.Add(ctx, "feature", "checkout")
+      <set attributeName="opacity" to="0" begin="0s" dur="0.001s" fill="freeze" />
+      <animate attributeName="opacity" values="0;1" dur="0.22s" begin="0.7s" fill="freeze" />
+    </text>
+    <text x="18" y="152" fill="#DCE8FF" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="15">hc.Add(ctx, "http.status", 200)
+      <set attributeName="opacity" to="0" begin="0s" dur="0.001s" fill="freeze" />
+      <animate attributeName="opacity" values="0;1" dur="0.22s" begin="0.95s" fill="freeze" />
+    </text>
+    <text x="18" y="182" fill="#AFC0E2" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="15">w.WriteHeader(http.StatusOK)
+      <set attributeName="opacity" to="0" begin="0s" dur="0.001s" fill="freeze" />
+      <animate attributeName="opacity" values="0;1" dur="0.22s" begin="1.2s" fill="freeze" />
+    </text>
+    <g>
+      <set attributeName="opacity" to="0" begin="0s" dur="0.001s" fill="freeze" />
+      <animate attributeName="opacity" values="0;1" dur="0.3s" begin="1.65s" fill="freeze" />
+      <rect x="12" y="206" width="476" height="124" rx="8" fill="#0B1730" fill-opacity="0.88" stroke="#BFD0F0" stroke-opacity="0.18" />
+      <text x="20" y="224" fill="#D6E3FF" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="14">output.json</text>
+      <text x="20" y="244" fill="#DCE8FF" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="14">{</text>
+      <text x="30" y="262" fill="#DCE8FF" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="14">"level": "INFO", "msg": "request_completed",</text>
+      <text x="30" y="280" fill="#DCE8FF" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="14">"http": { "status": 200, "route": "/orders/{id}" },</text>
+      <text x="30" y="298" fill="#DCE8FF" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="14">"user": { "id": "u_8472", "feature": "checkout" }</text>
+      <text x="20" y="316" fill="#DCE8FF" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="14">}</text>
+    </g>
+  </g>
+  <rect width="1200" height="630" fill="url(#vignette)" />
+</svg>

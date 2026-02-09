@@ -1,5 +1,13 @@
 # happycontext
 
+![happycontext banner](./assets/og-image.svg)
+
+[![CI](https://github.com/happytoolin/happycontext/actions/workflows/ci.yml/badge.svg)](https://github.com/happytoolin/happycontext/actions/workflows/ci.yml)
+[![Release](https://github.com/happytoolin/happycontext/actions/workflows/release.yml/badge.svg)](https://github.com/happytoolin/happycontext/actions/workflows/release.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/happytoolin/happycontext.svg)](https://pkg.go.dev/github.com/happytoolin/happycontext)
+[![Go Version](https://img.shields.io/badge/go-1.24%2B-00ADD8?logo=go)](https://go.dev/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
 `happycontext` helps Go services emit one structured log event per request.
 Instead of scattered log lines across handlers and middleware, you collect context during execution and write a single, complete event at the end.
 
@@ -9,8 +17,8 @@ Instead of scattered log lines across handlers and middleware, you collect conte
 - Consistent fields across handlers, middleware, and frameworks
 - Built-in sampling for healthy traffic
 - Error and panic events are always preserved
-- Works with `slog`, `zap`, and `zerolog`.
-- Integrates with `net/http`, `gin`, `echo`, `fiber`, and `fiber v3`.
+- Works with `slog`, `zap`, and `zerolog`
+- Integrates with `net/http`, `gin`, `echo`, `fiber`, and `fiber v3`
 
 ## Install
 
@@ -55,6 +63,23 @@ func main() {
 	})
 
 	_ = http.ListenAndServe(":8080", mw(mux))
+}
+```
+
+Example output:
+
+```json
+{
+  "time": "2026-02-09T14:03:12.451Z",
+  "level": "INFO",
+  "msg": "request_completed",
+  "duration_ms": 3,
+  "feature": "checkout",
+  "http.method": "GET",
+  "http.path": "/orders/123",
+  "http.route": "GET /orders/{id}",
+  "http.status": 200,
+  "user_id": "u_8472"
 }
 ```
 
