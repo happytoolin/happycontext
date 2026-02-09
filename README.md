@@ -191,6 +191,13 @@ just bench-save-all baseline
 just bench-compare-all baseline current
 ```
 
+## Releases
+
+- CI runs on pull requests and pushes to `main` (`.github/workflows/ci.yml`)
+- Releases and changelog are automated with release-please (`.github/workflows/release.yml`)
+- `CHANGELOG.md` is maintained from conventional commits
+- After a GitHub Release is published, module index refresh runs for Go proxy/pkg sites (`.github/workflows/go-proxy-sync.yml`)
+
 ## License
 
 MIT

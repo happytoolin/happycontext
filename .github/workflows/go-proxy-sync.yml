@@ -1,0 +1,44 @@
+name: go-proxy-sync
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Refresh Go module indexes
+        shell: bash
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          while IFS= read -r modfile; do
+            module_path="$(sed -n 's/^module //p' "$modfile" | head -n1)"
+            if [[ -z "$module_path" ]]; then
+              continue
+            fi
+
+            echo "== syncing ${module_path}@${TAG} =="
+            encoded_module="${module_path//\//%2F}"
+
+            # If a module doesn't have a matching tag/version, continue without failing
+            # so root-module release flow remains healthy.
+            for url in \
+              "https://proxy.golang.org/${encoded_module}/@v/${TAG}.info" \
+              "https://proxy.golang.org/${encoded_module}/@latest" \
+              "https://pkg.go.dev/${module_path}@${TAG}"
+            do
+              echo "request: $url"
+              curl -fsSIL --retry 3 --retry-delay 2 "$url" >/dev/null || \
+                echo "non-fatal: could not refresh $url"
+            done
+          done < <(printf '%s\n' go.mod && git ls-files '**/go.mod')

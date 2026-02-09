@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Go
+        uses: actions/setup-go@v6.2.0
+        with:
+          go-version: '1.25.x'
+          check-latest: true
+          cache: true
+
+      - name: Test all modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r modfile; do
+            moddir="$(dirname "$modfile")"
+            echo "== testing $moddir =="
+            (
+              cd "$moddir"
+              go test ./...
+            )
+          done < <(printf '%s\n' go.mod && git ls-files '**/go.mod')
+
+      - name: Vet all modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r modfile; do
+            moddir="$(dirname "$modfile")"
+            echo "== vet $moddir =="
+            (
+              cd "$moddir"
+              go vet ./...
+            )
+          done < <(printf '%s\n' go.mod && git ls-files '**/go.mod')
