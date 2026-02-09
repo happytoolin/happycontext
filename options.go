@@ -7,7 +7,8 @@ type Config struct {
 	// Sink receives the finalized event.
 	Sink Sink
 
-	// SamplingRate controls random sampling for non-error requests in [0,1].
+	// SamplingRate controls random sampling for non-error requests in [0,1]. Default is 1.0.
+	// 0.0 means no sampling, 1.0 means full sampling.
 	SamplingRate float64
 
 	// Message is the final log message.

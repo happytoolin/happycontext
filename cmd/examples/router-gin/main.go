@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log/slog"
 	"os"
 
@@ -17,9 +18,37 @@ func main() {
 	r := gin.New()
 	r.Use(ginhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	r.GET("/users/:id", func(c *gin.Context) {
-		hc.Add(c.Request.Context(), "router", "gin")
+		ctx := c.Request.Context()
+		id := c.Param("id")
+
+		hc.Add(ctx, "router", "gin")
+		hc.Add(ctx, "event_attached", hc.FromContext(ctx) != nil)
+		hc.AddMap(ctx, map[string]any{
+			"user": map[string]any{
+				"id":   id,
+				"plan": "pro",
+			},
+			"request": map[string]any{
+				"feature": "profile",
+				"tags":    []string{"examples", "router-gin"},
+			},
+		})
+		hc.SetRoute(ctx, "/users/:id")
+
+		if c.Query("debug") == "1" {
+			hc.SetLevel(ctx, hc.LevelDebug)
+		}
+		if level, ok := hc.GetLevel(ctx); ok {
+			hc.Add(ctx, "requested_level", level)
+		}
+		if c.Query("fail") == "1" {
+			hc.Error(ctx, errors.New("demo failure"))
+			c.Status(500)
+			return
+		}
+
 		c.Status(200)
 	})
 
-	_ = r.Run(":8102")
+	_ = r.Run(":8105")
 }
