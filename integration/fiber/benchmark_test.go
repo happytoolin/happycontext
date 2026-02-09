@@ -19,9 +19,9 @@ func (discardSink) Write(context.Context, string, string, map[string]any) {}
 func BenchmarkRouter_fiber(b *testing.B) {
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
 		app := fiber.New()
-		app.Use(Middleware(happycontext.Config{Sink: discardSink{}, SamplingRate: 1}))
+		app.Use(Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1}))
 		app.Get("/orders/:id", func(c *fiber.Ctx) error {
-			happycontext.Add(c.UserContext(), "user_id", "u_1")
+			hc.Add(c.UserContext(), "user_id", "u_1")
 			return c.SendStatus(http.StatusNoContent)
 		})
 		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)

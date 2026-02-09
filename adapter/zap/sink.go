@@ -25,7 +25,7 @@ func New(l *zap.Logger) *Sink {
 	return &Sink{logger: l}
 }
 
-// Write implements happycontext.Sink.
+// Write implements hc.Sink.
 func (z *Sink) Write(_ context.Context, level, message string, fields map[string]any) {
 	if z == nil || z.logger == nil {
 		return
@@ -46,15 +46,15 @@ func (z *Sink) Write(_ context.Context, level, message string, fields map[string
 	}
 
 	switch level {
-	case happycontext.LevelDebug:
+	case hc.LevelDebug:
 		z.logger.Debug(message, zapFields...)
-	case happycontext.LevelWarn:
+	case hc.LevelWarn:
 		z.logger.Warn(message, zapFields...)
-	case happycontext.LevelError:
+	case hc.LevelError:
 		z.logger.Error(message, zapFields...)
 	default:
 		z.logger.Info(message, zapFields...)
 	}
 }
 
-var _ happycontext.Sink = (*Sink)(nil)
+var _ hc.Sink = (*Sink)(nil)

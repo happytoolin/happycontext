@@ -10,7 +10,7 @@ import (
 )
 
 // Middleware returns a Fiber v2 middleware that captures one event per request.
-func Middleware(cfg happycontext.Config) fiber.Handler {
+func Middleware(cfg hc.Config) fiber.Handler {
 	cfg = common.NormalizeConfig(cfg)
 	if cfg.Sink == nil {
 		return func(c *fiber.Ctx) error {

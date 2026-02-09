@@ -7,7 +7,7 @@ import (
 )
 
 // Middleware returns a Gin middleware that captures one event per request.
-func Middleware(cfg happycontext.Config) gin.HandlerFunc {
+func Middleware(cfg hc.Config) gin.HandlerFunc {
 	cfg = common.NormalizeConfig(cfg)
 	if cfg.Sink == nil {
 		return func(c *gin.Context) {

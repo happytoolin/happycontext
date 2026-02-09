@@ -22,7 +22,7 @@ import (
 )
 
 type runResult struct {
-	event         happycontext.CapturedEvent
+	event         hc.CapturedEvent
 	panicObserved bool
 }
 
@@ -89,14 +89,14 @@ func assertConsistency(t *testing.T, mode string, out runResult) {
 
 	switch mode {
 	case "success":
-		if out.event.Level != happycontext.LevelInfo {
+		if out.event.Level != hc.LevelInfo {
 			t.Fatalf("level = %s, want INFO", out.event.Level)
 		}
 		if statusFromField(t, out.event.Fields["http.status"]) != http.StatusOK {
 			t.Fatalf("status = %v, want %d", out.event.Fields["http.status"], http.StatusOK)
 		}
 	case "error":
-		if out.event.Level != happycontext.LevelError {
+		if out.event.Level != hc.LevelError {
 			t.Fatalf("level = %s, want ERROR", out.event.Level)
 		}
 		if statusFromField(t, out.event.Fields["http.status"]) != http.StatusInternalServerError {
@@ -109,7 +109,7 @@ func assertConsistency(t *testing.T, mode string, out runResult) {
 		if !out.panicObserved {
 			t.Fatal("expected panic propagation/observation")
 		}
-		if out.event.Level != happycontext.LevelError {
+		if out.event.Level != hc.LevelError {
 			t.Fatalf("level = %s, want ERROR", out.event.Level)
 		}
 		if statusFromField(t, out.event.Fields["http.status"]) != http.StatusInternalServerError {
@@ -142,7 +142,7 @@ func TestIntegrationImplicitErrorStatusConsistency(t *testing.T) {
 			if status != http.StatusInternalServerError {
 				t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 			}
-			if out.event.Level != happycontext.LevelError {
+			if out.event.Level != hc.LevelError {
 				t.Fatalf("level = %s, want ERROR", out.event.Level)
 			}
 			if _, ok := out.event.Fields["error"].(map[string]any); !ok {
@@ -154,13 +154,13 @@ func TestIntegrationImplicitErrorStatusConsistency(t *testing.T) {
 
 func runStd(t *testing.T, mode string) runResult {
 	t.Helper()
-	sink := happycontext.NewTestSink()
-	mw := stdhappycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1})
+	sink := hc.NewTestSink()
+	mw := stdhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /orders/{id}", func(w http.ResponseWriter, r *http.Request) {
 		switch mode {
 		case "error":
-			happycontext.Error(r.Context(), errors.New("boom"))
+			hc.Error(r.Context(), errors.New("boom"))
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		case "panic":
@@ -182,9 +182,9 @@ func runStd(t *testing.T, mode string) runResult {
 
 func runGin(t *testing.T, mode string) runResult {
 	t.Helper()
-	sink := happycontext.NewTestSink()
+	sink := hc.NewTestSink()
 	r := gin.New()
-	r.Use(ginhappycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1}))
+	r.Use(ginhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	r.GET("/orders/:id", func(c *gin.Context) {
 		switch mode {
 		case "error":
@@ -210,9 +210,9 @@ func runGin(t *testing.T, mode string) runResult {
 
 func runEcho(t *testing.T, mode string) runResult {
 	t.Helper()
-	sink := happycontext.NewTestSink()
+	sink := hc.NewTestSink()
 	e := echo.New()
-	e.Use(echohappycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1}))
+	e.Use(echohappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	e.GET("/orders/:id", func(c echo.Context) error {
 		switch mode {
 		case "error":
@@ -236,10 +236,10 @@ func runEcho(t *testing.T, mode string) runResult {
 
 func runFiber(t *testing.T, mode string) runResult {
 	t.Helper()
-	sink := happycontext.NewTestSink()
+	sink := hc.NewTestSink()
 	app := fiber.New()
 	app.Use(recoverv2.New())
-	app.Use(fiberhappycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	app.Get("/orders/:id", func(c *fiber.Ctx) error {
 		switch mode {
 		case "error":
@@ -257,10 +257,10 @@ func runFiber(t *testing.T, mode string) runResult {
 
 func runFiberV3(t *testing.T, mode string) runResult {
 	t.Helper()
-	sink := happycontext.NewTestSink()
+	sink := hc.NewTestSink()
 	app := fiberv3.New()
 	app.Use(recoverv3.New())
-	app.Use(fiberv3happycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberv3happycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	app.Get("/orders/:id", func(c fiberv3.Ctx) error {
 		switch mode {
 		case "error":
@@ -278,9 +278,9 @@ func runFiberV3(t *testing.T, mode string) runResult {
 
 func runGinImplicitError(t *testing.T) runResult {
 	t.Helper()
-	sink := happycontext.NewTestSink()
+	sink := hc.NewTestSink()
 	r := gin.New()
-	r.Use(ginhappycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1}))
+	r.Use(ginhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	r.GET("/orders/:id", func(c *gin.Context) {
 		_ = c.Error(errors.New("boom"))
 	})
@@ -290,9 +290,9 @@ func runGinImplicitError(t *testing.T) runResult {
 
 func runEchoImplicitError(t *testing.T) runResult {
 	t.Helper()
-	sink := happycontext.NewTestSink()
+	sink := hc.NewTestSink()
 	e := echo.New()
-	e.Use(echohappycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1}))
+	e.Use(echohappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	e.GET("/orders/:id", func(c echo.Context) error {
 		return errors.New("boom")
 	})
@@ -302,9 +302,9 @@ func runEchoImplicitError(t *testing.T) runResult {
 
 func runFiberImplicitError(t *testing.T) runResult {
 	t.Helper()
-	sink := happycontext.NewTestSink()
+	sink := hc.NewTestSink()
 	app := fiber.New()
-	app.Use(fiberhappycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	app.Get("/orders/:id", func(c *fiber.Ctx) error {
 		return errors.New("boom")
 	})
@@ -314,9 +314,9 @@ func runFiberImplicitError(t *testing.T) runResult {
 
 func runFiberV3ImplicitError(t *testing.T) runResult {
 	t.Helper()
-	sink := happycontext.NewTestSink()
+	sink := hc.NewTestSink()
 	app := fiberv3.New()
-	app.Use(fiberv3happycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberv3happycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	app.Get("/orders/:id", func(c fiberv3.Ctx) error {
 		return errors.New("boom")
 	})
@@ -324,7 +324,7 @@ func runFiberV3ImplicitError(t *testing.T) runResult {
 	return runResult{event: onlyEvent(t, sink)}
 }
 
-func onlyEvent(t *testing.T, sink *happycontext.TestSink) happycontext.CapturedEvent {
+func onlyEvent(t *testing.T, sink *hc.TestSink) hc.CapturedEvent {
 	t.Helper()
 	events := sink.Events()
 	if len(events) != 1 {

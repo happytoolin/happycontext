@@ -25,11 +25,11 @@ func TestStartRequestAddsBaseFields(t *testing.T) {
 
 func TestFinalizeRequestEarlyReturnGuards(t *testing.T) {
 	ctx, event := StartRequest(context.Background(), "GET", "/x")
-	sink := happycontext.NewTestSink()
+	sink := hc.NewTestSink()
 
-	FinalizeRequest(happycontext.Config{}, FinalizeInput{Ctx: ctx, Event: event, StatusCode: 200})
-	FinalizeRequest(happycontext.Config{Sink: sink}, FinalizeInput{Ctx: nil, Event: event, StatusCode: 200})
-	FinalizeRequest(happycontext.Config{Sink: sink}, FinalizeInput{Ctx: ctx, Event: nil, StatusCode: 200})
+	FinalizeRequest(hc.Config{}, FinalizeInput{Ctx: ctx, Event: event, StatusCode: 200})
+	FinalizeRequest(hc.Config{Sink: sink}, FinalizeInput{Ctx: nil, Event: event, StatusCode: 200})
+	FinalizeRequest(hc.Config{Sink: sink}, FinalizeInput{Ctx: ctx, Event: nil, StatusCode: 200})
 
 	if len(sink.Events()) != 0 {
 		t.Fatal("expected no writes from guarded paths")
@@ -38,8 +38,8 @@ func TestFinalizeRequestEarlyReturnGuards(t *testing.T) {
 
 func TestFinalizeRequestRespectsSamplingDrop(t *testing.T) {
 	ctx, event := StartRequest(context.Background(), "GET", "/x")
-	sink := happycontext.NewTestSink()
-	cfg := NormalizeConfig(happycontext.Config{Sink: sink, SamplingRate: 0})
+	sink := hc.NewTestSink()
+	cfg := NormalizeConfig(hc.Config{Sink: sink, SamplingRate: 0})
 
 	FinalizeRequest(cfg, FinalizeInput{
 		Ctx:        ctx,
@@ -56,8 +56,8 @@ func TestFinalizeRequestRespectsSamplingDrop(t *testing.T) {
 
 func TestFinalizeRequestMarksErrorAndRoute(t *testing.T) {
 	ctx, event := StartRequest(context.Background(), "POST", "/payments")
-	sink := happycontext.NewTestSink()
-	cfg := NormalizeConfig(happycontext.Config{Sink: sink, SamplingRate: 1})
+	sink := hc.NewTestSink()
+	cfg := NormalizeConfig(hc.Config{Sink: sink, SamplingRate: 1})
 
 	FinalizeRequest(cfg, FinalizeInput{
 		Ctx:        ctx,
@@ -73,8 +73,8 @@ func TestFinalizeRequestMarksErrorAndRoute(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level != happycontext.LevelError {
-		t.Fatalf("level = %s, want %s", events[0].Level, happycontext.LevelError)
+	if events[0].Level != hc.LevelError {
+		t.Fatalf("level = %s, want %s", events[0].Level, hc.LevelError)
 	}
 	if events[0].Fields["http.route"] != "/payments/:id" {
 		t.Fatalf("route = %v", events[0].Fields["http.route"])
@@ -86,8 +86,8 @@ func TestFinalizeRequestMarksErrorAndRoute(t *testing.T) {
 
 func TestFinalizeRequestPanicAddsMetadata(t *testing.T) {
 	ctx, event := StartRequest(context.Background(), "GET", "/panic")
-	sink := happycontext.NewTestSink()
-	cfg := NormalizeConfig(happycontext.Config{Sink: sink, SamplingRate: 1})
+	sink := hc.NewTestSink()
+	cfg := NormalizeConfig(hc.Config{Sink: sink, SamplingRate: 1})
 
 	FinalizeRequest(cfg, FinalizeInput{
 		Ctx:        ctx,
@@ -105,16 +105,16 @@ func TestFinalizeRequestPanicAddsMetadata(t *testing.T) {
 	if _, ok := events[0].Fields["panic"].(map[string]any); !ok {
 		t.Fatal("expected panic field")
 	}
-	if events[0].Level != happycontext.LevelError {
+	if events[0].Level != hc.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level)
 	}
 }
 
 func TestFinalizeRequestAppliesRequestedLevelFloor(t *testing.T) {
 	ctx, event := StartRequest(context.Background(), "GET", "/x")
-	happycontext.SetLevel(ctx, happycontext.LevelWarn)
-	sink := happycontext.NewTestSink()
-	cfg := NormalizeConfig(happycontext.Config{Sink: sink, SamplingRate: 1})
+	hc.SetLevel(ctx, hc.LevelWarn)
+	sink := hc.NewTestSink()
+	cfg := NormalizeConfig(hc.Config{Sink: sink, SamplingRate: 1})
 
 	FinalizeRequest(cfg, FinalizeInput{
 		Ctx:        ctx,
@@ -128,7 +128,7 @@ func TestFinalizeRequestAppliesRequestedLevelFloor(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level != happycontext.LevelWarn {
+	if events[0].Level != hc.LevelWarn {
 		t.Fatalf("level = %s, want WARN", events[0].Level)
 	}
 }

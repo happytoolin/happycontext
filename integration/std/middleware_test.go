@@ -25,7 +25,7 @@ func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {
 	})
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		happycontext.Add(r.Context(), "example", "std-integration")
+		hc.Add(r.Context(), "example", "std-integration")
 		w.WriteHeader(http.StatusAccepted)
 	}))
 
@@ -76,7 +76,7 @@ func TestMiddlewarePanicPropagatesAndLogsError(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level != happycontext.LevelError {
+	if events[0].Level != hc.LevelError {
 		t.Fatalf("expected error level, got %s", events[0].Level)
 	}
 	if events[0].Fields["http.status"] != http.StatusInternalServerError {
@@ -149,7 +149,7 @@ func TestMiddlewarePanicAfterCommittedStatusKeepsCommittedStatus(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level != happycontext.LevelError {
+	if events[0].Level != hc.LevelError {
 		t.Fatalf("expected error level, got %s", events[0].Level)
 	}
 	if events[0].Fields["http.status"] != http.StatusCreated {

@@ -1,4 +1,4 @@
-package happycontext
+package hc
 
 func isValidLevel(level string) bool {
 	switch level {

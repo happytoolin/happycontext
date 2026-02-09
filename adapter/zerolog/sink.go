@@ -18,7 +18,7 @@ func New(l *zerolog.Logger) *Sink {
 	return &Sink{logger: l}
 }
 
-// Write implements happycontext.Sink.
+// Write implements hc.Sink.
 func (z *Sink) Write(_ context.Context, level, message string, fields map[string]any) {
 	if z == nil || z.logger == nil {
 		return
@@ -29,11 +29,11 @@ func (z *Sink) Write(_ context.Context, level, message string, fields map[string
 
 	event := z.logger.Info()
 	switch level {
-	case happycontext.LevelDebug:
+	case hc.LevelDebug:
 		event = z.logger.Debug()
-	case happycontext.LevelWarn:
+	case hc.LevelWarn:
 		event = z.logger.Warn()
-	case happycontext.LevelError:
+	case hc.LevelError:
 		event = z.logger.Error()
 	}
 
@@ -80,4 +80,4 @@ func (z *Sink) Write(_ context.Context, level, message string, fields map[string
 	event.Msg(message)
 }
 
-var _ happycontext.Sink = (*Sink)(nil)
+var _ hc.Sink = (*Sink)(nil)

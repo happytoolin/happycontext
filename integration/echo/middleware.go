@@ -10,7 +10,7 @@ import (
 )
 
 // Middleware returns an Echo middleware that captures one event per request.
-func Middleware(cfg happycontext.Config) echo.MiddlewareFunc {
+func Middleware(cfg hc.Config) echo.MiddlewareFunc {
 	cfg = common.NormalizeConfig(cfg)
 	if cfg.Sink == nil {
 		return func(next echo.HandlerFunc) echo.HandlerFunc {

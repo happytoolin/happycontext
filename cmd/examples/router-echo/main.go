@@ -15,9 +15,9 @@ func main() {
 	sink := slogadapter.New(logger)
 
 	e := echo.New()
-	e.Use(echohappycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1}))
+	e.Use(echohappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	e.GET("/users/:id", func(c echo.Context) error {
-		happycontext.Add(c.Request().Context(), "router", "echo")
+		hc.Add(c.Request().Context(), "router", "echo")
 		return c.NoContent(200)
 	})
 

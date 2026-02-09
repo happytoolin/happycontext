@@ -10,7 +10,7 @@ import (
 )
 
 // Config controls standard net/http middleware behavior.
-type Config = happycontext.Config
+type Config = hc.Config
 
 // Middleware wraps an http.Handler with happycontext request lifecycle logging.
 func Middleware(cfg Config) func(http.Handler) http.Handler {

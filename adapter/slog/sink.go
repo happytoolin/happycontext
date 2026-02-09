@@ -39,7 +39,7 @@ func NewWithOptions(l *slog.Logger, opts SinkOptions) *Sink {
 	return &Sink{logger: l, deterministicOrder: opts.DeterministicOrder}
 }
 
-// Write implements happycontext.Sink.
+// Write implements hc.Sink.
 func (s *Sink) Write(ctx context.Context, level, message string, fields map[string]any) {
 	if s == nil || s.logger == nil {
 		return
@@ -51,11 +51,11 @@ func (s *Sink) Write(ctx context.Context, level, message string, fields map[stri
 
 	slogLevel := slog.LevelInfo
 	switch level {
-	case happycontext.LevelDebug:
+	case hc.LevelDebug:
 		slogLevel = slog.LevelDebug
-	case happycontext.LevelWarn:
+	case hc.LevelWarn:
 		slogLevel = slog.LevelWarn
-	case happycontext.LevelError:
+	case hc.LevelError:
 		slogLevel = slog.LevelError
 	}
 
@@ -82,4 +82,4 @@ func (s *Sink) Write(ctx context.Context, level, message string, fields map[stri
 	s.logger.Log(ctx, slogLevel, message, attrs...)
 }
 
-var _ happycontext.Sink = (*Sink)(nil)
+var _ hc.Sink = (*Sink)(nil)

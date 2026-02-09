@@ -39,21 +39,21 @@ func BenchmarkAdapter_slog(b *testing.B) {
 	b.Run("write_small", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			sink.Write(ctx, happycontext.LevelInfo, "request_completed", benchFieldsSmall)
+			sink.Write(ctx, hc.LevelInfo, "request_completed", benchFieldsSmall)
 		}
 	})
 
 	b.Run("write_medium", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			sink.Write(ctx, happycontext.LevelInfo, "request_completed", medium)
+			sink.Write(ctx, hc.LevelInfo, "request_completed", medium)
 		}
 	})
 
 	b.Run("write_medium_deterministic", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			sinkDeterministic.Write(ctx, happycontext.LevelInfo, "request_completed", medium)
+			sinkDeterministic.Write(ctx, hc.LevelInfo, "request_completed", medium)
 		}
 	})
 }

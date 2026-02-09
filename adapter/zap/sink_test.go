@@ -44,9 +44,9 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 		level string
 		want  zapcore.Level
 	}{
-		{name: "debug", level: happycontext.LevelDebug, want: zapcore.DebugLevel},
-		{name: "warn", level: happycontext.LevelWarn, want: zapcore.WarnLevel},
-		{name: "error", level: happycontext.LevelError, want: zapcore.ErrorLevel},
+		{name: "debug", level: hc.LevelDebug, want: zapcore.DebugLevel},
+		{name: "warn", level: hc.LevelWarn, want: zapcore.WarnLevel},
+		{name: "error", level: hc.LevelError, want: zapcore.ErrorLevel},
 		{name: "default", level: "UNKNOWN", want: zapcore.InfoLevel},
 	}
 
@@ -76,8 +76,8 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 
 func TestSinkWriteNilSafety(t *testing.T) {
 	var nilSink *Sink
-	nilSink.Write(context.Background(), happycontext.LevelInfo, "x", map[string]any{"k": 1})
+	nilSink.Write(context.Background(), hc.LevelInfo, "x", map[string]any{"k": 1})
 
 	sink := New(nil)
-	sink.Write(context.Background(), happycontext.LevelInfo, "x", map[string]any{"k": 1})
+	sink.Write(context.Background(), hc.LevelInfo, "x", map[string]any{"k": 1})
 }

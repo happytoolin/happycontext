@@ -18,7 +18,7 @@ func (discardSink) Write(context.Context, string, string, map[string]any) {}
 func BenchmarkRouter_std(b *testing.B) {
 	req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
 	handlerHappycontextAPI := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		happycontext.Add(r.Context(), "user_id", "u_1")
+		hc.Add(r.Context(), "user_id", "u_1")
 		w.WriteHeader(http.StatusNoContent)
 	})
 

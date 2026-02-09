@@ -15,9 +15,9 @@ func main() {
 	sink := slogadapter.New(logger)
 
 	r := gin.New()
-	r.Use(ginhappycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1}))
+	r.Use(ginhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	r.GET("/users/:id", func(c *gin.Context) {
-		happycontext.Add(c.Request.Context(), "router", "gin")
+		hc.Add(c.Request.Context(), "router", "gin")
 		c.Status(200)
 	})
 

@@ -51,14 +51,14 @@ import (
 
 	"github.com/happytoolin/happycontext"
 	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
-	stdhappycontext "github.com/happytoolin/happycontext/integration/std"
+	stdhc "github.com/happytoolin/happycontext/integration/std"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	sink := slogadapter.New(logger)
 
-	mw := stdhappycontext.Middleware(happycontext.Config{
+	mw := stdhc.Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 0.10,
 		Message:      "request_completed",
@@ -67,8 +67,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /orders/{id}", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		happycontext.Add(ctx, "user_id", "u_8472")
-		happycontext.Add(ctx, "feature", "checkout")
+		hc.Add(ctx, "user_id", "u_8472")
+		hc.Add(ctx, "feature", "checkout")
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -78,13 +78,13 @@ func main() {
 
 ## Core API
 
-- `happycontext.NewContext(ctx)` creates a context with an attached event
-- `happycontext.Add(ctx, key, value)` adds or overwrites one field
-- `happycontext.AddMap(ctx, map[string]any)` merges fields
-- `happycontext.Error(ctx, err)` stores structured error metadata and marks the event as failed
-- `happycontext.SetLevel(ctx, level)` requests a minimum final level (`DEBUG`, `INFO`, `WARN`, `ERROR`)
-- `happycontext.SetRoute(ctx, route)` sets low-cardinality route template (`/orders/:id`)
-- `happycontext.Commit(ctx, sink, level)` immediately writes one snapshot (manual lifecycle)
+- `hc.NewContext(ctx)` creates a context with an attached event
+- `hc.Add(ctx, key, value)` adds or overwrites one field
+- `hc.AddMap(ctx, map[string]any)` merges fields
+- `hc.Error(ctx, err)` stores structured error metadata and marks the event as failed
+- `hc.SetLevel(ctx, level)` requests a minimum final level (`DEBUG`, `INFO`, `WARN`, `ERROR`)
+- `hc.SetRoute(ctx, route)` sets low-cardinality route template (`/orders/:id`)
+- `hc.Commit(ctx, sink, level)` immediately writes one snapshot (manual lifecycle)
 
 ## Event Fields
 
@@ -115,7 +115,7 @@ Examples:
 
 Sampling happens at request finalization:
 
-- Requests with errors (`happycontext.Error`) are always logged
+- Requests with errors (`hc.Error`) are always logged
 - Requests with status `>= 500` are always logged
 - Healthy requests follow `SamplingRate`:
   - `0` never log
@@ -138,15 +138,15 @@ Each integration is a separate Go module to keep dependency footprints small.
 - `adapter/zap`
 - `adapter/zerolog`
 
-All adapters implement `happycontext.Sink`.
+All adapters implement `hc.Sink`.
 
 ## Manual Lifecycle Example
 
 ```go
-ctx, _ := happycontext.NewContext(context.Background())
-happycontext.Add(ctx, "job.id", "j_123")
-happycontext.Add(ctx, "duration_ms", 42)
-happycontext.Commit(ctx, sink, happycontext.LevelInfo)
+ctx, _ := hc.NewContext(context.Background())
+hc.Add(ctx, "job.id", "j_123")
+hc.Add(ctx, "duration_ms", 42)
+hc.Commit(ctx, sink, hc.LevelInfo)
 ```
 
 ## Testing
@@ -154,7 +154,7 @@ happycontext.Commit(ctx, sink, happycontext.LevelInfo)
 Use the in-memory sink in tests:
 
 ```go
-sink := happycontext.NewTestSink()
+sink := hc.NewTestSink()
 // ... trigger request ...
 events := sink.Events()
 ```

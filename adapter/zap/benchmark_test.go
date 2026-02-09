@@ -44,14 +44,14 @@ func BenchmarkAdapter_zap(b *testing.B) {
 	b.Run("write_small", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			sink.Write(ctx, happycontext.LevelInfo, "request_completed", benchFieldsSmall)
+			sink.Write(ctx, hc.LevelInfo, "request_completed", benchFieldsSmall)
 		}
 	})
 
 	b.Run("write_medium", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			sink.Write(ctx, happycontext.LevelInfo, "request_completed", medium)
+			sink.Write(ctx, hc.LevelInfo, "request_completed", medium)
 		}
 	})
 }

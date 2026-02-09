@@ -18,12 +18,12 @@ func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 
 	sink := &memorySink{}
 	r := gin.New()
-	r.Use(Middleware(happycontext.Config{
+	r.Use(Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
 	r.GET("/orders/:id", func(c *gin.Context) {
-		happycontext.Add(c.Request.Context(), "user_id", "u_1")
+		hc.Add(c.Request.Context(), "user_id", "u_1")
 		c.Status(http.StatusCreated)
 	})
 
@@ -49,7 +49,7 @@ func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(Middleware(happycontext.Config{}))
+	r.Use(Middleware(hc.Config{}))
 	r.GET("/ok", func(c *gin.Context) {
 		c.Status(http.StatusAccepted)
 	})
@@ -65,7 +65,7 @@ func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	sink := &memorySink{}
 	r := gin.New()
-	r.Use(Middleware(happycontext.Config{
+	r.Use(Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 0,
 	}))
@@ -87,7 +87,7 @@ func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level != happycontext.LevelError {
+	if events[0].Level != hc.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level)
 	}
 	if events[0].Fields["http.status"] != http.StatusInternalServerError {
@@ -102,7 +102,7 @@ func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	sink := &memorySink{}
 	r := gin.New()
-	r.Use(Middleware(happycontext.Config{
+	r.Use(Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
@@ -141,7 +141,7 @@ func TestMiddlewareLogsNoRouteWithoutTemplate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	sink := &memorySink{}
 	r := gin.New()
-	r.Use(Middleware(happycontext.Config{
+	r.Use(Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
@@ -166,7 +166,7 @@ func TestMiddlewareGinErrorKeepsCommittedStatus(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	sink := &memorySink{}
 	r := gin.New()
-	r.Use(Middleware(happycontext.Config{
+	r.Use(Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
@@ -183,7 +183,7 @@ func TestMiddlewareGinErrorKeepsCommittedStatus(t *testing.T) {
 	if events[0].Fields["http.status"] != http.StatusTooManyRequests {
 		t.Fatalf("status = %v, want %d", events[0].Fields["http.status"], http.StatusTooManyRequests)
 	}
-	if events[0].Level != happycontext.LevelError {
+	if events[0].Level != hc.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level)
 	}
 }

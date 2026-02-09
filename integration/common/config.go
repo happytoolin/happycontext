@@ -6,7 +6,7 @@ import "github.com/happytoolin/happycontext"
 const DefaultMessage = "request_completed"
 
 // NormalizeConfig clamps config values and applies defaults.
-func NormalizeConfig(cfg happycontext.Config) happycontext.Config {
+func NormalizeConfig(cfg hc.Config) hc.Config {
 	if cfg.SamplingRate < 0 {
 		cfg.SamplingRate = 0
 	}
@@ -32,13 +32,13 @@ func MergeLevelWithFloor(autoLevel, requestedLevel string, hasRequested bool) st
 
 func levelRank(level string) int {
 	switch level {
-	case happycontext.LevelDebug:
+	case hc.LevelDebug:
 		return 10
-	case happycontext.LevelInfo:
+	case hc.LevelInfo:
 		return 20
-	case happycontext.LevelWarn:
+	case hc.LevelWarn:
 		return 30
-	case happycontext.LevelError:
+	case hc.LevelError:
 		return 40
 	default:
 		return 20
@@ -47,7 +47,7 @@ func levelRank(level string) int {
 
 func isValidLevel(level string) bool {
 	switch level {
-	case happycontext.LevelDebug, happycontext.LevelInfo, happycontext.LevelWarn, happycontext.LevelError:
+	case hc.LevelDebug, hc.LevelInfo, hc.LevelWarn, hc.LevelError:
 		return true
 	default:
 		return false

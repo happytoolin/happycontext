@@ -58,9 +58,9 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 		level string
 		want  slog.Level
 	}{
-		{name: "debug", level: happycontext.LevelDebug, want: slog.LevelDebug},
-		{name: "warn", level: happycontext.LevelWarn, want: slog.LevelWarn},
-		{name: "error", level: happycontext.LevelError, want: slog.LevelError},
+		{name: "debug", level: hc.LevelDebug, want: slog.LevelDebug},
+		{name: "warn", level: hc.LevelWarn, want: slog.LevelWarn},
+		{name: "error", level: hc.LevelError, want: slog.LevelError},
 		{name: "default", level: "UNKNOWN", want: slog.LevelInfo},
 	}
 
@@ -85,10 +85,10 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 
 func TestSinkWriteNilSafety(t *testing.T) {
 	var nilSink *Sink
-	nilSink.Write(context.Background(), happycontext.LevelInfo, "x", map[string]any{"k": 1})
+	nilSink.Write(context.Background(), hc.LevelInfo, "x", map[string]any{"k": 1})
 
 	sink := New(nil)
-	sink.Write(context.Background(), happycontext.LevelInfo, "x", map[string]any{"k": 1})
+	sink.Write(context.Background(), hc.LevelInfo, "x", map[string]any{"k": 1})
 }
 
 type captureSlogRecord struct {

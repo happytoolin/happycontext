@@ -15,9 +15,9 @@ func main() {
 	sink := slogadapter.New(logger)
 
 	app := fiber.New()
-	app.Use(fiberhappycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	app.Get("/users/:id", func(c *fiber.Ctx) error {
-		happycontext.Add(c.UserContext(), "router", "fiber-v2")
+		hc.Add(c.UserContext(), "router", "fiber-v2")
 		return c.SendStatus(200)
 	})
 

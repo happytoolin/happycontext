@@ -46,7 +46,7 @@ func TestSinkWriteAllSupportedFieldTypes(t *testing.T) {
 	sink := New(&logger)
 	now := time.Now().UTC().Truncate(time.Second)
 
-	sink.Write(context.Background(), happycontext.LevelInfo, "typed", map[string]any{
+	sink.Write(context.Background(), hc.LevelInfo, "typed", map[string]any{
 		"s":   "x",
 		"i":   int(1),
 		"i8":  int8(2),
@@ -90,9 +90,9 @@ func TestSinkWriteMapsAllLevelsAndMessageBehavior(t *testing.T) {
 		wantLevel   string
 		wantMessage string
 	}{
-		{name: "debug", level: happycontext.LevelDebug, message: "m", wantLevel: "debug", wantMessage: "m"},
-		{name: "warn", level: happycontext.LevelWarn, message: "m", wantLevel: "warn", wantMessage: "m"},
-		{name: "error", level: happycontext.LevelError, message: "m", wantLevel: "error", wantMessage: "m"},
+		{name: "debug", level: hc.LevelDebug, message: "m", wantLevel: "debug", wantMessage: "m"},
+		{name: "warn", level: hc.LevelWarn, message: "m", wantLevel: "warn", wantMessage: "m"},
+		{name: "error", level: hc.LevelError, message: "m", wantLevel: "error", wantMessage: "m"},
 		{name: "default", level: "UNKNOWN", message: "", wantLevel: "info", wantMessage: "request_completed"},
 	}
 
@@ -119,8 +119,8 @@ func TestSinkWriteMapsAllLevelsAndMessageBehavior(t *testing.T) {
 
 func TestSinkWriteNilSafety(t *testing.T) {
 	var nilSink *Sink
-	nilSink.Write(context.Background(), happycontext.LevelInfo, "x", map[string]any{"k": 1})
+	nilSink.Write(context.Background(), hc.LevelInfo, "x", map[string]any{"k": 1})
 
 	sink := New(nil)
-	sink.Write(context.Background(), happycontext.LevelInfo, "x", map[string]any{"k": 1})
+	sink.Write(context.Background(), hc.LevelInfo, "x", map[string]any{"k": 1})
 }

@@ -9,13 +9,13 @@ import (
 func TestNormalizeConfigClampsAndDefaults(t *testing.T) {
 	tests := []struct {
 		name    string
-		cfg     happycontext.Config
+		cfg     hc.Config
 		wantMsg string
 		wantRat float64
 	}{
-		{name: "negative", cfg: happycontext.Config{SamplingRate: -1}, wantMsg: DefaultMessage, wantRat: 0},
-		{name: "over one", cfg: happycontext.Config{SamplingRate: 2}, wantMsg: DefaultMessage, wantRat: 1},
-		{name: "custom", cfg: happycontext.Config{SamplingRate: 0.5, Message: "done"}, wantMsg: "done", wantRat: 0.5},
+		{name: "negative", cfg: hc.Config{SamplingRate: -1}, wantMsg: DefaultMessage, wantRat: 0},
+		{name: "over one", cfg: hc.Config{SamplingRate: 2}, wantMsg: DefaultMessage, wantRat: 1},
+		{name: "custom", cfg: hc.Config{SamplingRate: 0.5, Message: "done"}, wantMsg: "done", wantRat: 0.5},
 	}
 
 	for _, tt := range tests {
@@ -39,10 +39,10 @@ func TestMergeLevelWithFloor(t *testing.T) {
 		hasRequested bool
 		want         string
 	}{
-		{name: "no request", auto: happycontext.LevelInfo, want: happycontext.LevelInfo},
-		{name: "invalid request", auto: happycontext.LevelInfo, requested: "TRACE", hasRequested: true, want: happycontext.LevelInfo},
-		{name: "raise level", auto: happycontext.LevelInfo, requested: happycontext.LevelWarn, hasRequested: true, want: happycontext.LevelWarn},
-		{name: "keep floor", auto: happycontext.LevelError, requested: happycontext.LevelDebug, hasRequested: true, want: happycontext.LevelError},
+		{name: "no request", auto: hc.LevelInfo, want: hc.LevelInfo},
+		{name: "invalid request", auto: hc.LevelInfo, requested: "TRACE", hasRequested: true, want: hc.LevelInfo},
+		{name: "raise level", auto: hc.LevelInfo, requested: hc.LevelWarn, hasRequested: true, want: hc.LevelWarn},
+		{name: "keep floor", auto: hc.LevelError, requested: hc.LevelDebug, hasRequested: true, want: hc.LevelError},
 	}
 
 	for _, tt := range tests {

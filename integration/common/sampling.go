@@ -13,7 +13,7 @@ func init() {
 	samplerState.Store(uint64(time.Now().UnixNano()) + 0x9e3779b97f4a7c15)
 }
 
-func shouldWriteEvent(in happycontext.SampleInput) bool {
+func shouldWriteEvent(in hc.SampleInput) bool {
 	if in.HasError || in.StatusCode >= 500 {
 		return true
 	}

@@ -13,11 +13,11 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	sink := slogadapter.New(logger)
-	mw := stdhappycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1})
+	mw := stdhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {
-		happycontext.Add(r.Context(), "router", "net/http")
+		hc.Add(r.Context(), "router", "net/http")
 		w.WriteHeader(http.StatusOK)
 	})
 
