@@ -15,7 +15,7 @@ func FromContext(ctx context.Context) *Event {
 
 // NewContext attaches a new event to ctx and returns both.
 func NewContext(ctx context.Context) (context.Context, *Event) {
-	e := NewEvent()
+	e := newEvent()
 	return context.WithValue(ctx, contextKey{}, e), e
 }
 
@@ -25,7 +25,7 @@ func Add(ctx context.Context, key string, value any) bool {
 	if e == nil {
 		return false
 	}
-	e.Add(key, value)
+	e.add(key, value)
 	return true
 }
 
@@ -35,7 +35,7 @@ func AddMap(ctx context.Context, fields map[string]any) bool {
 	if e == nil {
 		return false
 	}
-	e.AddMap(fields)
+	e.addMap(fields)
 	return true
 }
 
@@ -45,7 +45,7 @@ func Error(ctx context.Context, err error) bool {
 	if e == nil {
 		return false
 	}
-	e.SetError(err)
+	e.setError(err)
 	return true
 }
 
@@ -55,7 +55,7 @@ func SetLevel(ctx context.Context, level Level) bool {
 	if e == nil {
 		return false
 	}
-	return e.SetLevel(level)
+	return e.setLevel(level)
 }
 
 // SetRoute sets a normalized route template on the event in ctx.
@@ -71,7 +71,7 @@ func SetRoute(ctx context.Context, route string) bool {
 // GetLevel returns a previously requested level override from ctx.
 func GetLevel(ctx context.Context) (Level, bool) {
 	if e := FromContext(ctx); e != nil {
-		return e.RequestedLevel()
+		return e.requestedLevelValue()
 	}
 	return Level(""), false
 }

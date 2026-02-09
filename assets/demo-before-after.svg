@@ -1,0 +1,58 @@
+<svg width="1200" height="560" viewBox="0 0 1200 560" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Before and After</title>
+  <desc id="desc">Scattered logs before; one structured event after.</desc>
+  <defs>
+    <linearGradient id="frameStroke" x1="0" y1="0" x2="1200" y2="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F60" stop-opacity="0.42" />
+      <stop offset="0.5" stop-color="#F60" stop-opacity="0.2" />
+      <stop offset="1" stop-color="#F60" stop-opacity="0.4" />
+    </linearGradient>
+    <radialGradient id="vignette" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(600 280) rotate(90) scale(360 700)">
+      <stop offset="0.72" stop-color="#F2F2F0" stop-opacity="0" />
+      <stop offset="1" stop-color="#F60" stop-opacity="0.18" />
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="560" fill="#F2F2F0" />
+  <rect x="8" y="8" width="1184" height="544" fill="none" stroke="url(#frameStroke)" stroke-width="1.5" />
+
+  <text x="60" y="76" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="42" font-weight="700" fill="#F60">Before vs After</text>
+  <text x="60" y="104" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="17" fill="#F60" fill-opacity="0.82">From fragmented lines to one complete event.</text>
+
+  <g transform="translate(60 138)">
+    <rect width="520" height="350" rx="12" fill="#F2F2F0" stroke="#F60" stroke-opacity="0.58" stroke-width="1.7" />
+    <rect width="520" height="40" rx="12" fill="#F60" fill-opacity="0.1" />
+    <text x="18" y="27" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="17" font-weight="700" fill="#F60">BEFORE: FRAGMENTED</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="14" fill="#F60" fill-opacity="0.84">
+      <text x="22" y="82">INFO start path=/api/v1/user</text>
+      <text x="22" y="114">DEBUG validate_auth user_id=123</text>
+      <text x="22" y="146">WARN cache miss key=u:123</text>
+      <text x="22" y="178">INFO db query duration=12ms</text>
+      <text x="22" y="210">ERROR payment failed code=402</text>
+      <text x="22" y="242">INFO request done status=500</text>
+    </g>
+    <line x1="22" y1="282" x2="498" y2="282" stroke="#F60" stroke-opacity="0.45" stroke-width="2" stroke-dasharray="5 6" />
+    <text x="22" y="314" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" fill="#F60" fill-opacity="0.9">Hard to correlate one request across many lines.</text>
+  </g>
+
+  <g transform="translate(620 138)">
+    <rect width="520" height="350" rx="12" fill="#F60" fill-opacity="0.08" stroke="#F60" stroke-opacity="0.72" stroke-width="1.8" />
+    <rect width="520" height="40" rx="12" fill="#F60" fill-opacity="0.15" />
+    <text x="18" y="27" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="17" font-weight="700" fill="#F60">AFTER: STRUCTURED</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="14" fill="#F60">
+      <text x="22" y="82">{</text>
+      <text x="38" y="112">"level": "ERROR",</text>
+      <text x="38" y="140">"msg": "request_completed",</text>
+      <text x="38" y="168">"path": "/api/v1/user",</text>
+      <text x="38" y="196">"user_id": "123",</text>
+      <text x="38" y="224">"error": "payment_failed",</text>
+      <text x="38" y="252">"status": 500,</text>
+      <text x="38" y="280">"duration_ms": 45</text>
+      <text x="22" y="308">}</text>
+    </g>
+    <line x1="22" y1="320" x2="498" y2="320" stroke="#F60" stroke-opacity="0.45" stroke-width="2" />
+    <text x="22" y="340" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#F60">One complete, queryable event record.</text>
+  </g>
+
+  <rect width="1200" height="560" fill="url(#vignette)" />
+</svg>

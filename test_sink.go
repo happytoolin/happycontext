@@ -1,8 +1,6 @@
 package hc
 
 import (
-	"maps"
-	"slices"
 	"sync"
 )
 
@@ -28,7 +26,7 @@ func NewTestSink() *TestSink {
 func (t *TestSink) Write(level Level, message string, fields map[string]any) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	cp := maps.Clone(fields)
+	cp := deepCopyFields(fields)
 	t.events = append(t.events, CapturedEvent{Level: level, Message: message, Fields: cp})
 }
 
@@ -36,5 +34,20 @@ func (t *TestSink) Write(level Level, message string, fields map[string]any) {
 func (t *TestSink) Events() []CapturedEvent {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return slices.Clone(t.events)
+
+	cp := make([]CapturedEvent, len(t.events))
+	for i := range t.events {
+		ev := t.events[i]
+		cp[i] = CapturedEvent{
+			Level:   ev.Level,
+			Message: ev.Message,
+			Fields:  deepCopyFields(ev.Fields),
+		}
+	}
+	return cp
+}
+
+func deepCopyFields(fields map[string]any) map[string]any {
+	tracker := &cycleTracker{}
+	return deepCopyMapStringAny(fields, tracker)
 }

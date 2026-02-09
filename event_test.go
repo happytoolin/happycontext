@@ -9,7 +9,7 @@ import (
 )
 
 func TestEventConcurrentAdd(t *testing.T) {
-	e := NewEvent()
+	e := newEvent()
 	const n = 100
 
 	wg := sync.WaitGroup{}
@@ -17,26 +17,26 @@ func TestEventConcurrentAdd(t *testing.T) {
 	for i := 0; i < n; i++ {
 		go func(i int) {
 			defer wg.Done()
-			e.Add("k"+strconv.Itoa(i), i)
+			e.add("k"+strconv.Itoa(i), i)
 		}(i)
 	}
 	wg.Wait()
 
-	s := e.Snapshot()
-	if len(s.Fields) != n {
-		t.Fatalf("expected %d fields, got %d", n, len(s.Fields))
+	s := e.snapshot()
+	if len(s.fields) != n {
+		t.Fatalf("expected %d fields, got %d", n, len(s.fields))
 	}
 }
 
 func TestSetError(t *testing.T) {
-	e := NewEvent()
-	e.SetError(errors.New("x"))
+	e := newEvent()
+	e.setError(errors.New("x"))
 
-	s := e.Snapshot()
-	if !s.HasError {
+	s := e.snapshot()
+	if !s.hasError {
 		t.Fatalf("expected HasError=true")
 	}
-	errField, ok := s.Fields["error"].(map[string]any)
+	errField, ok := s.fields["error"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected structured error field")
 	}
@@ -46,55 +46,55 @@ func TestSetError(t *testing.T) {
 }
 
 func TestSetErrorNilDoesNothing(t *testing.T) {
-	e := NewEvent()
-	e.SetError(nil)
-	if e.HasError() {
+	e := newEvent()
+	e.setError(nil)
+	if e.hasErrorValue() {
 		t.Fatalf("expected HasError=false")
 	}
 }
 
 func TestSetRouteEmptyIgnored(t *testing.T) {
-	e := NewEvent()
+	e := newEvent()
 	e.setRoute("")
-	if _, ok := e.Snapshot().Fields["http.route"]; ok {
+	if _, ok := e.snapshot().fields["http.route"]; ok {
 		t.Fatalf("did not expect route field")
 	}
 }
 
 func TestEventStartTimeAndHasError(t *testing.T) {
-	e := NewEvent()
-	if e.HasError() {
+	e := newEvent()
+	if e.hasErrorValue() {
 		t.Fatalf("expected no error initially")
 	}
-	if e.StartTime().IsZero() {
+	if e.startedAt().IsZero() {
 		t.Fatalf("expected non-zero start time")
 	}
-	e.SetError(errors.New("boom"))
-	if !e.HasError() {
+	e.setError(errors.New("boom"))
+	if !e.hasErrorValue() {
 		t.Fatalf("expected has error")
 	}
 }
 
 func TestSetLevelInvalidIgnored(t *testing.T) {
-	e := NewEvent()
-	if e.SetLevel(Level("TRACE")) {
+	e := newEvent()
+	if e.setLevel(Level("TRACE")) {
 		t.Fatalf("expected invalid level to be rejected")
 	}
-	if _, ok := e.RequestedLevel(); ok {
+	if _, ok := e.requestedLevelValue(); ok {
 		t.Fatalf("expected invalid level to be ignored")
 	}
 
-	if !e.SetLevel(LevelDebug) {
+	if !e.setLevel(LevelDebug) {
 		t.Fatalf("expected valid level to be accepted")
 	}
-	level, ok := e.RequestedLevel()
+	level, ok := e.requestedLevelValue()
 	if !ok || level != LevelDebug {
 		t.Fatalf("expected debug override, got %q (ok=%v)", level, ok)
 	}
 }
 
 func TestSnapshotCopiesTopLevelMap(t *testing.T) {
-	e := NewEvent()
+	e := newEvent()
 	nested := map[string]any{
 		"id": "u_1",
 		"roles": []any{
@@ -102,13 +102,13 @@ func TestSnapshotCopiesTopLevelMap(t *testing.T) {
 			map[string]any{"scope": "billing"},
 		},
 	}
-	e.Add("user", nested)
+	e.add("user", nested)
 
-	s := e.Snapshot()
+	s := e.snapshot()
 
-	user, ok := s.Fields["user"].(map[string]any)
+	user, ok := s.fields["user"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected user map in snapshot, got %T", s.Fields["user"])
+		t.Fatalf("expected user map in snapshot, got %T", s.fields["user"])
 	}
 	if user["id"] != "u_1" {
 		t.Fatalf("expected user.id=u_1, got %v", user["id"])
@@ -123,17 +123,17 @@ func TestSnapshotCopiesTopLevelMap(t *testing.T) {
 }
 
 func TestSnapshotSupportsCyclicMapValue(t *testing.T) {
-	e := NewEvent()
+	e := newEvent()
 	cyclic := map[string]any{}
 	cyclic["self"] = cyclic
 	cyclic["name"] = "root"
 
-	e.Add("node", cyclic)
-	s := e.Snapshot()
+	e.add("node", cyclic)
+	s := e.snapshot()
 
-	node, ok := s.Fields["node"].(map[string]any)
+	node, ok := s.fields["node"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected map value, got %T", s.Fields["node"])
+		t.Fatalf("expected map value, got %T", s.fields["node"])
 	}
 	if node["name"] != "root" {
 		t.Fatalf("expected name=root, got %v", node["name"])
@@ -154,7 +154,7 @@ func TestSnapshotSupportsCyclicMapValue(t *testing.T) {
 }
 
 func TestSnapshotDeepCopiesNestedValues(t *testing.T) {
-	e := NewEvent()
+	e := newEvent()
 	nested := map[string]any{
 		"id": "u_1",
 		"roles": []any{
@@ -162,17 +162,17 @@ func TestSnapshotDeepCopiesNestedValues(t *testing.T) {
 			map[string]any{"scope": "billing"},
 		},
 	}
-	e.Add("user", nested)
-	s := e.Snapshot()
+	e.add("user", nested)
+	s := e.snapshot()
 
 	nested["id"] = "u_2"
 	roles := nested["roles"].([]any)
 	roles[0] = "viewer"
 	roles[1].(map[string]any)["scope"] = "support"
 
-	user, ok := s.Fields["user"].(map[string]any)
+	user, ok := s.fields["user"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected user map in snapshot, got %T", s.Fields["user"])
+		t.Fatalf("expected user map in snapshot, got %T", s.fields["user"])
 	}
 	if user["id"] != "u_1" {
 		t.Fatalf("expected independent user.id=u_1, got %v", user["id"])
@@ -192,20 +192,20 @@ type structPayload struct {
 }
 
 func TestSnapshotDeepCopiesStructReferenceFields(t *testing.T) {
-	e := NewEvent()
+	e := newEvent()
 	p := structPayload{
 		Meta: map[string]int{"count": 1},
 		Tags: []string{"a", "b"},
 	}
-	e.Add("payload", p)
+	e.add("payload", p)
 
-	s := e.Snapshot()
+	s := e.snapshot()
 	p.Meta["count"] = 99
 	p.Tags[0] = "z"
 
-	got, ok := s.Fields["payload"].(structPayload)
+	got, ok := s.fields["payload"].(structPayload)
 	if !ok {
-		t.Fatalf("expected struct payload, got %T", s.Fields["payload"])
+		t.Fatalf("expected struct payload, got %T", s.fields["payload"])
 	}
 	if got.Meta["count"] != 1 {
 		t.Fatalf("expected copied map value=1, got %d", got.Meta["count"])
