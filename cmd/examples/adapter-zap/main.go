@@ -32,7 +32,7 @@ func main() {
 				"tags":    []string{"examples", "zap"},
 			},
 		})
-		hc.SetRoute(ctx, "/users/:id")
+		hc.SetRoute(ctx, "/users/{id}")
 
 		if r.URL.Query().Get("debug") == "1" {
 			hc.SetLevel(ctx, hc.LevelDebug)

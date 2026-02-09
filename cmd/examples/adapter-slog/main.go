@@ -14,7 +14,7 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	sink := slogadapter.New(logger)
-	mw := stdhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 0.1, Message: "Yooooo"})
+	mw := stdhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 0.1, Message: "request handled"})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -33,7 +33,7 @@ func main() {
 				"tags":    []string{"examples", "slog"},
 			},
 		})
-		hc.SetRoute(ctx, "/users/:id")
+		hc.SetRoute(ctx, "/users/{id}")
 
 		if r.URL.Query().Get("debug") == "1" {
 			hc.SetLevel(ctx, hc.LevelDebug)

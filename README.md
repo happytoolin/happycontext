@@ -252,7 +252,7 @@ func main() {
 		c.Status(200)
 	})
 
-	_ = r.Run(":8102")
+	_ = r.Run(":8105")
 }
 ```
 
@@ -285,7 +285,7 @@ func main() {
 		return c.SendStatus(200)
 	})
 
-	_ = app.Listen(":8104")
+	_ = app.Listen(":8107")
 }
 ```
 
@@ -318,7 +318,7 @@ func main() {
 		return c.SendStatus(200)
 	})
 
-	_ = app.Listen(":8105")
+	_ = app.Listen(":8108")
 }
 ```
 
@@ -351,7 +351,7 @@ func main() {
 		return c.NoContent(200)
 	})
 
-	_ = e.Start(":8103")
+	_ = e.Start(":8106")
 }
 ```
 
@@ -383,7 +383,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	_ = http.ListenAndServe(":8092", mw(mux))
+	_ = http.ListenAndServe(":8102", mw(mux))
 }
 ```
 
@@ -416,7 +416,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	_ = http.ListenAndServe(":8093", mw(mux))
+	_ = http.ListenAndServe(":8103", mw(mux))
 }
 ```
 
