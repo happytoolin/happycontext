@@ -177,6 +177,39 @@ func TestMiddlewareCustomMessagePropagates(t *testing.T) {
 	}
 }
 
+func TestMiddlewareLogsStatusFromCustomEchoErrorHandler(t *testing.T) {
+	e := echo.New()
+	e.HTTPErrorHandler = func(err error, c echo.Context) {
+		_ = c.String(http.StatusTeapot, "handled")
+	}
+
+	sink := &memorySink{}
+	e.Use(Middleware(hlog.Config{
+		Sink:         sink,
+		SamplingRate: 1,
+	}))
+	e.GET("/custom-err", func(c echo.Context) error {
+		return errors.New("boom")
+	})
+
+	rr := httptest.NewRecorder()
+	e.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/custom-err", nil))
+	if rr.Code != http.StatusTeapot {
+		t.Fatalf("expected status %d, got %d", http.StatusTeapot, rr.Code)
+	}
+
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Fields["http.status"] != http.StatusTeapot {
+		t.Fatalf("status = %v, want %d", events[0].Fields["http.status"], http.StatusTeapot)
+	}
+	if events[0].Level != hlog.LevelError {
+		t.Fatalf("level = %s, want ERROR", events[0].Level)
+	}
+}
+
 type memoryEvent struct {
 	Level   string
 	Message string

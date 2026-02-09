@@ -187,6 +187,19 @@ func deepCopyValue(value reflect.Value, seen map[visit]reflect.Value) reflect.Va
 			copied.Index(i).Set(deepCopyValue(value.Index(i), seen))
 		}
 		return copied
+	case reflect.Struct:
+		// Start from a shallow copy so unexported fields are preserved,
+		// then deep-copy settable fields to break shared references.
+		copied := reflect.New(value.Type()).Elem()
+		copied.Set(value)
+		for i := range value.NumField() {
+			dst := copied.Field(i)
+			if !dst.CanSet() {
+				continue
+			}
+			dst.Set(deepCopyValue(value.Field(i), seen))
+		}
+		return copied
 	case reflect.Interface:
 		if value.IsNil() {
 			return reflect.Zero(value.Type())

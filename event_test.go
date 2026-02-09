@@ -181,3 +181,32 @@ func TestSnapshotDeepCopiesNestedValues(t *testing.T) {
 		t.Fatalf("expected independent nested map value, got %v", snapshotRoles[1].(map[string]any)["scope"])
 	}
 }
+
+type structPayload struct {
+	Meta map[string]int
+	Tags []string
+}
+
+func TestSnapshotDeepCopiesStructReferenceFields(t *testing.T) {
+	e := NewEvent()
+	p := structPayload{
+		Meta: map[string]int{"count": 1},
+		Tags: []string{"a", "b"},
+	}
+	e.Add("payload", p)
+
+	s := e.Snapshot()
+	p.Meta["count"] = 99
+	p.Tags[0] = "z"
+
+	got, ok := s.Fields["payload"].(structPayload)
+	if !ok {
+		t.Fatalf("expected struct payload, got %T", s.Fields["payload"])
+	}
+	if got.Meta["count"] != 1 {
+		t.Fatalf("expected copied map value=1, got %d", got.Meta["count"])
+	}
+	if got.Tags[0] != "a" {
+		t.Fatalf("expected copied slice value=a, got %s", got.Tags[0])
+	}
+}

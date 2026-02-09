@@ -24,16 +24,17 @@ func Middleware(cfg hlog.Config) echo.MiddlewareFunc {
 		return func(c echo.Context) (err error) {
 			ctx, event := common.StartRequest(c.Request().Context(), c.Request().Method, c.Request().URL.Path)
 			c.SetRequest(c.Request().WithContext(ctx))
+			var finalizeErr error
 
 			defer func() {
 				recovered := recover()
 				route := c.Path()
 				status := common.ResolveStatus(
 					c.Response().Status,
-					err,
+					finalizeErr,
 					recovered,
 					c.Response().Committed,
-					statusFromEchoError(err),
+					statusFromEchoError(finalizeErr),
 				)
 				common.FinalizeRequest(cfg, common.FinalizeInput{
 					Ctx:        ctx,
@@ -42,7 +43,7 @@ func Middleware(cfg hlog.Config) echo.MiddlewareFunc {
 					Path:       c.Request().URL.Path,
 					Route:      route,
 					StatusCode: status,
-					Err:        err,
+					Err:        finalizeErr,
 					Recovered:  recovered,
 				})
 
@@ -52,6 +53,11 @@ func Middleware(cfg hlog.Config) echo.MiddlewareFunc {
 			}()
 
 			err = next(c)
+			finalizeErr = err
+			if err != nil && !c.Response().Committed {
+				c.Error(err)
+				err = nil
+			}
 			return err
 		}
 	}

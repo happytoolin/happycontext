@@ -183,6 +183,41 @@ func TestMiddlewareCustomMessagePropagates(t *testing.T) {
 	}
 }
 
+func TestMiddlewareLogsStatusFromCustomFiberErrorHandler(t *testing.T) {
+	app := fiber.New(fiber.Config{
+		ErrorHandler: func(c fiber.Ctx, err error) error {
+			return c.Status(http.StatusTeapot).SendString("handled")
+		},
+	})
+	sink := &memorySink{}
+	app.Use(Middleware(hlog.Config{
+		Sink:         sink,
+		SamplingRate: 1,
+	}))
+	app.Get("/custom-err", func(c fiber.Ctx) error {
+		return errors.New("boom")
+	})
+
+	res, err := app.Test(httptest.NewRequest(http.MethodGet, "/custom-err", nil))
+	if err != nil {
+		t.Fatalf("fiber v3 request failed: %v", err)
+	}
+	if res.StatusCode != http.StatusTeapot {
+		t.Fatalf("expected HTTP status %d, got %d", http.StatusTeapot, res.StatusCode)
+	}
+
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Fields["http.status"] != http.StatusTeapot {
+		t.Fatalf("status = %v, want %d", events[0].Fields["http.status"], http.StatusTeapot)
+	}
+	if events[0].Level != hlog.LevelError {
+		t.Fatalf("level = %s, want ERROR", events[0].Level)
+	}
+}
+
 type memoryEvent struct {
 	Level   string
 	Message string

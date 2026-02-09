@@ -21,6 +21,7 @@ func Middleware(cfg hlog.Config) fiber.Handler {
 	return func(c *fiber.Ctx) (err error) {
 		ctx, event := common.StartRequest(c.UserContext(), c.Method(), c.Path())
 		c.SetUserContext(ctx)
+		var finalizeErr error
 
 		defer func() {
 			recovered := recover()
@@ -30,7 +31,7 @@ func Middleware(cfg hlog.Config) fiber.Handler {
 			}
 			status := c.Response().StatusCode()
 			responseStarted := status != 0 && (status != http.StatusOK || len(c.Response().Body()) > 0)
-			status = common.ResolveStatus(status, err, recovered, responseStarted, statusFromFiberError(err))
+			status = common.ResolveStatus(status, finalizeErr, recovered, responseStarted, statusFromFiberError(finalizeErr))
 			common.FinalizeRequest(cfg, common.FinalizeInput{
 				Ctx:        ctx,
 				Event:      event,
@@ -38,7 +39,7 @@ func Middleware(cfg hlog.Config) fiber.Handler {
 				Path:       c.Path(),
 				Route:      routePath,
 				StatusCode: status,
-				Err:        err,
+				Err:        finalizeErr,
 				Recovered:  recovered,
 			})
 
@@ -48,6 +49,13 @@ func Middleware(cfg hlog.Config) fiber.Handler {
 		}()
 
 		err = c.Next()
+		finalizeErr = err
+		if err != nil {
+			if errorHandler := c.App().Config().ErrorHandler; errorHandler != nil {
+				_ = errorHandler(c, err)
+			}
+			err = nil
+		}
 		return err
 	}
 }
