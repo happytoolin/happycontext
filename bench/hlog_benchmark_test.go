@@ -76,6 +76,37 @@ func BenchmarkEventSnapshot(b *testing.B) {
 	}
 }
 
+func BenchmarkEventSnapshotNested(b *testing.B) {
+	e := hlog.NewEvent()
+	e.Add("request", map[string]any{
+		"user": map[string]any{
+			"id":    "u_1",
+			"roles": []any{"admin", "billing"},
+		},
+		"flags": []any{
+			map[string]any{"name": "beta", "enabled": true},
+			map[string]any{"name": "new_pricing", "enabled": false},
+		},
+	})
+
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = e.Snapshot()
+	}
+}
+
+func BenchmarkEventSnapshotCyclic(b *testing.B) {
+	e := hlog.NewEvent()
+	node := map[string]any{"name": "root"}
+	node["self"] = node
+	e.Add("node", node)
+
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = e.Snapshot()
+	}
+}
+
 func BenchmarkCommitPath(b *testing.B) {
 	baseFields := map[string]any{
 		"http.method":    "GET",

@@ -108,9 +108,9 @@ func (e *Event) Snapshot() Snapshot {
 	defer e.mu.RUnlock()
 
 	fields := make(map[string]any, len(e.fields))
-	seen := make(map[visit]reflect.Value)
+	tracker := &cycleTracker{}
 	for key, value := range e.fields {
-		fields[key] = deepCopyAny(value, seen)
+		fields[key] = deepCopyAny(value, tracker)
 	}
 
 	return Snapshot{
@@ -125,14 +125,124 @@ type visit struct {
 	ptr uintptr
 }
 
-func deepCopyAny(value any, seen map[visit]reflect.Value) any {
+type cycleTracker struct {
+	fast []fastCopyEntry
+	seen map[visit]reflect.Value
+}
+
+type fastCopyKind uint8
+
+const (
+	fastCopyMap fastCopyKind = iota + 1
+	fastCopySlice
+)
+
+type fastCopyEntry struct {
+	ptr  uintptr
+	kind fastCopyKind
+	val  any
+}
+
+func (t *cycleTracker) lookupFast(ptr uintptr, kind fastCopyKind) (any, bool) {
+	if ptr == 0 {
+		return nil, false
+	}
+	for i := range t.fast {
+		if t.fast[i].ptr == ptr && t.fast[i].kind == kind {
+			return t.fast[i].val, true
+		}
+	}
+	return nil, false
+}
+
+func (t *cycleTracker) rememberFast(ptr uintptr, kind fastCopyKind, copied any) {
+	if ptr == 0 {
+		return
+	}
+	t.fast = append(t.fast, fastCopyEntry{ptr: ptr, kind: kind, val: copied})
+}
+
+func (t *cycleTracker) lookupGeneric(typ reflect.Type, ptr uintptr) (reflect.Value, bool) {
+	if ptr == 0 || t.seen == nil {
+		return reflect.Value{}, false
+	}
+	v, ok := t.seen[visit{typ: typ, ptr: ptr}]
+	return v, ok
+}
+
+func (t *cycleTracker) rememberGeneric(typ reflect.Type, ptr uintptr, copied reflect.Value) {
+	if ptr == 0 {
+		return
+	}
+	if t.seen == nil {
+		t.seen = make(map[visit]reflect.Value)
+	}
+	t.seen[visit{typ: typ, ptr: ptr}] = copied
+}
+
+func deepCopyAny(value any, tracker *cycleTracker) any {
 	if value == nil {
 		return nil
 	}
-	return deepCopyValue(reflect.ValueOf(value), seen).Interface()
+
+	switch v := value.(type) {
+	case map[string]any:
+		return deepCopyMapStringAny(v, tracker)
+	case []any:
+		return deepCopySliceAny(v, tracker)
+	case string, bool,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64, uintptr,
+		float32, float64,
+		complex64, complex128,
+		time.Time, time.Duration:
+		return v
+	default:
+		return deepCopyValue(reflect.ValueOf(value), tracker).Interface()
+	}
 }
 
-func deepCopyValue(value reflect.Value, seen map[visit]reflect.Value) reflect.Value {
+func deepCopyMapStringAny(src map[string]any, tracker *cycleTracker) map[string]any {
+	if src == nil {
+		return nil
+	}
+
+	ptr := reflect.ValueOf(src).Pointer()
+	if copied, ok := tracker.lookupFast(ptr, fastCopyMap); ok {
+		if m, ok := copied.(map[string]any); ok {
+			return m
+		}
+	}
+
+	dst := make(map[string]any, len(src))
+	tracker.rememberFast(ptr, fastCopyMap, dst)
+	for k, v := range src {
+		dst[k] = deepCopyAny(v, tracker)
+	}
+	return dst
+}
+
+func deepCopySliceAny(src []any, tracker *cycleTracker) []any {
+	if src == nil {
+		return nil
+	}
+
+	ptr := reflect.ValueOf(src).Pointer()
+	if copied, ok := tracker.lookupFast(ptr, fastCopySlice); ok {
+		if s, ok := copied.([]any); ok {
+			return s
+		}
+	}
+
+	dst := make([]any, len(src))
+	tracker.rememberFast(ptr, fastCopySlice, dst)
+	for i := range src {
+		dst[i] = deepCopyAny(src[i], tracker)
+	}
+	return dst
+}
+
+func deepCopyValue(value reflect.Value, tracker *cycleTracker) reflect.Value {
 	if !value.IsValid() {
 		return value
 	}
@@ -142,28 +252,26 @@ func deepCopyValue(value reflect.Value, seen map[visit]reflect.Value) reflect.Va
 		if value.IsNil() {
 			return reflect.Zero(value.Type())
 		}
-		key := visit{typ: value.Type(), ptr: value.Pointer()}
-		if copied, ok := seen[key]; ok {
+		if copied, ok := tracker.lookupGeneric(value.Type(), value.Pointer()); ok {
 			return copied
 		}
 		copied := reflect.New(value.Type().Elem())
-		seen[key] = copied
-		copied.Elem().Set(deepCopyValue(value.Elem(), seen))
+		tracker.rememberGeneric(value.Type(), value.Pointer(), copied)
+		copied.Elem().Set(deepCopyValue(value.Elem(), tracker))
 		return copied
 	case reflect.Map:
 		if value.IsNil() {
 			return reflect.Zero(value.Type())
 		}
-		key := visit{typ: value.Type(), ptr: value.Pointer()}
-		if copied, ok := seen[key]; ok {
+		if copied, ok := tracker.lookupGeneric(value.Type(), value.Pointer()); ok {
 			return copied
 		}
 		copied := reflect.MakeMapWithSize(value.Type(), value.Len())
-		seen[key] = copied
+		tracker.rememberGeneric(value.Type(), value.Pointer(), copied)
 		iter := value.MapRange()
 		for iter.Next() {
-			copiedKey := deepCopyValue(iter.Key(), seen)
-			copiedValue := deepCopyValue(iter.Value(), seen)
+			copiedKey := deepCopyValue(iter.Key(), tracker)
+			copiedValue := deepCopyValue(iter.Value(), tracker)
 			copied.SetMapIndex(copiedKey, copiedValue)
 		}
 		return copied
@@ -171,20 +279,19 @@ func deepCopyValue(value reflect.Value, seen map[visit]reflect.Value) reflect.Va
 		if value.IsNil() {
 			return reflect.Zero(value.Type())
 		}
-		key := visit{typ: value.Type(), ptr: value.Pointer()}
-		if copied, ok := seen[key]; ok {
+		if copied, ok := tracker.lookupGeneric(value.Type(), value.Pointer()); ok {
 			return copied
 		}
 		copied := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
-		seen[key] = copied
+		tracker.rememberGeneric(value.Type(), value.Pointer(), copied)
 		for i := range value.Len() {
-			copied.Index(i).Set(deepCopyValue(value.Index(i), seen))
+			copied.Index(i).Set(deepCopyValue(value.Index(i), tracker))
 		}
 		return copied
 	case reflect.Array:
 		copied := reflect.New(value.Type()).Elem()
 		for i := range value.Len() {
-			copied.Index(i).Set(deepCopyValue(value.Index(i), seen))
+			copied.Index(i).Set(deepCopyValue(value.Index(i), tracker))
 		}
 		return copied
 	case reflect.Struct:
@@ -197,14 +304,14 @@ func deepCopyValue(value reflect.Value, seen map[visit]reflect.Value) reflect.Va
 			if !dst.CanSet() {
 				continue
 			}
-			dst.Set(deepCopyValue(value.Field(i), seen))
+			dst.Set(deepCopyValue(value.Field(i), tracker))
 		}
 		return copied
 	case reflect.Interface:
 		if value.IsNil() {
 			return reflect.Zero(value.Type())
 		}
-		return deepCopyValue(value.Elem(), seen)
+		return deepCopyValue(value.Elem(), tracker)
 	default:
 		return value
 	}
