@@ -1,7 +1,6 @@
 package zerologadapter
 
 import (
-	"context"
 	"time"
 
 	"github.com/happytoolin/happycontext"
@@ -19,7 +18,7 @@ func New(l *zerolog.Logger) *Sink {
 }
 
 // Write implements hc.Sink.
-func (z *Sink) Write(_ context.Context, level, message string, fields map[string]any) {
+func (z *Sink) Write(level hc.Level, message string, fields map[string]any) {
 	if z == nil || z.logger == nil {
 		return
 	}

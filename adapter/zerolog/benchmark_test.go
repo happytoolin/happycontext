@@ -1,7 +1,6 @@
 package zerologadapter
 
 import (
-	"context"
 	"io"
 	"strconv"
 	"testing"
@@ -32,20 +31,19 @@ func benchFieldsMedium() map[string]any {
 func BenchmarkAdapter_zerolog(b *testing.B) {
 	logger := zerolog.New(io.Discard)
 	sink := New(&logger)
-	ctx := context.Background()
 	medium := benchFieldsMedium()
 
 	b.Run("write_small", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			sink.Write(ctx, hc.LevelInfo, "request_completed", benchFieldsSmall)
+			sink.Write(hc.LevelInfo, "request_completed", benchFieldsSmall)
 		}
 	})
 
 	b.Run("write_medium", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			sink.Write(ctx, hc.LevelInfo, "request_completed", medium)
+			sink.Write(hc.LevelInfo, "request_completed", medium)
 		}
 	})
 }

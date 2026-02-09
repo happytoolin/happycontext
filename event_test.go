@@ -77,12 +77,16 @@ func TestEventStartTimeAndHasError(t *testing.T) {
 
 func TestSetLevelInvalidIgnored(t *testing.T) {
 	e := NewEvent()
-	e.SetLevel("TRACE")
+	if e.SetLevel(Level("TRACE")) {
+		t.Fatalf("expected invalid level to be rejected")
+	}
 	if _, ok := e.RequestedLevel(); ok {
 		t.Fatalf("expected invalid level to be ignored")
 	}
 
-	e.SetLevel(LevelDebug)
+	if !e.SetLevel(LevelDebug) {
+		t.Fatalf("expected valid level to be accepted")
+	}
 	level, ok := e.RequestedLevel()
 	if !ok || level != LevelDebug {
 		t.Fatalf("expected debug override, got %q (ok=%v)", level, ok)

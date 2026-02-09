@@ -1,6 +1,6 @@
 package hc
 
-func isValidLevel(level string) bool {
+func isValidLevel(level Level) bool {
 	switch level {
 	case LevelDebug, LevelInfo, LevelWarn, LevelError:
 		return true

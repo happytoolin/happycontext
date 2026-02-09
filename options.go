@@ -1,9 +1,5 @@
 package hc
 
-import (
-	"time"
-)
-
 const defaultMessage = "request_completed"
 
 // Config controls request finalization behavior.
@@ -16,14 +12,4 @@ type Config struct {
 
 	// Message is the final log message.
 	Message string
-}
-
-// SampleInput is the sampling decision input.
-type SampleInput struct {
-	Method     string
-	Path       string
-	HasError   bool
-	StatusCode int
-	Duration   time.Duration
-	Rate       float64
 }

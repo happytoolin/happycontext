@@ -2,7 +2,6 @@ package zerologadapter
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -17,7 +16,7 @@ func TestSinkWriteMapsLevelAndFields(t *testing.T) {
 	logger := zerolog.New(&buf)
 	sink := New(&logger)
 
-	sink.Write(context.Background(), "WARN", "", map[string]any{
+	sink.Write("WARN", "", map[string]any{
 		"http.status": 429,
 		"retry":       true,
 	})
@@ -46,7 +45,7 @@ func TestSinkWriteAllSupportedFieldTypes(t *testing.T) {
 	sink := New(&logger)
 	now := time.Now().UTC().Truncate(time.Second)
 
-	sink.Write(context.Background(), hc.LevelInfo, "typed", map[string]any{
+	sink.Write(hc.LevelInfo, "typed", map[string]any{
 		"s":   "x",
 		"i":   int(1),
 		"i8":  int8(2),
@@ -85,7 +84,7 @@ func TestSinkWriteAllSupportedFieldTypes(t *testing.T) {
 func TestSinkWriteMapsAllLevelsAndMessageBehavior(t *testing.T) {
 	tests := []struct {
 		name        string
-		level       string
+		level       hc.Level
 		message     string
 		wantLevel   string
 		wantMessage string
@@ -101,7 +100,7 @@ func TestSinkWriteMapsAllLevelsAndMessageBehavior(t *testing.T) {
 			var buf bytes.Buffer
 			logger := zerolog.New(&buf)
 			sink := New(&logger)
-			sink.Write(context.Background(), tt.level, tt.message, map[string]any{"k": "v"})
+			sink.Write(tt.level, tt.message, map[string]any{"k": "v"})
 
 			var payload map[string]any
 			if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
@@ -119,8 +118,8 @@ func TestSinkWriteMapsAllLevelsAndMessageBehavior(t *testing.T) {
 
 func TestSinkWriteNilSafety(t *testing.T) {
 	var nilSink *Sink
-	nilSink.Write(context.Background(), hc.LevelInfo, "x", map[string]any{"k": 1})
+	nilSink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
 
 	sink := New(nil)
-	sink.Write(context.Background(), hc.LevelInfo, "x", map[string]any{"k": 1})
+	sink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
 }

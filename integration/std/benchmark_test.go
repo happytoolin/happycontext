@@ -1,7 +1,6 @@
 package stdhappycontext
 
 import (
-	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,7 +12,7 @@ import (
 
 type discardSink struct{}
 
-func (discardSink) Write(context.Context, string, string, map[string]any) {}
+func (discardSink) Write(hc.Level, string, map[string]any) {}
 
 func BenchmarkRouter_std(b *testing.B) {
 	req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)

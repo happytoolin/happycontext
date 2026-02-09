@@ -1,14 +1,13 @@
 package hc
 
 import (
-	"context"
 	"testing"
 )
 
 func TestTestSinkCopiesInputFields(t *testing.T) {
 	sink := NewTestSink()
 	fields := map[string]any{"a": 1}
-	sink.Write(context.Background(), LevelInfo, "m", fields)
+	sink.Write(LevelInfo, "m", fields)
 	fields["a"] = 2
 
 	events := sink.Events()
@@ -22,7 +21,7 @@ func TestTestSinkCopiesInputFields(t *testing.T) {
 
 func TestTestSinkEventsReturnsCopy(t *testing.T) {
 	sink := NewTestSink()
-	sink.Write(context.Background(), LevelInfo, "m", map[string]any{"a": 1})
+	sink.Write(LevelInfo, "m", map[string]any{"a": 1})
 
 	events := sink.Events()
 	events[0].Level = LevelError

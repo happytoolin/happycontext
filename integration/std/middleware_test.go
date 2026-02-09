@@ -3,7 +3,6 @@ package stdhappycontext
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"errors"
 	"io"
 	"net"
@@ -319,7 +318,7 @@ func TestMiddlewareSamplingDropForHealthyRequest(t *testing.T) {
 }
 
 type memoryEvent struct {
-	Level   string
+	Level   hc.Level
 	Message string
 	Fields  map[string]any
 }
@@ -329,7 +328,7 @@ type memorySink struct {
 	events []memoryEvent
 }
 
-func (s *memorySink) Write(_ context.Context, level, message string, fields map[string]any) {
+func (s *memorySink) Write(level hc.Level, message string, fields map[string]any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cp := make(map[string]any, len(fields))

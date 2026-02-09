@@ -1,7 +1,6 @@
 package ginhappycontext
 
 import (
-	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,7 +13,7 @@ import (
 
 type discardSink struct{}
 
-func (discardSink) Write(context.Context, string, string, map[string]any) {}
+func (discardSink) Write(hc.Level, string, map[string]any) {}
 
 func BenchmarkRouter_gin(b *testing.B) {
 	gin.SetMode(gin.TestMode)

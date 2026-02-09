@@ -1,7 +1,6 @@
 package zapadapter
 
 import (
-	"context"
 	"testing"
 
 	"github.com/happytoolin/happycontext"
@@ -15,7 +14,7 @@ func TestSinkWriteMapsLevelAndMessage(t *testing.T) {
 	logger := zap.New(core)
 	sink := New(logger)
 
-	sink.Write(context.Background(), "ERROR", "", map[string]any{
+	sink.Write("ERROR", "", map[string]any{
 		"http.status": 500,
 		"user_id":     "u_1",
 	})
@@ -41,7 +40,7 @@ func TestSinkWriteMapsLevelAndMessage(t *testing.T) {
 func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 	tests := []struct {
 		name  string
-		level string
+		level hc.Level
 		want  zapcore.Level
 	}{
 		{name: "debug", level: hc.LevelDebug, want: zapcore.DebugLevel},
@@ -55,7 +54,7 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 			core, logs := observer.New(zapcore.DebugLevel)
 			sink := New(zap.New(core))
 
-			sink.Write(context.Background(), tt.level, "done", map[string]any{"k": "v"})
+			sink.Write(tt.level, "done", map[string]any{"k": "v"})
 
 			if logs.Len() != 1 {
 				t.Fatalf("expected one log entry, got %d", logs.Len())
@@ -76,8 +75,8 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 
 func TestSinkWriteNilSafety(t *testing.T) {
 	var nilSink *Sink
-	nilSink.Write(context.Background(), hc.LevelInfo, "x", map[string]any{"k": 1})
+	nilSink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
 
 	sink := New(nil)
-	sink.Write(context.Background(), hc.LevelInfo, "x", map[string]any{"k": 1})
+	sink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
 }

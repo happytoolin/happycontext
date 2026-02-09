@@ -1,7 +1,6 @@
 package zapadapter
 
 import (
-	"context"
 	"io"
 	"strconv"
 	"testing"
@@ -38,20 +37,19 @@ func BenchmarkAdapter_zap(b *testing.B) {
 		zapcore.InfoLevel,
 	)
 	sink := New(zap.New(core))
-	ctx := context.Background()
 	medium := benchFieldsMedium()
 
 	b.Run("write_small", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			sink.Write(ctx, hc.LevelInfo, "request_completed", benchFieldsSmall)
+			sink.Write(hc.LevelInfo, "request_completed", benchFieldsSmall)
 		}
 	})
 
 	b.Run("write_medium", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			sink.Write(ctx, hc.LevelInfo, "request_completed", medium)
+			sink.Write(hc.LevelInfo, "request_completed", medium)
 		}
 	})
 }

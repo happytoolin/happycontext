@@ -3,8 +3,6 @@ package common
 import (
 	"sync/atomic"
 	"time"
-
-	"github.com/happytoolin/happycontext"
 )
 
 var samplerState atomic.Uint64
@@ -13,7 +11,16 @@ func init() {
 	samplerState.Store(uint64(time.Now().UnixNano()) + 0x9e3779b97f4a7c15)
 }
 
-func shouldWriteEvent(in hc.SampleInput) bool {
+type sampleInput struct {
+	Method     string
+	Path       string
+	HasError   bool
+	StatusCode int
+	Duration   time.Duration
+	Rate       float64
+}
+
+func shouldWriteEvent(in sampleInput) bool {
 	if in.HasError || in.StatusCode >= 500 {
 		return true
 	}

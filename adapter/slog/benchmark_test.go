@@ -1,7 +1,6 @@
 package slogadapter
 
 import (
-	"context"
 	"io"
 	"log/slog"
 	"strconv"
@@ -33,27 +32,26 @@ func BenchmarkAdapter_slog(b *testing.B) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	sink := New(logger)
 	sinkDeterministic := NewWithOptions(logger, SinkOptions{DeterministicOrder: true})
-	ctx := context.Background()
 	medium := benchFieldsMedium()
 
 	b.Run("write_small", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			sink.Write(ctx, hc.LevelInfo, "request_completed", benchFieldsSmall)
+			sink.Write(hc.LevelInfo, "request_completed", benchFieldsSmall)
 		}
 	})
 
 	b.Run("write_medium", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			sink.Write(ctx, hc.LevelInfo, "request_completed", medium)
+			sink.Write(hc.LevelInfo, "request_completed", medium)
 		}
 	})
 
 	b.Run("write_medium_deterministic", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			sinkDeterministic.Write(ctx, hc.LevelInfo, "request_completed", medium)
+			sinkDeterministic.Write(hc.LevelInfo, "request_completed", medium)
 		}
 	})
 }

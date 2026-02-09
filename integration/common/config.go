@@ -20,7 +20,7 @@ func NormalizeConfig(cfg hc.Config) hc.Config {
 }
 
 // MergeLevelWithFloor merges auto level with an optional requested level.
-func MergeLevelWithFloor(autoLevel, requestedLevel string, hasRequested bool) string {
+func MergeLevelWithFloor(autoLevel, requestedLevel hc.Level, hasRequested bool) hc.Level {
 	if !hasRequested || !isValidLevel(requestedLevel) {
 		return autoLevel
 	}
@@ -30,7 +30,7 @@ func MergeLevelWithFloor(autoLevel, requestedLevel string, hasRequested bool) st
 	return autoLevel
 }
 
-func levelRank(level string) int {
+func levelRank(level hc.Level) int {
 	switch level {
 	case hc.LevelDebug:
 		return 10
@@ -45,7 +45,7 @@ func levelRank(level string) int {
 	}
 }
 
-func isValidLevel(level string) bool {
+func isValidLevel(level hc.Level) bool {
 	switch level {
 	case hc.LevelDebug, hc.LevelInfo, hc.LevelWarn, hc.LevelError:
 		return true

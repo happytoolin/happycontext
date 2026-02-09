@@ -14,7 +14,7 @@ func TestSinkWriteMapsLevelAndDefaultsMessage(t *testing.T) {
 	logger := slog.New(h)
 	sink := New(logger)
 
-	sink.Write(context.Background(), "WARN", "", map[string]any{
+	sink.Write("WARN", "", map[string]any{
 		"user_id": "u_1",
 	})
 
@@ -37,7 +37,7 @@ func TestSinkDeterministicOrderSortsKeys(t *testing.T) {
 	logger := slog.New(h)
 	sink := NewWithOptions(logger, SinkOptions{DeterministicOrder: true})
 
-	sink.Write(context.Background(), "INFO", "done", map[string]any{
+	sink.Write("INFO", "done", map[string]any{
 		"z": 1,
 		"a": 2,
 		"m": 3,
@@ -55,20 +55,20 @@ func TestSinkDeterministicOrderSortsKeys(t *testing.T) {
 func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 	tests := []struct {
 		name  string
-		level string
+		level hc.Level
 		want  slog.Level
 	}{
 		{name: "debug", level: hc.LevelDebug, want: slog.LevelDebug},
 		{name: "warn", level: hc.LevelWarn, want: slog.LevelWarn},
 		{name: "error", level: hc.LevelError, want: slog.LevelError},
-		{name: "default", level: "UNKNOWN", want: slog.LevelInfo},
+		{name: "default", level: hc.Level("UNKNOWN"), want: slog.LevelInfo},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := &captureSlogHandler{}
 			sink := New(slog.New(h))
-			sink.Write(context.Background(), tt.level, "done", map[string]any{"k": "v"})
+			sink.Write(tt.level, "done", map[string]any{"k": "v"})
 
 			if len(h.records) != 1 {
 				t.Fatalf("expected 1 record, got %d", len(h.records))
@@ -85,10 +85,10 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 
 func TestSinkWriteNilSafety(t *testing.T) {
 	var nilSink *Sink
-	nilSink.Write(context.Background(), hc.LevelInfo, "x", map[string]any{"k": 1})
+	nilSink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
 
 	sink := New(nil)
-	sink.Write(context.Background(), hc.LevelInfo, "x", map[string]any{"k": 1})
+	sink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
 }
 
 type captureSlogRecord struct {

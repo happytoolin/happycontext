@@ -40,7 +40,7 @@ func NewWithOptions(l *slog.Logger, opts SinkOptions) *Sink {
 }
 
 // Write implements hc.Sink.
-func (s *Sink) Write(ctx context.Context, level, message string, fields map[string]any) {
+func (s *Sink) Write(level hc.Level, message string, fields map[string]any) {
 	if s == nil || s.logger == nil {
 		return
 	}
@@ -70,7 +70,7 @@ func (s *Sink) Write(ctx context.Context, level, message string, fields map[stri
 		for k, v := range fields {
 			attrs = append(attrs, slog.Any(k, v))
 		}
-		s.logger.Log(ctx, slogLevel, message, attrs...)
+		s.logger.Log(context.Background(), slogLevel, message, attrs...)
 		return
 	}
 	keys := slices.Collect(maps.Keys(fields))
@@ -79,7 +79,7 @@ func (s *Sink) Write(ctx context.Context, level, message string, fields map[stri
 	for _, k := range keys {
 		attrs = append(attrs, slog.Any(k, fields[k]))
 	}
-	s.logger.Log(ctx, slogLevel, message, attrs...)
+	s.logger.Log(context.Background(), slogLevel, message, attrs...)
 }
 
 var _ hc.Sink = (*Sink)(nil)

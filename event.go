@@ -14,7 +14,7 @@ type Event struct {
 	fields            map[string]any
 	startTime         time.Time
 	hasError          bool
-	requestedLevel    string
+	requestedLevel    Level
 	hasRequestedLevel bool
 }
 
@@ -85,18 +85,19 @@ func (e *Event) StartTime() time.Time {
 }
 
 // SetLevel stores a requested level override if valid.
-func (e *Event) SetLevel(level string) {
+func (e *Event) SetLevel(level Level) bool {
 	if !isValidLevel(level) {
-		return
+		return false
 	}
 	e.mu.Lock()
 	e.requestedLevel = level
 	e.hasRequestedLevel = true
 	e.mu.Unlock()
+	return true
 }
 
 // RequestedLevel returns the requested level override when present.
-func (e *Event) RequestedLevel() (string, bool) {
+func (e *Event) RequestedLevel() (Level, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.requestedLevel, e.hasRequestedLevel

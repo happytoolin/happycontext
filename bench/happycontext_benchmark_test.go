@@ -119,20 +119,19 @@ func BenchmarkCommitPath(b *testing.B) {
 	}
 
 	sink := discardSink{}
-	ctx := context.Background()
 
 	b.ReportAllocs()
 	for b.Loop() {
 		e := hc.NewEvent()
 		e.AddMap(baseFields)
 		s := e.Snapshot()
-		sink.Write(ctx, hc.LevelInfo, "request_completed", s.Fields)
+		sink.Write(hc.LevelInfo, "request_completed", s.Fields)
 	}
 }
 
 type discardSink struct{}
 
-func (discardSink) Write(_ context.Context, _, _ string, _ map[string]any) {}
+func (discardSink) Write(_ hc.Level, _ string, _ map[string]any) {}
 
 func BenchmarkJSONEncodingReference(b *testing.B) {
 	payload := []byte(`{"status":"ok"}`)
@@ -143,7 +142,6 @@ func BenchmarkJSONEncodingReference(b *testing.B) {
 }
 
 func BenchmarkNonHTTPManualLifecycle(b *testing.B) {
-	ctx := context.Background()
 	sink := discardSink{}
 
 	fieldProfiles := map[string]map[string]any{
@@ -166,7 +164,7 @@ func BenchmarkNonHTTPManualLifecycle(b *testing.B) {
 				e := hc.NewEvent()
 				e.AddMap(fields)
 				snapshot := e.Snapshot()
-				sink.Write(ctx, hc.LevelInfo, "job_completed", snapshot.Fields)
+				sink.Write(hc.LevelInfo, "job_completed", snapshot.Fields)
 			}
 		})
 	}

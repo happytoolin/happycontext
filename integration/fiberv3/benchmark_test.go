@@ -1,7 +1,6 @@
 package fiberv3happycontext
 
 import (
-	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,7 +13,7 @@ import (
 
 type discardSink struct{}
 
-func (discardSink) Write(context.Context, string, string, map[string]any) {}
+func (discardSink) Write(hc.Level, string, map[string]any) {}
 
 func BenchmarkRouter_fiberv3(b *testing.B) {
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {

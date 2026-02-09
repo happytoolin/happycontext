@@ -10,7 +10,9 @@ func TestCommitWritesEventSnapshot(t *testing.T) {
 	Add(ctx, "k", "v")
 	sink := NewTestSink()
 
-	Commit(ctx, sink, LevelWarn)
+	if !Commit(ctx, sink, LevelWarn) {
+		t.Fatal("expected commit to write")
+	}
 
 	events := sink.Events()
 	if len(events) != 1 {
@@ -28,10 +30,14 @@ func TestCommitWritesEventSnapshot(t *testing.T) {
 }
 
 func TestCommitNoopGuards(t *testing.T) {
-	Commit(context.Background(), nil, LevelInfo)
+	if Commit(context.Background(), nil, LevelInfo) {
+		t.Fatal("expected commit with nil sink to return false")
+	}
 
 	sink := NewTestSink()
-	Commit(context.Background(), sink, LevelInfo)
+	if Commit(context.Background(), sink, LevelInfo) {
+		t.Fatal("expected commit without event to return false")
+	}
 	if got := len(sink.Events()); got != 0 {
 		t.Fatalf("expected no events, got %d", got)
 	}

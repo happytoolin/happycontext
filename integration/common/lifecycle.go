@@ -46,7 +46,7 @@ func FinalizeRequest(cfg hc.Config, in FinalizeInput) {
 	duration := annotateTiming(in.Ctx, in.Event, in.StatusCode)
 	hasError := in.Event.HasError() || in.StatusCode >= 500
 	level := resolveLevel(in.Ctx, hasError)
-	if !shouldWriteEvent(hc.SampleInput{
+	if !shouldWriteEvent(sampleInput{
 		Method:     in.Method,
 		Path:       in.Path,
 		HasError:   hasError,
@@ -57,7 +57,7 @@ func FinalizeRequest(cfg hc.Config, in FinalizeInput) {
 		return
 	}
 	snapshot := in.Event.Snapshot()
-	cfg.Sink.Write(in.Ctx, level, cfg.Message, snapshot.Fields)
+	cfg.Sink.Write(level, cfg.Message, snapshot.Fields)
 }
 
 func annotateFailures(ctx context.Context, err error, recovered any) {
@@ -80,7 +80,7 @@ func annotateTiming(ctx context.Context, event *hc.Event, statusCode int) time.D
 	return duration
 }
 
-func resolveLevel(ctx context.Context, hasError bool) string {
+func resolveLevel(ctx context.Context, hasError bool) hc.Level {
 	autoLevel := hc.LevelInfo
 	if hasError {
 		autoLevel = hc.LevelError

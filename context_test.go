@@ -16,9 +16,9 @@ func TestContextHelpersNoopWithoutEvent(t *testing.T) {
 func TestContextHelpers(t *testing.T) {
 	ctx, _ := NewContext(context.Background())
 	Add(ctx, "a", 1)
-	Set(ctx, "alias", true)
+	Add(ctx, "alias", true)
 	AddMap(ctx, map[string]any{"b": 2})
-	SetError(ctx, errors.New("boom"))
+	Error(ctx, errors.New("boom"))
 	SetLevel(ctx, LevelWarn)
 	SetRoute(ctx, "/orders/:id")
 
@@ -47,7 +47,28 @@ func TestContextHelpers(t *testing.T) {
 
 func TestGetLevelWithoutEvent(t *testing.T) {
 	lvl, ok := GetLevel(context.Background())
-	if ok || lvl != "" {
+	if ok || lvl != Level("") {
 		t.Fatalf("expected empty/no level, got %q (ok=%v)", lvl, ok)
+	}
+}
+
+func TestHelpersWithNilContextAreNoop(t *testing.T) {
+	if Add(nil, "a", 1) {
+		t.Fatal("expected Add(nil, ...) to return false")
+	}
+	if AddMap(nil, map[string]any{"a": 1}) {
+		t.Fatal("expected AddMap(nil, ...) to return false")
+	}
+	if Error(nil, errors.New("boom")) {
+		t.Fatal("expected Error(nil, ...) to return false")
+	}
+	if SetLevel(nil, LevelInfo) {
+		t.Fatal("expected SetLevel(nil, ...) to return false")
+	}
+	if SetRoute(nil, "/x") {
+		t.Fatal("expected SetRoute(nil, ...) to return false")
+	}
+	if got := FromContext(nil); got != nil {
+		t.Fatal("expected FromContext(nil) to be nil")
 	}
 }

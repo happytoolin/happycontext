@@ -27,7 +27,7 @@ type runResult struct {
 }
 
 type comparableResult struct {
-	level    string
+	level    hc.Level
 	status   int
 	message  string
 	method   string

@@ -1,7 +1,6 @@
 package hc
 
 import (
-	"context"
 	"maps"
 	"slices"
 	"sync"
@@ -9,7 +8,7 @@ import (
 
 // CapturedEvent is one event captured by TestSink.
 type CapturedEvent struct {
-	Level   string
+	Level   Level
 	Message string
 	Fields  map[string]any
 }
@@ -26,7 +25,7 @@ func NewTestSink() *TestSink {
 }
 
 // Write appends one captured event.
-func (t *TestSink) Write(_ context.Context, level, message string, fields map[string]any) {
+func (t *TestSink) Write(level Level, message string, fields map[string]any) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	cp := maps.Clone(fields)

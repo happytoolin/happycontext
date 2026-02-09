@@ -79,12 +79,12 @@ func main() {
 ## Core API
 
 - `hc.NewContext(ctx)` creates a context with an attached event
-- `hc.Add(ctx, key, value)` adds or overwrites one field
-- `hc.AddMap(ctx, map[string]any)` merges fields
-- `hc.Error(ctx, err)` stores structured error metadata and marks the event as failed
-- `hc.SetLevel(ctx, level)` requests a minimum final level (`DEBUG`, `INFO`, `WARN`, `ERROR`)
-- `hc.SetRoute(ctx, route)` sets low-cardinality route template (`/orders/:id`)
-- `hc.Commit(ctx, sink, level)` immediately writes one snapshot (manual lifecycle)
+- `hc.Add(ctx, key, value) bool` adds or overwrites one field
+- `hc.AddMap(ctx, map[string]any) bool` merges fields
+- `hc.Error(ctx, err) bool` stores structured error metadata and marks the event as failed
+- `hc.SetLevel(ctx, level) bool` requests a minimum final level (`hc.LevelDebug`, `hc.LevelInfo`, `hc.LevelWarn`, `hc.LevelError`)
+- `hc.SetRoute(ctx, route) bool` sets low-cardinality route template (`/orders/:id`)
+- `hc.Commit(ctx, sink, level) bool` immediately writes one snapshot (manual lifecycle)
 
 ## Event Fields
 
@@ -146,7 +146,7 @@ All adapters implement `hc.Sink`.
 ctx, _ := hc.NewContext(context.Background())
 hc.Add(ctx, "job.id", "j_123")
 hc.Add(ctx, "duration_ms", 42)
-hc.Commit(ctx, sink, hc.LevelInfo)
+_ = hc.Commit(ctx, sink, hc.LevelInfo)
 ```
 
 ## Testing
