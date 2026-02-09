@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 	"github.com/rs/zerolog"
 )
 
-// Sink writes hlog events to zerolog.
+// Sink writes happycontext events to zerolog.
 type Sink struct {
 	logger *zerolog.Logger
 }
@@ -18,7 +18,7 @@ func New(l *zerolog.Logger) *Sink {
 	return &Sink{logger: l}
 }
 
-// Write implements hlog.Sink.
+// Write implements happycontext.Sink.
 func (z *Sink) Write(_ context.Context, level, message string, fields map[string]any) {
 	if z == nil || z.logger == nil {
 		return
@@ -29,11 +29,11 @@ func (z *Sink) Write(_ context.Context, level, message string, fields map[string
 
 	event := z.logger.Info()
 	switch level {
-	case hlog.LevelDebug:
+	case happycontext.LevelDebug:
 		event = z.logger.Debug()
-	case hlog.LevelWarn:
+	case happycontext.LevelWarn:
 		event = z.logger.Warn()
-	case hlog.LevelError:
+	case happycontext.LevelError:
 		event = z.logger.Error()
 	}
 
@@ -80,4 +80,4 @@ func (z *Sink) Write(_ context.Context, level, message string, fields map[string
 	event.Msg(message)
 }
 
-var _ hlog.Sink = (*Sink)(nil)
+var _ happycontext.Sink = (*Sink)(nil)

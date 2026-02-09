@@ -1,10 +1,10 @@
-module github.com/happytoolin/hlog/integration/gin
+module github.com/happytoolin/happycontext/integration/gin
 
 go 1.24.0
 
 require (
 	github.com/gin-gonic/gin v1.11.0
-	github.com/happytoolin/hlog v0.0.0
+	github.com/happytoolin/happycontext v0.0.0
 )
 
 require (
@@ -41,4 +41,4 @@ require (
 	google.golang.org/protobuf v1.36.9 // indirect
 )
 
-replace github.com/happytoolin/hlog => ../../
+replace github.com/happytoolin/happycontext => ../../

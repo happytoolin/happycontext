@@ -1,16 +1,16 @@
-package fiberv3hlog
+package fiberv3happycontext
 
 import (
 	"errors"
 	"net/http"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/happytoolin/hlog"
-	"github.com/happytoolin/hlog/integration/common"
+	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/happycontext/integration/common"
 )
 
 // Middleware returns a Fiber v3 middleware that captures one event per request.
-func Middleware(cfg hlog.Config) fiber.Handler {
+func Middleware(cfg happycontext.Config) fiber.Handler {
 	cfg = common.NormalizeConfig(cfg)
 	if cfg.Sink == nil {
 		return func(c fiber.Ctx) error {

@@ -1,13 +1,13 @@
-package ginhlog
+package ginhappycontext
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/happytoolin/hlog"
-	"github.com/happytoolin/hlog/integration/common"
+	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/happycontext/integration/common"
 )
 
 // Middleware returns a Gin middleware that captures one event per request.
-func Middleware(cfg hlog.Config) gin.HandlerFunc {
+func Middleware(cfg happycontext.Config) gin.HandlerFunc {
 	cfg = common.NormalizeConfig(cfg)
 	if cfg.Sink == nil {
 		return func(c *gin.Context) {

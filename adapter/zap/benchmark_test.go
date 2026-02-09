@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -44,14 +44,14 @@ func BenchmarkAdapter_zap(b *testing.B) {
 	b.Run("write_small", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			sink.Write(ctx, hlog.LevelInfo, "request_completed", benchFieldsSmall)
+			sink.Write(ctx, happycontext.LevelInfo, "request_completed", benchFieldsSmall)
 		}
 	})
 
 	b.Run("write_medium", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			sink.Write(ctx, hlog.LevelInfo, "request_completed", medium)
+			sink.Write(ctx, happycontext.LevelInfo, "request_completed", medium)
 		}
 	})
 }

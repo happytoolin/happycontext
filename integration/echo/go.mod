@@ -1,9 +1,9 @@
-module github.com/happytoolin/hlog/integration/echo
+module github.com/happytoolin/happycontext/integration/echo
 
 go 1.24.0
 
 require (
-	github.com/happytoolin/hlog v0.0.0
+	github.com/happytoolin/happycontext v0.0.0
 	github.com/labstack/echo/v4 v4.15.0
 )
 
@@ -19,4 +19,4 @@ require (
 	golang.org/x/text v0.32.0 // indirect
 )
 
-replace github.com/happytoolin/hlog => ../../
+replace github.com/happytoolin/happycontext => ../../

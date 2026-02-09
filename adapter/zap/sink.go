@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 	"go.uber.org/zap"
 )
 
@@ -15,7 +15,7 @@ var zapFieldPool = sync.Pool{
 	},
 }
 
-// Sink writes hlog events to zap.
+// Sink writes happycontext events to zap.
 type Sink struct {
 	logger *zap.Logger
 }
@@ -25,7 +25,7 @@ func New(l *zap.Logger) *Sink {
 	return &Sink{logger: l}
 }
 
-// Write implements hlog.Sink.
+// Write implements happycontext.Sink.
 func (z *Sink) Write(_ context.Context, level, message string, fields map[string]any) {
 	if z == nil || z.logger == nil {
 		return
@@ -46,15 +46,15 @@ func (z *Sink) Write(_ context.Context, level, message string, fields map[string
 	}
 
 	switch level {
-	case hlog.LevelDebug:
+	case happycontext.LevelDebug:
 		z.logger.Debug(message, zapFields...)
-	case hlog.LevelWarn:
+	case happycontext.LevelWarn:
 		z.logger.Warn(message, zapFields...)
-	case hlog.LevelError:
+	case happycontext.LevelError:
 		z.logger.Error(message, zapFields...)
 	default:
 		z.logger.Info(message, zapFields...)
 	}
 }
 
-var _ hlog.Sink = (*Sink)(nil)
+var _ happycontext.Sink = (*Sink)(nil)

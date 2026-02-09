@@ -1,16 +1,16 @@
-package echohlog
+package echohappycontext
 
 import (
 	"errors"
 	"net/http"
 
-	"github.com/happytoolin/hlog"
-	"github.com/happytoolin/hlog/integration/common"
+	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/happycontext/integration/common"
 	"github.com/labstack/echo/v4"
 )
 
 // Middleware returns an Echo middleware that captures one event per request.
-func Middleware(cfg hlog.Config) echo.MiddlewareFunc {
+func Middleware(cfg happycontext.Config) echo.MiddlewareFunc {
 	cfg = common.NormalizeConfig(cfg)
 	if cfg.Sink == nil {
 		return func(next echo.HandlerFunc) echo.HandlerFunc {

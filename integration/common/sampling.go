@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 )
 
 var samplerState atomic.Uint64
@@ -13,7 +13,7 @@ func init() {
 	samplerState.Store(uint64(time.Now().UnixNano()) + 0x9e3779b97f4a7c15)
 }
 
-func shouldWriteEvent(in hlog.SampleInput) bool {
+func shouldWriteEvent(in happycontext.SampleInput) bool {
 	if in.HasError || in.StatusCode >= 500 {
 		return true
 	}

@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 )
 
 func TestSinkWriteMapsLevelAndDefaultsMessage(t *testing.T) {
@@ -58,9 +58,9 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 		level string
 		want  slog.Level
 	}{
-		{name: "debug", level: hlog.LevelDebug, want: slog.LevelDebug},
-		{name: "warn", level: hlog.LevelWarn, want: slog.LevelWarn},
-		{name: "error", level: hlog.LevelError, want: slog.LevelError},
+		{name: "debug", level: happycontext.LevelDebug, want: slog.LevelDebug},
+		{name: "warn", level: happycontext.LevelWarn, want: slog.LevelWarn},
+		{name: "error", level: happycontext.LevelError, want: slog.LevelError},
 		{name: "default", level: "UNKNOWN", want: slog.LevelInfo},
 	}
 
@@ -85,10 +85,10 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 
 func TestSinkWriteNilSafety(t *testing.T) {
 	var nilSink *Sink
-	nilSink.Write(context.Background(), hlog.LevelInfo, "x", map[string]any{"k": 1})
+	nilSink.Write(context.Background(), happycontext.LevelInfo, "x", map[string]any{"k": 1})
 
 	sink := New(nil)
-	sink.Write(context.Background(), hlog.LevelInfo, "x", map[string]any{"k": 1})
+	sink.Write(context.Background(), happycontext.LevelInfo, "x", map[string]any{"k": 1})
 }
 
 type captureSlogRecord struct {

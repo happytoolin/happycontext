@@ -1,3 +1,3 @@
-module github.com/happytoolin/hlog
+module github.com/happytoolin/happycontext
 
 go 1.24

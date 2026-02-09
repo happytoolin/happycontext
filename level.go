@@ -1,4 +1,4 @@
-package hlog
+package happycontext
 
 func isValidLevel(level string) bool {
 	switch level {

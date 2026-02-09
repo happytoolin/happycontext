@@ -7,7 +7,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 )
 
 var slogAnyPool = sync.Pool{
@@ -23,7 +23,7 @@ type SinkOptions struct {
 	DeterministicOrder bool
 }
 
-// Sink writes hlog events to slog.
+// Sink writes happycontext events to slog.
 type Sink struct {
 	logger             *slog.Logger
 	deterministicOrder bool
@@ -39,7 +39,7 @@ func NewWithOptions(l *slog.Logger, opts SinkOptions) *Sink {
 	return &Sink{logger: l, deterministicOrder: opts.DeterministicOrder}
 }
 
-// Write implements hlog.Sink.
+// Write implements happycontext.Sink.
 func (s *Sink) Write(ctx context.Context, level, message string, fields map[string]any) {
 	if s == nil || s.logger == nil {
 		return
@@ -51,11 +51,11 @@ func (s *Sink) Write(ctx context.Context, level, message string, fields map[stri
 
 	slogLevel := slog.LevelInfo
 	switch level {
-	case hlog.LevelDebug:
+	case happycontext.LevelDebug:
 		slogLevel = slog.LevelDebug
-	case hlog.LevelWarn:
+	case happycontext.LevelWarn:
 		slogLevel = slog.LevelWarn
-	case hlog.LevelError:
+	case happycontext.LevelError:
 		slogLevel = slog.LevelError
 	}
 
@@ -82,4 +82,4 @@ func (s *Sink) Write(ctx context.Context, level, message string, fields map[stri
 	s.logger.Log(ctx, slogLevel, message, attrs...)
 }
 
-var _ hlog.Sink = (*Sink)(nil)
+var _ happycontext.Sink = (*Sink)(nil)

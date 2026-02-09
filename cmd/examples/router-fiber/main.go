@@ -5,9 +5,9 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/happytoolin/hlog"
-	slogadapter "github.com/happytoolin/hlog/adapter/slog"
-	fiberhlog "github.com/happytoolin/hlog/integration/fiber"
+	"github.com/happytoolin/happycontext"
+	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	fiberhappycontext "github.com/happytoolin/happycontext/integration/fiber"
 )
 
 func main() {
@@ -15,9 +15,9 @@ func main() {
 	sink := slogadapter.New(logger)
 
 	app := fiber.New()
-	app.Use(fiberhlog.Middleware(hlog.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberhappycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1}))
 	app.Get("/users/:id", func(c *fiber.Ctx) error {
-		hlog.Add(c.UserContext(), "router", "fiber-v2")
+		happycontext.Add(c.UserContext(), "router", "fiber-v2")
 		return c.SendStatus(200)
 	})
 

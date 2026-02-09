@@ -1,4 +1,4 @@
-package echohlog
+package echohappycontext
 
 import (
 	"context"
@@ -9,19 +9,19 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 	"github.com/labstack/echo/v4"
 )
 
 func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 	e := echo.New()
 	sink := &memorySink{}
-	e.Use(Middleware(hlog.Config{
+	e.Use(Middleware(happycontext.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
 	e.GET("/orders/:id", func(c echo.Context) error {
-		hlog.Add(c.Request().Context(), "user_id", "u_1")
+		happycontext.Add(c.Request().Context(), "user_id", "u_1")
 		return c.NoContent(http.StatusAccepted)
 	})
 
@@ -46,7 +46,7 @@ func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 
 func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
 	e := echo.New()
-	e.Use(Middleware(hlog.Config{}))
+	e.Use(Middleware(happycontext.Config{}))
 	e.GET("/ok", func(c echo.Context) error {
 		return c.NoContent(http.StatusAccepted)
 	})
@@ -61,7 +61,7 @@ func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
 func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 	e := echo.New()
 	sink := &memorySink{}
-	e.Use(Middleware(hlog.Config{
+	e.Use(Middleware(happycontext.Config{
 		Sink:         sink,
 		SamplingRate: 0,
 	}))
@@ -82,7 +82,7 @@ func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level != hlog.LevelError {
+	if events[0].Level != happycontext.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level)
 	}
 	if events[0].Fields["http.status"] != http.StatusInternalServerError {
@@ -96,7 +96,7 @@ func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 	e := echo.New()
 	sink := &memorySink{}
-	e.Use(Middleware(hlog.Config{
+	e.Use(Middleware(happycontext.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
@@ -134,7 +134,7 @@ func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 func TestMiddlewareEchoHTTPErrorKeepsHTTPStatus(t *testing.T) {
 	e := echo.New()
 	sink := &memorySink{}
-	e.Use(Middleware(hlog.Config{
+	e.Use(Middleware(happycontext.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
@@ -150,7 +150,7 @@ func TestMiddlewareEchoHTTPErrorKeepsHTTPStatus(t *testing.T) {
 	if events[0].Fields["http.status"] != http.StatusForbidden {
 		t.Fatalf("status = %v, want %d", events[0].Fields["http.status"], http.StatusForbidden)
 	}
-	if events[0].Level != hlog.LevelError {
+	if events[0].Level != happycontext.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level)
 	}
 }
@@ -158,7 +158,7 @@ func TestMiddlewareEchoHTTPErrorKeepsHTTPStatus(t *testing.T) {
 func TestMiddlewareCustomMessagePropagates(t *testing.T) {
 	e := echo.New()
 	sink := &memorySink{}
-	e.Use(Middleware(hlog.Config{
+	e.Use(Middleware(happycontext.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 		Message:      "done",
@@ -184,7 +184,7 @@ func TestMiddlewareLogsStatusFromCustomEchoErrorHandler(t *testing.T) {
 	}
 
 	sink := &memorySink{}
-	e.Use(Middleware(hlog.Config{
+	e.Use(Middleware(happycontext.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
@@ -205,7 +205,7 @@ func TestMiddlewareLogsStatusFromCustomEchoErrorHandler(t *testing.T) {
 	if events[0].Fields["http.status"] != http.StatusTeapot {
 		t.Fatalf("status = %v, want %d", events[0].Fields["http.status"], http.StatusTeapot)
 	}
-	if events[0].Level != hlog.LevelError {
+	if events[0].Level != happycontext.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level)
 	}
 }

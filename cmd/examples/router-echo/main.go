@@ -4,9 +4,9 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/happytoolin/hlog"
-	slogadapter "github.com/happytoolin/hlog/adapter/slog"
-	echohlog "github.com/happytoolin/hlog/integration/echo"
+	"github.com/happytoolin/happycontext"
+	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	echohappycontext "github.com/happytoolin/happycontext/integration/echo"
 	"github.com/labstack/echo/v4"
 )
 
@@ -15,9 +15,9 @@ func main() {
 	sink := slogadapter.New(logger)
 
 	e := echo.New()
-	e.Use(echohlog.Middleware(hlog.Config{Sink: sink, SamplingRate: 1}))
+	e.Use(echohappycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1}))
 	e.GET("/users/:id", func(c echo.Context) error {
-		hlog.Add(c.Request().Context(), "router", "echo")
+		happycontext.Add(c.Request().Context(), "router", "echo")
 		return c.NoContent(200)
 	})
 

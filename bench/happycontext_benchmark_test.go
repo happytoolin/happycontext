@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 )
 
 func BenchmarkEventAddStableKeys(b *testing.B) {
-	e := hlog.NewEvent()
+	e := happycontext.NewEvent()
 	keys := make([]string, 32)
 	for i := range keys {
 		keys[i] = "k" + strconv.Itoa(i)
@@ -36,13 +36,13 @@ func BenchmarkEventAddMap(b *testing.B) {
 
 	b.ReportAllocs()
 	for b.Loop() {
-		e := hlog.NewEvent()
+		e := happycontext.NewEvent()
 		e.AddMap(template)
 	}
 }
 
 func BenchmarkEventAddParallelStableKeys(b *testing.B) {
-	e := hlog.NewEvent()
+	e := happycontext.NewEvent()
 	keys := make([]string, 32)
 	for i := range keys {
 		keys[i] = "k" + strconv.Itoa(i)
@@ -63,7 +63,7 @@ func BenchmarkEventAddParallelStableKeys(b *testing.B) {
 func BenchmarkEventSnapshot(b *testing.B) {
 	for _, n := range []int{8, 32, 128} {
 		b.Run("fields_"+strconv.Itoa(n), func(b *testing.B) {
-			e := hlog.NewEvent()
+			e := happycontext.NewEvent()
 			for i := 0; i < n; i++ {
 				e.Add("k"+strconv.Itoa(i), i)
 			}
@@ -77,7 +77,7 @@ func BenchmarkEventSnapshot(b *testing.B) {
 }
 
 func BenchmarkEventSnapshotNested(b *testing.B) {
-	e := hlog.NewEvent()
+	e := happycontext.NewEvent()
 	e.Add("request", map[string]any{
 		"user": map[string]any{
 			"id":    "u_1",
@@ -96,7 +96,7 @@ func BenchmarkEventSnapshotNested(b *testing.B) {
 }
 
 func BenchmarkEventSnapshotCyclic(b *testing.B) {
-	e := hlog.NewEvent()
+	e := happycontext.NewEvent()
 	node := map[string]any{"name": "root"}
 	node["self"] = node
 	e.Add("node", node)
@@ -123,10 +123,10 @@ func BenchmarkCommitPath(b *testing.B) {
 
 	b.ReportAllocs()
 	for b.Loop() {
-		e := hlog.NewEvent()
+		e := happycontext.NewEvent()
 		e.AddMap(baseFields)
 		s := e.Snapshot()
-		sink.Write(ctx, hlog.LevelInfo, "request_completed", s.Fields)
+		sink.Write(ctx, happycontext.LevelInfo, "request_completed", s.Fields)
 	}
 }
 
@@ -163,10 +163,10 @@ func BenchmarkNonHTTPManualLifecycle(b *testing.B) {
 		b.Run(name, func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
-				e := hlog.NewEvent()
+				e := happycontext.NewEvent()
 				e.AddMap(fields)
 				snapshot := e.Snapshot()
-				sink.Write(ctx, hlog.LevelInfo, "job_completed", snapshot.Fields)
+				sink.Write(ctx, happycontext.LevelInfo, "job_completed", snapshot.Fields)
 			}
 		})
 	}
@@ -177,13 +177,13 @@ func BenchmarkNonHTTPBackgroundJob(b *testing.B) {
 
 	b.ReportAllocs()
 	for b.Loop() {
-		ctx, _ := hlog.NewContext(context.Background())
-		hlog.Add(ctx, "job.id", "job_8472")
-		hlog.Add(ctx, "worker", "payments")
-		hlog.Add(ctx, "attempt", 1)
-		hlog.Add(ctx, "duration_ms", 13)
-		hlog.Add(ctx, "scheduled_at", time.Now().UTC().Truncate(time.Second))
-		hlog.Commit(ctx, sink, hlog.LevelInfo)
+		ctx, _ := happycontext.NewContext(context.Background())
+		happycontext.Add(ctx, "job.id", "job_8472")
+		happycontext.Add(ctx, "worker", "payments")
+		happycontext.Add(ctx, "attempt", 1)
+		happycontext.Add(ctx, "duration_ms", 13)
+		happycontext.Add(ctx, "scheduled_at", time.Now().UTC().Truncate(time.Second))
+		happycontext.Commit(ctx, sink, happycontext.LevelInfo)
 	}
 }
 

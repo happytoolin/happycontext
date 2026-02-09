@@ -1,18 +1,18 @@
-package stdhlog
+package stdhappycontext
 
 import (
 	"io"
 	"net/http"
 
 	"github.com/felixge/httpsnoop"
-	"github.com/happytoolin/hlog"
-	"github.com/happytoolin/hlog/integration/common"
+	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/happycontext/integration/common"
 )
 
 // Config controls standard net/http middleware behavior.
-type Config = hlog.Config
+type Config = happycontext.Config
 
-// Middleware wraps an http.Handler with hlog request lifecycle logging.
+// Middleware wraps an http.Handler with happycontext request lifecycle logging.
 func Middleware(cfg Config) func(http.Handler) http.Handler {
 	cfg = common.NormalizeConfig(cfg)
 	sink := cfg.Sink

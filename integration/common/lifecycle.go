@@ -6,13 +6,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 )
 
 // FinalizeInput contains request data required for finalization.
 type FinalizeInput struct {
 	Ctx        context.Context
-	Event      *hlog.Event
+	Event      *happycontext.Event
 	Method     string
 	Path       string
 	Route      string
@@ -22,31 +22,31 @@ type FinalizeInput struct {
 }
 
 // StartRequest initializes request context and base HTTP fields.
-func StartRequest(baseCtx context.Context, method, path string) (context.Context, *hlog.Event) {
+func StartRequest(baseCtx context.Context, method, path string) (context.Context, *happycontext.Event) {
 	if baseCtx == nil {
 		baseCtx = context.Background()
 	}
-	ctx, event := hlog.NewContext(baseCtx)
-	hlog.Add(ctx, "http.method", method)
-	hlog.Add(ctx, "http.path", path)
+	ctx, event := happycontext.NewContext(baseCtx)
+	happycontext.Add(ctx, "http.method", method)
+	happycontext.Add(ctx, "http.path", path)
 	return ctx, event
 }
 
 // FinalizeRequest computes status/level/sampling and writes the final snapshot.
-func FinalizeRequest(cfg hlog.Config, in FinalizeInput) {
+func FinalizeRequest(cfg happycontext.Config, in FinalizeInput) {
 	if cfg.Sink == nil || in.Event == nil || in.Ctx == nil {
 		return
 	}
 
 	annotateFailures(in.Ctx, in.Err, in.Recovered)
 	if in.Route != "" {
-		hlog.SetRoute(in.Ctx, in.Route)
+		happycontext.SetRoute(in.Ctx, in.Route)
 	}
 
 	duration := annotateTiming(in.Ctx, in.Event, in.StatusCode)
 	hasError := in.Event.HasError() || in.StatusCode >= 500
 	level := resolveLevel(in.Ctx, hasError)
-	if !shouldWriteEvent(hlog.SampleInput{
+	if !shouldWriteEvent(happycontext.SampleInput{
 		Method:     in.Method,
 		Path:       in.Path,
 		HasError:   hasError,
@@ -62,30 +62,30 @@ func FinalizeRequest(cfg hlog.Config, in FinalizeInput) {
 
 func annotateFailures(ctx context.Context, err error, recovered any) {
 	if recovered != nil {
-		hlog.Add(ctx, "panic", map[string]any{
+		happycontext.Add(ctx, "panic", map[string]any{
 			"type":  fmt.Sprintf("%T", recovered),
 			"value": fmt.Sprint(recovered),
 		})
-		hlog.Error(ctx, fmt.Errorf("panic: %v", recovered))
+		happycontext.Error(ctx, fmt.Errorf("panic: %v", recovered))
 	}
 	if err != nil {
-		hlog.Error(ctx, err)
+		happycontext.Error(ctx, err)
 	}
 }
 
-func annotateTiming(ctx context.Context, event *hlog.Event, statusCode int) time.Duration {
+func annotateTiming(ctx context.Context, event *happycontext.Event, statusCode int) time.Duration {
 	duration := time.Since(event.StartTime())
-	hlog.Add(ctx, "duration_ms", duration.Milliseconds())
-	hlog.Add(ctx, "http.status", statusCode)
+	happycontext.Add(ctx, "duration_ms", duration.Milliseconds())
+	happycontext.Add(ctx, "http.status", statusCode)
 	return duration
 }
 
 func resolveLevel(ctx context.Context, hasError bool) string {
-	autoLevel := hlog.LevelInfo
+	autoLevel := happycontext.LevelInfo
 	if hasError {
-		autoLevel = hlog.LevelError
+		autoLevel = happycontext.LevelError
 	}
-	requestedLevel, hasRequestedLevel := hlog.GetLevel(ctx)
+	requestedLevel, hasRequestedLevel := happycontext.GetLevel(ctx)
 	return MergeLevelWithFloor(autoLevel, requestedLevel, hasRequestedLevel)
 }
 

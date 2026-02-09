@@ -3,19 +3,19 @@ package common
 import (
 	"testing"
 
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 )
 
 func TestNormalizeConfigClampsAndDefaults(t *testing.T) {
 	tests := []struct {
 		name    string
-		cfg     hlog.Config
+		cfg     happycontext.Config
 		wantMsg string
 		wantRat float64
 	}{
-		{name: "negative", cfg: hlog.Config{SamplingRate: -1}, wantMsg: DefaultMessage, wantRat: 0},
-		{name: "over one", cfg: hlog.Config{SamplingRate: 2}, wantMsg: DefaultMessage, wantRat: 1},
-		{name: "custom", cfg: hlog.Config{SamplingRate: 0.5, Message: "done"}, wantMsg: "done", wantRat: 0.5},
+		{name: "negative", cfg: happycontext.Config{SamplingRate: -1}, wantMsg: DefaultMessage, wantRat: 0},
+		{name: "over one", cfg: happycontext.Config{SamplingRate: 2}, wantMsg: DefaultMessage, wantRat: 1},
+		{name: "custom", cfg: happycontext.Config{SamplingRate: 0.5, Message: "done"}, wantMsg: "done", wantRat: 0.5},
 	}
 
 	for _, tt := range tests {
@@ -39,10 +39,10 @@ func TestMergeLevelWithFloor(t *testing.T) {
 		hasRequested bool
 		want         string
 	}{
-		{name: "no request", auto: hlog.LevelInfo, want: hlog.LevelInfo},
-		{name: "invalid request", auto: hlog.LevelInfo, requested: "TRACE", hasRequested: true, want: hlog.LevelInfo},
-		{name: "raise level", auto: hlog.LevelInfo, requested: hlog.LevelWarn, hasRequested: true, want: hlog.LevelWarn},
-		{name: "keep floor", auto: hlog.LevelError, requested: hlog.LevelDebug, hasRequested: true, want: hlog.LevelError},
+		{name: "no request", auto: happycontext.LevelInfo, want: happycontext.LevelInfo},
+		{name: "invalid request", auto: happycontext.LevelInfo, requested: "TRACE", hasRequested: true, want: happycontext.LevelInfo},
+		{name: "raise level", auto: happycontext.LevelInfo, requested: happycontext.LevelWarn, hasRequested: true, want: happycontext.LevelWarn},
+		{name: "keep floor", auto: happycontext.LevelError, requested: happycontext.LevelDebug, hasRequested: true, want: happycontext.LevelError},
 	}
 
 	for _, tt := range tests {

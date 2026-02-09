@@ -1,4 +1,4 @@
-package ginhlog
+package ginhappycontext
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 )
 
 type discardSink struct{}
@@ -21,9 +21,9 @@ func BenchmarkRouter_gin(b *testing.B) {
 
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
 		r := gin.New()
-		r.Use(Middleware(hlog.Config{Sink: discardSink{}, SamplingRate: 1}))
+		r.Use(Middleware(happycontext.Config{Sink: discardSink{}, SamplingRate: 1}))
 		r.GET("/orders/:id", func(c *gin.Context) {
-			hlog.Add(c.Request.Context(), "user_id", "u_1")
+			happycontext.Add(c.Request.Context(), "user_id", "u_1")
 			c.Status(http.StatusNoContent)
 		})
 		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)

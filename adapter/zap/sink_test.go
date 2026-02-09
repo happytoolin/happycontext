@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -44,9 +44,9 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 		level string
 		want  zapcore.Level
 	}{
-		{name: "debug", level: hlog.LevelDebug, want: zapcore.DebugLevel},
-		{name: "warn", level: hlog.LevelWarn, want: zapcore.WarnLevel},
-		{name: "error", level: hlog.LevelError, want: zapcore.ErrorLevel},
+		{name: "debug", level: happycontext.LevelDebug, want: zapcore.DebugLevel},
+		{name: "warn", level: happycontext.LevelWarn, want: zapcore.WarnLevel},
+		{name: "error", level: happycontext.LevelError, want: zapcore.ErrorLevel},
 		{name: "default", level: "UNKNOWN", want: zapcore.InfoLevel},
 	}
 
@@ -76,8 +76,8 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 
 func TestSinkWriteNilSafety(t *testing.T) {
 	var nilSink *Sink
-	nilSink.Write(context.Background(), hlog.LevelInfo, "x", map[string]any{"k": 1})
+	nilSink.Write(context.Background(), happycontext.LevelInfo, "x", map[string]any{"k": 1})
 
 	sink := New(nil)
-	sink.Write(context.Background(), hlog.LevelInfo, "x", map[string]any{"k": 1})
+	sink.Write(context.Background(), happycontext.LevelInfo, "x", map[string]any{"k": 1})
 }

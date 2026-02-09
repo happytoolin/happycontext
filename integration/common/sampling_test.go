@@ -4,11 +4,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 )
 
 func TestSamplingDecisionRules(t *testing.T) {
-	base := hlog.SampleInput{
+	base := happycontext.SampleInput{
 		Method:     "GET",
 		Path:       "/x",
 		StatusCode: 200,
@@ -16,16 +16,16 @@ func TestSamplingDecisionRules(t *testing.T) {
 		Rate:       0,
 	}
 
-	if !shouldWriteEvent(hlog.SampleInput{HasError: true, StatusCode: 200}) {
+	if !shouldWriteEvent(happycontext.SampleInput{HasError: true, StatusCode: 200}) {
 		t.Fatal("expected hasError to force logging")
 	}
-	if !shouldWriteEvent(hlog.SampleInput{StatusCode: 500}) {
+	if !shouldWriteEvent(happycontext.SampleInput{StatusCode: 500}) {
 		t.Fatal("expected 5xx to force logging")
 	}
 	if shouldWriteEvent(base) {
 		t.Fatal("expected rate 0 healthy request to be dropped")
 	}
-	if !shouldWriteEvent(hlog.SampleInput{Rate: 1}) {
+	if !shouldWriteEvent(happycontext.SampleInput{Rate: 1}) {
 		t.Fatal("expected rate 1 to always log")
 	}
 }

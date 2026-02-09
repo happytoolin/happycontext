@@ -1,4 +1,4 @@
-package echohlog
+package echohappycontext
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 	"github.com/labstack/echo/v4"
 )
 
@@ -19,9 +19,9 @@ func (discardSink) Write(context.Context, string, string, map[string]any) {}
 func BenchmarkRouter_echo(b *testing.B) {
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
 		e := echo.New()
-		e.Use(Middleware(hlog.Config{Sink: discardSink{}, SamplingRate: 1}))
+		e.Use(Middleware(happycontext.Config{Sink: discardSink{}, SamplingRate: 1}))
 		e.GET("/orders/:id", func(c echo.Context) error {
-			hlog.Add(c.Request().Context(), "user_id", "u_1")
+			happycontext.Add(c.Request().Context(), "user_id", "u_1")
 			return c.NoContent(http.StatusNoContent)
 		})
 		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)

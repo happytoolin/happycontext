@@ -1,4 +1,4 @@
-package fiberv3hlog
+package fiberv3happycontext
 
 import (
 	"context"
@@ -11,18 +11,18 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	recovermw "github.com/gofiber/fiber/v3/middleware/recover"
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 )
 
 func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 	app := fiber.New()
 	sink := &memorySink{}
-	app.Use(Middleware(hlog.Config{
+	app.Use(Middleware(happycontext.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
 	app.Get("/orders/:id", func(c fiber.Ctx) error {
-		hlog.Add(c.Context(), "user_id", "u_1")
+		happycontext.Add(c.Context(), "user_id", "u_1")
 		return c.SendStatus(http.StatusNoContent)
 	})
 
@@ -52,7 +52,7 @@ func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 
 func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
 	app := fiber.New()
-	app.Use(Middleware(hlog.Config{}))
+	app.Use(Middleware(happycontext.Config{}))
 	app.Get("/ok", func(c fiber.Ctx) error {
 		return c.SendStatus(http.StatusAccepted)
 	})
@@ -69,7 +69,7 @@ func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
 func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 	app := fiber.New()
 	sink := &memorySink{}
-	app.Use(Middleware(hlog.Config{
+	app.Use(Middleware(happycontext.Config{
 		Sink:         sink,
 		SamplingRate: 0,
 	}))
@@ -92,7 +92,7 @@ func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level != hlog.LevelError {
+	if events[0].Level != happycontext.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level)
 	}
 	if events[0].Fields["http.status"] != http.StatusInternalServerError {
@@ -107,7 +107,7 @@ func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 	app := fiber.New()
 	app.Use(recovermw.New())
 	sink := &memorySink{}
-	app.Use(Middleware(hlog.Config{
+	app.Use(Middleware(happycontext.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
@@ -136,7 +136,7 @@ func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 func TestMiddlewareFiberErrorKeepsHTTPStatus(t *testing.T) {
 	app := fiber.New()
 	sink := &memorySink{}
-	app.Use(Middleware(hlog.Config{
+	app.Use(Middleware(happycontext.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
@@ -154,7 +154,7 @@ func TestMiddlewareFiberErrorKeepsHTTPStatus(t *testing.T) {
 	if events[0].Fields["http.status"] != http.StatusTooManyRequests {
 		t.Fatalf("status = %v, want %d", events[0].Fields["http.status"], http.StatusTooManyRequests)
 	}
-	if events[0].Level != hlog.LevelError {
+	if events[0].Level != happycontext.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level)
 	}
 }
@@ -162,7 +162,7 @@ func TestMiddlewareFiberErrorKeepsHTTPStatus(t *testing.T) {
 func TestMiddlewareCustomMessagePropagates(t *testing.T) {
 	app := fiber.New()
 	sink := &memorySink{}
-	app.Use(Middleware(hlog.Config{
+	app.Use(Middleware(happycontext.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 		Message:      "done",
@@ -190,7 +190,7 @@ func TestMiddlewareLogsStatusFromCustomFiberErrorHandler(t *testing.T) {
 		},
 	})
 	sink := &memorySink{}
-	app.Use(Middleware(hlog.Config{
+	app.Use(Middleware(happycontext.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
@@ -213,7 +213,7 @@ func TestMiddlewareLogsStatusFromCustomFiberErrorHandler(t *testing.T) {
 	if events[0].Fields["http.status"] != http.StatusTeapot {
 		t.Fatalf("status = %v, want %d", events[0].Fields["http.status"], http.StatusTeapot)
 	}
-	if events[0].Level != hlog.LevelError {
+	if events[0].Level != happycontext.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level)
 	}
 }

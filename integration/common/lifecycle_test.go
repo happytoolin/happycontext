@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 )
 
 func TestStartRequestAddsBaseFields(t *testing.T) {
@@ -25,11 +25,11 @@ func TestStartRequestAddsBaseFields(t *testing.T) {
 
 func TestFinalizeRequestEarlyReturnGuards(t *testing.T) {
 	ctx, event := StartRequest(context.Background(), "GET", "/x")
-	sink := hlog.NewTestSink()
+	sink := happycontext.NewTestSink()
 
-	FinalizeRequest(hlog.Config{}, FinalizeInput{Ctx: ctx, Event: event, StatusCode: 200})
-	FinalizeRequest(hlog.Config{Sink: sink}, FinalizeInput{Ctx: nil, Event: event, StatusCode: 200})
-	FinalizeRequest(hlog.Config{Sink: sink}, FinalizeInput{Ctx: ctx, Event: nil, StatusCode: 200})
+	FinalizeRequest(happycontext.Config{}, FinalizeInput{Ctx: ctx, Event: event, StatusCode: 200})
+	FinalizeRequest(happycontext.Config{Sink: sink}, FinalizeInput{Ctx: nil, Event: event, StatusCode: 200})
+	FinalizeRequest(happycontext.Config{Sink: sink}, FinalizeInput{Ctx: ctx, Event: nil, StatusCode: 200})
 
 	if len(sink.Events()) != 0 {
 		t.Fatal("expected no writes from guarded paths")
@@ -38,8 +38,8 @@ func TestFinalizeRequestEarlyReturnGuards(t *testing.T) {
 
 func TestFinalizeRequestRespectsSamplingDrop(t *testing.T) {
 	ctx, event := StartRequest(context.Background(), "GET", "/x")
-	sink := hlog.NewTestSink()
-	cfg := NormalizeConfig(hlog.Config{Sink: sink, SamplingRate: 0})
+	sink := happycontext.NewTestSink()
+	cfg := NormalizeConfig(happycontext.Config{Sink: sink, SamplingRate: 0})
 
 	FinalizeRequest(cfg, FinalizeInput{
 		Ctx:        ctx,
@@ -56,8 +56,8 @@ func TestFinalizeRequestRespectsSamplingDrop(t *testing.T) {
 
 func TestFinalizeRequestMarksErrorAndRoute(t *testing.T) {
 	ctx, event := StartRequest(context.Background(), "POST", "/payments")
-	sink := hlog.NewTestSink()
-	cfg := NormalizeConfig(hlog.Config{Sink: sink, SamplingRate: 1})
+	sink := happycontext.NewTestSink()
+	cfg := NormalizeConfig(happycontext.Config{Sink: sink, SamplingRate: 1})
 
 	FinalizeRequest(cfg, FinalizeInput{
 		Ctx:        ctx,
@@ -73,8 +73,8 @@ func TestFinalizeRequestMarksErrorAndRoute(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level != hlog.LevelError {
-		t.Fatalf("level = %s, want %s", events[0].Level, hlog.LevelError)
+	if events[0].Level != happycontext.LevelError {
+		t.Fatalf("level = %s, want %s", events[0].Level, happycontext.LevelError)
 	}
 	if events[0].Fields["http.route"] != "/payments/:id" {
 		t.Fatalf("route = %v", events[0].Fields["http.route"])
@@ -86,8 +86,8 @@ func TestFinalizeRequestMarksErrorAndRoute(t *testing.T) {
 
 func TestFinalizeRequestPanicAddsMetadata(t *testing.T) {
 	ctx, event := StartRequest(context.Background(), "GET", "/panic")
-	sink := hlog.NewTestSink()
-	cfg := NormalizeConfig(hlog.Config{Sink: sink, SamplingRate: 1})
+	sink := happycontext.NewTestSink()
+	cfg := NormalizeConfig(happycontext.Config{Sink: sink, SamplingRate: 1})
 
 	FinalizeRequest(cfg, FinalizeInput{
 		Ctx:        ctx,
@@ -105,16 +105,16 @@ func TestFinalizeRequestPanicAddsMetadata(t *testing.T) {
 	if _, ok := events[0].Fields["panic"].(map[string]any); !ok {
 		t.Fatal("expected panic field")
 	}
-	if events[0].Level != hlog.LevelError {
+	if events[0].Level != happycontext.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level)
 	}
 }
 
 func TestFinalizeRequestAppliesRequestedLevelFloor(t *testing.T) {
 	ctx, event := StartRequest(context.Background(), "GET", "/x")
-	hlog.SetLevel(ctx, hlog.LevelWarn)
-	sink := hlog.NewTestSink()
-	cfg := NormalizeConfig(hlog.Config{Sink: sink, SamplingRate: 1})
+	happycontext.SetLevel(ctx, happycontext.LevelWarn)
+	sink := happycontext.NewTestSink()
+	cfg := NormalizeConfig(happycontext.Config{Sink: sink, SamplingRate: 1})
 
 	FinalizeRequest(cfg, FinalizeInput{
 		Ctx:        ctx,
@@ -128,7 +128,7 @@ func TestFinalizeRequestAppliesRequestedLevelFloor(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level != hlog.LevelWarn {
+	if events[0].Level != happycontext.LevelWarn {
 		t.Fatalf("level = %s, want WARN", events[0].Level)
 	}
 }

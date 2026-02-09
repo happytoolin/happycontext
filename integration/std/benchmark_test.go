@@ -1,4 +1,4 @@
-package stdhlog
+package stdhappycontext
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/happytoolin/hlog"
+	"github.com/happytoolin/happycontext"
 )
 
 type discardSink struct{}
@@ -17,14 +17,14 @@ func (discardSink) Write(context.Context, string, string, map[string]any) {}
 
 func BenchmarkRouter_std(b *testing.B) {
 	req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
-	handlerHlogAPI := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hlog.Add(r.Context(), "user_id", "u_1")
+	handlerHappycontextAPI := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		happycontext.Add(r.Context(), "user_id", "u_1")
 		w.WriteHeader(http.StatusNoContent)
 	})
 
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
 		mw := Middleware(Config{Sink: discardSink{}, SamplingRate: 1})
-		wrapped := mw(handlerHlogAPI)
+		wrapped := mw(handlerHappycontextAPI)
 
 		b.ReportAllocs()
 		for b.Loop() {

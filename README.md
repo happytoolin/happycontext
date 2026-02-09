@@ -1,9 +1,9 @@
-# hlog
+# happycontext
 
-`hlog` is a request-scoped structured logging library for Go.
+`happycontext` is a request-scoped structured logging library for Go.
 It implements the Canonical Log Line (wide event) pattern: collect fields during request handling, then emit one final event when the request completes.
 
-## Why hlog
+## Why happycontext
 
 - One event per request instead of many fragmented log lines
 - Consistent field contract across handlers, middleware, and services
@@ -23,20 +23,20 @@ Compatibility:
 Core package:
 
 ```bash
-go get github.com/happytoolin/hlog
+go get github.com/happytoolin/happycontext
 ```
 
 Choose only the modules you use:
 
 ```bash
-go get github.com/happytoolin/hlog/adapter/slog
-go get github.com/happytoolin/hlog/adapter/zap
-go get github.com/happytoolin/hlog/adapter/zerolog
-go get github.com/happytoolin/hlog/integration/std
-go get github.com/happytoolin/hlog/integration/gin
-go get github.com/happytoolin/hlog/integration/echo
-go get github.com/happytoolin/hlog/integration/fiber
-go get github.com/happytoolin/hlog/integration/fiberv3
+go get github.com/happytoolin/happycontext/adapter/slog
+go get github.com/happytoolin/happycontext/adapter/zap
+go get github.com/happytoolin/happycontext/adapter/zerolog
+go get github.com/happytoolin/happycontext/integration/std
+go get github.com/happytoolin/happycontext/integration/gin
+go get github.com/happytoolin/happycontext/integration/echo
+go get github.com/happytoolin/happycontext/integration/fiber
+go get github.com/happytoolin/happycontext/integration/fiberv3
 ```
 
 ## Quick Start (net/http + slog)
@@ -49,16 +49,16 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/happytoolin/hlog"
-	slogadapter "github.com/happytoolin/hlog/adapter/slog"
-	stdhlog "github.com/happytoolin/hlog/integration/std"
+	"github.com/happytoolin/happycontext"
+	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	stdhappycontext "github.com/happytoolin/happycontext/integration/std"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	sink := slogadapter.New(logger)
 
-	mw := stdhlog.Middleware(hlog.Config{
+	mw := stdhappycontext.Middleware(happycontext.Config{
 		Sink:         sink,
 		SamplingRate: 0.10,
 		Message:      "request_completed",
@@ -67,8 +67,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /orders/{id}", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		hlog.Add(ctx, "user_id", "u_8472")
-		hlog.Add(ctx, "feature", "checkout")
+		happycontext.Add(ctx, "user_id", "u_8472")
+		happycontext.Add(ctx, "feature", "checkout")
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -78,13 +78,13 @@ func main() {
 
 ## Core API
 
-- `hlog.NewContext(ctx)` creates a context with an attached event
-- `hlog.Add(ctx, key, value)` adds or overwrites one field
-- `hlog.AddMap(ctx, map[string]any)` merges fields
-- `hlog.Error(ctx, err)` stores structured error metadata and marks the event as failed
-- `hlog.SetLevel(ctx, level)` requests a minimum final level (`DEBUG`, `INFO`, `WARN`, `ERROR`)
-- `hlog.SetRoute(ctx, route)` sets low-cardinality route template (`/orders/:id`)
-- `hlog.Commit(ctx, sink, level)` immediately writes one snapshot (manual lifecycle)
+- `happycontext.NewContext(ctx)` creates a context with an attached event
+- `happycontext.Add(ctx, key, value)` adds or overwrites one field
+- `happycontext.AddMap(ctx, map[string]any)` merges fields
+- `happycontext.Error(ctx, err)` stores structured error metadata and marks the event as failed
+- `happycontext.SetLevel(ctx, level)` requests a minimum final level (`DEBUG`, `INFO`, `WARN`, `ERROR`)
+- `happycontext.SetRoute(ctx, route)` sets low-cardinality route template (`/orders/:id`)
+- `happycontext.Commit(ctx, sink, level)` immediately writes one snapshot (manual lifecycle)
 
 ## Event Fields
 
@@ -115,7 +115,7 @@ Examples:
 
 Sampling happens at request finalization:
 
-- Requests with errors (`hlog.Error`) are always logged
+- Requests with errors (`happycontext.Error`) are always logged
 - Requests with status `>= 500` are always logged
 - Healthy requests follow `SamplingRate`:
   - `0` never log
@@ -138,15 +138,15 @@ Each integration is a separate Go module to keep dependency footprints small.
 - `adapter/zap`
 - `adapter/zerolog`
 
-All adapters implement `hlog.Sink`.
+All adapters implement `happycontext.Sink`.
 
 ## Manual Lifecycle Example
 
 ```go
-ctx, _ := hlog.NewContext(context.Background())
-hlog.Add(ctx, "job.id", "j_123")
-hlog.Add(ctx, "duration_ms", 42)
-hlog.Commit(ctx, sink, hlog.LevelInfo)
+ctx, _ := happycontext.NewContext(context.Background())
+happycontext.Add(ctx, "job.id", "j_123")
+happycontext.Add(ctx, "duration_ms", 42)
+happycontext.Commit(ctx, sink, happycontext.LevelInfo)
 ```
 
 ## Testing
@@ -154,7 +154,7 @@ hlog.Commit(ctx, sink, hlog.LevelInfo)
 Use the in-memory sink in tests:
 
 ```go
-sink := hlog.NewTestSink()
+sink := happycontext.NewTestSink()
 // ... trigger request ...
 events := sink.Events()
 ```

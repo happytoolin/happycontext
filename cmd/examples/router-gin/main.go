@@ -5,9 +5,9 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/happytoolin/hlog"
-	slogadapter "github.com/happytoolin/hlog/adapter/slog"
-	ginhlog "github.com/happytoolin/hlog/integration/gin"
+	"github.com/happytoolin/happycontext"
+	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	ginhappycontext "github.com/happytoolin/happycontext/integration/gin"
 )
 
 func main() {
@@ -15,9 +15,9 @@ func main() {
 	sink := slogadapter.New(logger)
 
 	r := gin.New()
-	r.Use(ginhlog.Middleware(hlog.Config{Sink: sink, SamplingRate: 1}))
+	r.Use(ginhappycontext.Middleware(happycontext.Config{Sink: sink, SamplingRate: 1}))
 	r.GET("/users/:id", func(c *gin.Context) {
-		hlog.Add(c.Request.Context(), "router", "gin")
+		happycontext.Add(c.Request.Context(), "router", "gin")
 		c.Status(200)
 	})
 

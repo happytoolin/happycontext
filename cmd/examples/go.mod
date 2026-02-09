@@ -1,4 +1,4 @@
-module github.com/happytoolin/hlog/cmd/examples
+module github.com/happytoolin/happycontext/cmd/examples
 
 go 1.25.0
 
@@ -6,15 +6,15 @@ require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/gofiber/fiber/v2 v2.52.11
 	github.com/gofiber/fiber/v3 v3.0.0-rc.3
-	github.com/happytoolin/hlog v0.0.0
-	github.com/happytoolin/hlog/adapter/slog v0.0.0
-	github.com/happytoolin/hlog/adapter/zap v0.0.0
-	github.com/happytoolin/hlog/adapter/zerolog v0.0.0
-	github.com/happytoolin/hlog/integration/echo v0.0.0
-	github.com/happytoolin/hlog/integration/fiber v0.0.0
-	github.com/happytoolin/hlog/integration/fiberv3 v0.0.0
-	github.com/happytoolin/hlog/integration/gin v0.0.0
-	github.com/happytoolin/hlog/integration/std v0.0.0
+	github.com/happytoolin/happycontext v0.0.0
+	github.com/happytoolin/happycontext/adapter/slog v0.0.0
+	github.com/happytoolin/happycontext/adapter/zap v0.0.0
+	github.com/happytoolin/happycontext/adapter/zerolog v0.0.0
+	github.com/happytoolin/happycontext/integration/echo v0.0.0
+	github.com/happytoolin/happycontext/integration/fiber v0.0.0
+	github.com/happytoolin/happycontext/integration/fiberv3 v0.0.0
+	github.com/happytoolin/happycontext/integration/gin v0.0.0
+	github.com/happytoolin/happycontext/integration/std v0.0.0
 	github.com/labstack/echo/v4 v4.15.0
 	github.com/rs/zerolog v1.34.0
 	go.uber.org/zap v1.27.1
@@ -70,20 +70,20 @@ require (
 	google.golang.org/protobuf v1.36.9 // indirect
 )
 
-replace github.com/happytoolin/hlog => ../..
+replace github.com/happytoolin/happycontext => ../..
 
-replace github.com/happytoolin/hlog/adapter/slog => ../../adapter/slog
+replace github.com/happytoolin/happycontext/adapter/slog => ../../adapter/slog
 
-replace github.com/happytoolin/hlog/adapter/zap => ../../adapter/zap
+replace github.com/happytoolin/happycontext/adapter/zap => ../../adapter/zap
 
-replace github.com/happytoolin/hlog/adapter/zerolog => ../../adapter/zerolog
+replace github.com/happytoolin/happycontext/adapter/zerolog => ../../adapter/zerolog
 
-replace github.com/happytoolin/hlog/integration/gin => ../../integration/gin
+replace github.com/happytoolin/happycontext/integration/gin => ../../integration/gin
 
-replace github.com/happytoolin/hlog/integration/echo => ../../integration/echo
+replace github.com/happytoolin/happycontext/integration/echo => ../../integration/echo
 
-replace github.com/happytoolin/hlog/integration/fiber => ../../integration/fiber
+replace github.com/happytoolin/happycontext/integration/fiber => ../../integration/fiber
 
-replace github.com/happytoolin/hlog/integration/fiberv3 => ../../integration/fiberv3
+replace github.com/happytoolin/happycontext/integration/fiberv3 => ../../integration/fiberv3
 
-replace github.com/happytoolin/hlog/integration/std => ../../integration/std
+replace github.com/happytoolin/happycontext/integration/std => ../../integration/std
