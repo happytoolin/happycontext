@@ -26,18 +26,18 @@ func TestContextHelpers(t *testing.T) {
 	if e == nil {
 		t.Fatal("event missing in context")
 	}
-	s := e.Snapshot()
-	if s.Fields["a"] != 1 || s.Fields["b"] != 2 {
-		t.Fatalf("missing fields: %#v", s.Fields)
+	fields := EventFields(e)
+	if fields["a"] != 1 || fields["b"] != 2 {
+		t.Fatalf("missing fields: %#v", fields)
 	}
-	if s.Fields["alias"] != true {
+	if fields["alias"] != true {
 		t.Fatalf("expected alias field")
 	}
-	if !s.HasError {
+	if !EventHasError(e) {
 		t.Fatal("expected HasError true")
 	}
-	if s.Fields["http.route"] != "/orders/:id" {
-		t.Fatalf("expected explicit route field, got %#v", s.Fields["http.route"])
+	if fields["http.route"] != "/orders/:id" {
+		t.Fatalf("expected explicit route field, got %#v", fields["http.route"])
 	}
 	lvl, ok := GetLevel(ctx)
 	if !ok || lvl != LevelWarn {

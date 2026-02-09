@@ -11,7 +11,7 @@ import (
 )
 
 func BenchmarkEventAddStableKeys(b *testing.B) {
-	e := hc.NewEvent()
+	ctx, _ := hc.NewContext(context.Background())
 	keys := make([]string, 32)
 	for i := range keys {
 		keys[i] = "k" + strconv.Itoa(i)
@@ -20,7 +20,7 @@ func BenchmarkEventAddStableKeys(b *testing.B) {
 	b.ReportAllocs()
 	i := 0
 	for b.Loop() {
-		e.Add(keys[i&31], i)
+		hc.Add(ctx, keys[i&31], i)
 		i++
 	}
 }
@@ -36,13 +36,13 @@ func BenchmarkEventAddMap(b *testing.B) {
 
 	b.ReportAllocs()
 	for b.Loop() {
-		e := hc.NewEvent()
-		e.AddMap(template)
+		ctx, _ := hc.NewContext(context.Background())
+		hc.AddMap(ctx, template)
 	}
 }
 
 func BenchmarkEventAddParallelStableKeys(b *testing.B) {
-	e := hc.NewEvent()
+	ctx, _ := hc.NewContext(context.Background())
 	keys := make([]string, 32)
 	for i := range keys {
 		keys[i] = "k" + strconv.Itoa(i)
@@ -54,7 +54,7 @@ func BenchmarkEventAddParallelStableKeys(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
 		for pb.Next() {
-			e.Add(keys[i&31], i)
+			hc.Add(ctx, keys[i&31], i)
 			i++
 		}
 	})
@@ -63,22 +63,22 @@ func BenchmarkEventAddParallelStableKeys(b *testing.B) {
 func BenchmarkEventSnapshot(b *testing.B) {
 	for _, n := range []int{8, 32, 128} {
 		b.Run("fields_"+strconv.Itoa(n), func(b *testing.B) {
-			e := hc.NewEvent()
+			ctx, _ := hc.NewContext(context.Background())
 			for i := 0; i < n; i++ {
-				e.Add("k"+strconv.Itoa(i), i)
+				hc.Add(ctx, "k"+strconv.Itoa(i), i)
 			}
 
 			b.ReportAllocs()
 			for b.Loop() {
-				_ = e.Snapshot()
+				_ = hc.EventFields(hc.FromContext(ctx))
 			}
 		})
 	}
 }
 
 func BenchmarkEventSnapshotNested(b *testing.B) {
-	e := hc.NewEvent()
-	e.Add("request", map[string]any{
+	ctx, _ := hc.NewContext(context.Background())
+	hc.Add(ctx, "request", map[string]any{
 		"user": map[string]any{
 			"id":    "u_1",
 			"roles": []any{"admin", "billing"},
@@ -91,19 +91,19 @@ func BenchmarkEventSnapshotNested(b *testing.B) {
 
 	b.ReportAllocs()
 	for b.Loop() {
-		_ = e.Snapshot()
+		_ = hc.EventFields(hc.FromContext(ctx))
 	}
 }
 
 func BenchmarkEventSnapshotCyclic(b *testing.B) {
-	e := hc.NewEvent()
+	ctx, _ := hc.NewContext(context.Background())
 	node := map[string]any{"name": "root"}
 	node["self"] = node
-	e.Add("node", node)
+	hc.Add(ctx, "node", node)
 
 	b.ReportAllocs()
 	for b.Loop() {
-		_ = e.Snapshot()
+		_ = hc.EventFields(hc.FromContext(ctx))
 	}
 }
 
@@ -122,10 +122,9 @@ func BenchmarkCommitPath(b *testing.B) {
 
 	b.ReportAllocs()
 	for b.Loop() {
-		e := hc.NewEvent()
-		e.AddMap(baseFields)
-		s := e.Snapshot()
-		sink.Write(hc.LevelInfo, "request_completed", s.Fields)
+		ctx, _ := hc.NewContext(context.Background())
+		hc.AddMap(ctx, baseFields)
+		sink.Write(hc.LevelInfo, "request_completed", hc.EventFields(hc.FromContext(ctx)))
 	}
 }
 
@@ -161,10 +160,9 @@ func BenchmarkNonHTTPManualLifecycle(b *testing.B) {
 		b.Run(name, func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
-				e := hc.NewEvent()
-				e.AddMap(fields)
-				snapshot := e.Snapshot()
-				sink.Write(hc.LevelInfo, "job_completed", snapshot.Fields)
+				ctx, _ := hc.NewContext(context.Background())
+				hc.AddMap(ctx, fields)
+				sink.Write(hc.LevelInfo, "job_completed", hc.EventFields(hc.FromContext(ctx)))
 			}
 		})
 	}

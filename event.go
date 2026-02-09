@@ -18,30 +18,26 @@ type Event struct {
 	hasRequestedLevel bool
 }
 
-// Snapshot is an immutable copy of event state at commit time.
-type Snapshot struct {
-	Fields    map[string]any
-	StartTime time.Time
-	HasError  bool
+type snapshot struct {
+	fields    map[string]any
+	startTime time.Time
+	hasError  bool
 }
 
-// NewEvent creates a new event with initialized field storage and start time.
-func NewEvent() *Event {
+func newEvent() *Event {
 	return &Event{
 		fields:    make(map[string]any),
 		startTime: time.Now(),
 	}
 }
 
-// Add sets one field on the event.
-func (e *Event) Add(key string, value any) {
+func (e *Event) add(key string, value any) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.fields[key] = value
 }
 
-// AddMap merges all fields from m into the event.
-func (e *Event) AddMap(m map[string]any) {
+func (e *Event) addMap(m map[string]any) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	maps.Copy(e.fields, m)
@@ -56,8 +52,7 @@ func (e *Event) setRoute(route string) {
 	e.mu.Unlock()
 }
 
-// SetError marks the event as failed and stores a structured error.
-func (e *Event) SetError(err error) {
+func (e *Event) setError(err error) {
 	if err == nil {
 		return
 	}
@@ -70,22 +65,19 @@ func (e *Event) SetError(err error) {
 	}
 }
 
-// HasError reports whether the event has an attached error.
-func (e *Event) HasError() bool {
+func (e *Event) hasErrorValue() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.hasError
 }
 
-// StartTime returns the event start time.
-func (e *Event) StartTime() time.Time {
+func (e *Event) startedAt() time.Time {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.startTime
 }
 
-// SetLevel stores a requested level override if valid.
-func (e *Event) SetLevel(level Level) bool {
+func (e *Event) setLevel(level Level) bool {
 	if !isValidLevel(level) {
 		return false
 	}
@@ -96,15 +88,13 @@ func (e *Event) SetLevel(level Level) bool {
 	return true
 }
 
-// RequestedLevel returns the requested level override when present.
-func (e *Event) RequestedLevel() (Level, bool) {
+func (e *Event) requestedLevelValue() (Level, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.requestedLevel, e.hasRequestedLevel
 }
 
-// Snapshot returns a deep-copied immutable view of current event data.
-func (e *Event) Snapshot() Snapshot {
+func (e *Event) snapshot() snapshot {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
@@ -114,10 +104,10 @@ func (e *Event) Snapshot() Snapshot {
 		fields[key] = deepCopyAny(value, tracker)
 	}
 
-	return Snapshot{
-		Fields:    fields,
-		StartTime: e.startTime,
-		HasError:  e.hasError,
+	return snapshot{
+		fields:    fields,
+		startTime: e.startTime,
+		hasError:  e.hasError,
 	}
 }
 

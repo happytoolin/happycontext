@@ -3,6 +3,8 @@ package common
 import (
 	"sync/atomic"
 	"time"
+
+	"github.com/happytoolin/happycontext"
 )
 
 var samplerState atomic.Uint64
@@ -17,14 +19,35 @@ type sampleInput struct {
 	HasError   bool
 	StatusCode int
 	Duration   time.Duration
+	Level      hc.Level
 	Rate       float64
+	Event      *hc.Event
 }
 
-func shouldWriteEvent(in sampleInput) bool {
+func shouldWriteEvent(cfg hc.Config, in sampleInput) bool {
+	if cfg.Sampler != nil {
+		return cfg.Sampler(hc.SampleInput{
+			Method:     in.Method,
+			Path:       in.Path,
+			StatusCode: in.StatusCode,
+			Duration:   in.Duration,
+			Level:      in.Level,
+			HasError:   in.HasError,
+			Event:      in.Event,
+		})
+	}
+
 	if in.HasError || in.StatusCode >= 500 {
 		return true
 	}
-	return shouldSample(in.Rate)
+
+	rate := in.Rate
+	if cfg.LevelSamplingRates != nil {
+		if levelRate, ok := cfg.LevelSamplingRates[in.Level]; ok {
+			rate = levelRate
+		}
+	}
+	return shouldSample(rate)
 }
 
 func shouldSample(rate float64) bool {

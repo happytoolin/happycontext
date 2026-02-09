@@ -13,6 +13,22 @@ func NormalizeConfig(cfg hc.Config) hc.Config {
 	if cfg.SamplingRate > 1 {
 		cfg.SamplingRate = 1
 	}
+	if len(cfg.LevelSamplingRates) > 0 {
+		clamped := make(map[hc.Level]float64, len(cfg.LevelSamplingRates))
+		for level, rate := range cfg.LevelSamplingRates {
+			if !isValidLevel(level) {
+				continue
+			}
+			if rate < 0 {
+				rate = 0
+			}
+			if rate > 1 {
+				rate = 1
+			}
+			clamped[level] = rate
+		}
+		cfg.LevelSamplingRates = clamped
+	}
 	if cfg.Message == "" {
 		cfg.Message = DefaultMessage
 	}

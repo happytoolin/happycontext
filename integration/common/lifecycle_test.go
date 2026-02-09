@@ -14,12 +14,12 @@ func TestStartRequestAddsBaseFields(t *testing.T) {
 	if event == nil || ctx == nil {
 		t.Fatal("expected context and event")
 	}
-	snapshot := event.Snapshot()
-	if snapshot.Fields["http.method"] != "GET" {
-		t.Fatalf("method field = %v", snapshot.Fields["http.method"])
+	fields := hc.EventFields(event)
+	if fields["http.method"] != "GET" {
+		t.Fatalf("method field = %v", fields["http.method"])
 	}
-	if snapshot.Fields["http.path"] != "/orders/1" {
-		t.Fatalf("path field = %v", snapshot.Fields["http.path"])
+	if fields["http.path"] != "/orders/1" {
+		t.Fatalf("path field = %v", fields["http.path"])
 	}
 }
 

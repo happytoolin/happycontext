@@ -8,10 +8,12 @@
 [![Go Version](https://img.shields.io/badge/go-1.24%2B-00ADD8?logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-`happycontext` helps Go services emit one structured log event per request.
-Instead of scattered log lines across handlers and middleware, you collect context during execution and write a single, complete event at the end.
+Most application logs are high-volume but low-context.
+`happycontext` helps Go services emit one structured, canonical event per request, so debugging and analysis start from a complete record instead of scattered lines.
 
-## Why use it?
+![happycontext log stream demo](./assets/demo-log-stream.svg)
+
+## Why happycontext?
 
 - Cleaner logs with one canonical event per request
 - Consistent fields across handlers, middleware, and frameworks
@@ -19,6 +21,11 @@ Instead of scattered log lines across handlers and middleware, you collect conte
 - Error and panic events are always preserved
 - Works with `slog`, `zap`, and `zerolog`
 - Integrates with `net/http`, `gin`, `echo`, `fiber`, and `fiber v3`
+
+Design principle:
+
+- Prefer one context-rich request event over many fragmented log lines.
+  ![happycontext before and after](./assets/demo-before-after.svg)
 
 ## Install
 
@@ -28,7 +35,7 @@ go get github.com/happytoolin/happycontext/adapter/slog
 go get github.com/happytoolin/happycontext/integration/std
 ```
 
-Use only the adapter and integration modules you need.
+Install only the adapter and integration packages you use.
 
 ## Quick Start (`net/http` + `slog`)
 
@@ -62,7 +69,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
-_ = http.ListenAndServe(":8080", mw(mux))
+	_ = http.ListenAndServe(":8080", mw(mux))
 }
 ```
 
@@ -95,12 +102,79 @@ Example output:
 
 - `Sink`: destination logger adapter (required to emit events)
 - `SamplingRate`: `0` to `1` for healthy-request sampling
+- `LevelSamplingRates`: optional level-specific sampling overrides
+- `Sampler`: optional custom sampling function (full control)
 - `Message`: final log message (defaults to `request_completed`)
 
 Notes:
 
 - Sampling is automatically bypassed for errors and server failures.
 - If no sink is configured, requests still run; logging is skipped.
+- Sampling behavior is consistent across all integrations (`net/http`, `gin`, `echo`, `fiber`, and `fiber v3`).
+
+### Sampling Customization
+
+Per-level sampling:
+
+```go
+mw := stdhc.Middleware(hc.Config{
+	Sink:         sink,
+	SamplingRate: 0.05, // default for healthy traffic
+	LevelSamplingRates: map[hc.Level]float64{
+		hc.LevelWarn:  1.0, // keep all warns
+		hc.LevelDebug: 0.01,
+	},
+})
+```
+
+Custom sampler (route/user/latency rules):
+
+```go
+mw := stdhc.Middleware(hc.Config{
+	Sink: sink,
+	Sampler: func(in hc.SampleInput) bool {
+		// Always keep failures and slow requests.
+		if in.HasError || in.StatusCode >= 500 {
+			return true
+		}
+		if in.Duration > 2*time.Second {
+			return true
+		}
+		// Keep checkout requests.
+		if in.Path == "/api/checkout" {
+			return true
+		}
+		// Keep enterprise requests based on event fields.
+		fields := hc.EventFields(in.Event)
+		tier, _ := fields["user_tier"].(string)
+		return tier == "enterprise"
+	},
+})
+```
+
+Built-in sampler chain:
+
+```go
+mw := stdhc.Middleware(hc.Config{
+	Sink: sink,
+	Sampler: hc.ChainSampler(
+		hc.RateSampler(0.05),        // base sampler
+		hc.KeepErrors(),             // always keep errors
+		hc.KeepPathPrefix("/admin"), // always keep admin paths
+		hc.KeepSlowerThan(500*time.Millisecond),
+	),
+})
+```
+
+Sampler building blocks:
+
+- `hc.ChainSampler(base, middlewares...)`: composes one final `Sampler` from middleware rules.
+- `hc.AlwaysSampler()`: base sampler that keeps every event.
+- `hc.NeverSampler()`: base sampler that drops every event.
+- `hc.RateSampler(rate)`: base probabilistic sampler (`0` drops all, `1` keeps all).
+- `hc.KeepErrors()`: middleware that keeps errored requests (`HasError` or `5xx`).
+- `hc.KeepPathPrefix("/checkout", "/admin")`: middleware that keeps matching path prefixes.
+- `hc.KeepSlowerThan(minDuration)`: middleware that keeps requests at/above a duration threshold.
 
 ## Integrations
 
@@ -148,6 +222,7 @@ func main() {
 	_ = http.ListenAndServe(":8101", mw(mux))
 }
 ```
+
 </details>
 
 <details>
@@ -180,6 +255,7 @@ func main() {
 	_ = r.Run(":8102")
 }
 ```
+
 </details>
 
 <details>
@@ -212,6 +288,7 @@ func main() {
 	_ = app.Listen(":8104")
 }
 ```
+
 </details>
 
 <details>
@@ -244,6 +321,7 @@ func main() {
 	_ = app.Listen(":8105")
 }
 ```
+
 </details>
 
 <details>
@@ -276,6 +354,7 @@ func main() {
 	_ = e.Start(":8103")
 }
 ```
+
 </details>
 
 <details>
@@ -307,6 +386,7 @@ func main() {
 	_ = http.ListenAndServe(":8092", mw(mux))
 }
 ```
+
 </details>
 
 <details>
@@ -339,6 +419,7 @@ func main() {
 	_ = http.ListenAndServe(":8093", mw(mux))
 }
 ```
+
 </details>
 
 Runnable commands are also available in `cmd/examples`:
@@ -353,6 +434,8 @@ go run ./router-gin
 go run ./router-echo
 go run ./router-fiber
 go run ./router-fiberv3
+go run ./sampling-inbuilt
+go run ./sampling-custom
 ```
 
 ## Release Process
@@ -360,6 +443,10 @@ go run ./router-fiberv3
 - CI: `.github/workflows/ci.yml`
 - Release automation: `.github/workflows/release.yml`
 - Go proxy sync: `.github/workflows/go-proxy-sync.yml`
+
+## References
+
+- Framing inspiration: "Logging Sucks - Your Logs Are Lying To You" by Boris Tane: https://loggingsucks.com/
 
 ## License
 

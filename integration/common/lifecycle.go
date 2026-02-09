@@ -44,20 +44,21 @@ func FinalizeRequest(cfg hc.Config, in FinalizeInput) {
 	}
 
 	duration := annotateTiming(in.Ctx, in.Event, in.StatusCode)
-	hasError := in.Event.HasError() || in.StatusCode >= 500
+	hasError := hc.EventHasError(in.Event) || in.StatusCode >= 500
 	level := resolveLevel(in.Ctx, hasError)
-	if !shouldWriteEvent(sampleInput{
+	if !shouldWriteEvent(cfg, sampleInput{
 		Method:     in.Method,
 		Path:       in.Path,
 		HasError:   hasError,
 		StatusCode: in.StatusCode,
 		Duration:   duration,
+		Level:      level,
 		Rate:       cfg.SamplingRate,
+		Event:      in.Event,
 	}) {
 		return
 	}
-	snapshot := in.Event.Snapshot()
-	cfg.Sink.Write(level, cfg.Message, snapshot.Fields)
+	cfg.Sink.Write(level, cfg.Message, hc.EventFields(in.Event))
 }
 
 func annotateFailures(ctx context.Context, err error, recovered any) {
@@ -74,7 +75,7 @@ func annotateFailures(ctx context.Context, err error, recovered any) {
 }
 
 func annotateTiming(ctx context.Context, event *hc.Event, statusCode int) time.Duration {
-	duration := time.Since(event.StartTime())
+	duration := time.Since(hc.EventStartTime(event))
 	hc.Add(ctx, "duration_ms", duration.Milliseconds())
 	hc.Add(ctx, "http.status", statusCode)
 	return duration
