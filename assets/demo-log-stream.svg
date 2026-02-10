@@ -31,7 +31,7 @@
   <rect width="1200" height="520" fill="#F2F2F0" />
   <rect x="8" y="8" width="1184" height="504" fill="none" stroke="url(#frameStroke)" stroke-width="1.5" />
 
-  <text x="60" y="76" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="40" font-weight="700" fill="#F60">happycontext Demo</text>
+  <text x="60" y="76" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="40" font-weight="700" fill="#F60">Demo</text>
 
   <rect x="60" y="144" width="604" height="220" rx="12" fill="#F8F6F3" stroke="#F60" stroke-opacity="0.52" stroke-width="1.4" />
 

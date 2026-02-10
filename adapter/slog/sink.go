@@ -3,8 +3,7 @@ package slogadapter
 import (
 	"context"
 	"log/slog"
-	"maps"
-	"slices"
+	"sort"
 	"sync"
 
 	"github.com/happytoolin/happycontext"
@@ -13,6 +12,13 @@ import (
 var slogAnyPool = sync.Pool{
 	New: func() any {
 		buf := make([]any, 0, 32)
+		return &buf
+	},
+}
+
+var slogKeyPool = sync.Pool{
+	New: func() any {
+		buf := make([]string, 0, 32)
 		return &buf
 	},
 }
@@ -73,8 +79,16 @@ func (s *Sink) Write(level hc.Level, message string, fields map[string]any) {
 		s.logger.Log(context.Background(), slogLevel, message, attrs...)
 		return
 	}
-	keys := slices.Collect(maps.Keys(fields))
-	slices.Sort(keys)
+	keysPtr := slogKeyPool.Get().(*[]string)
+	keys := (*keysPtr)[:0]
+	defer func() {
+		*keysPtr = keys[:0]
+		slogKeyPool.Put(keysPtr)
+	}()
+	for k := range fields {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
 
 	for _, k := range keys {
 		attrs = append(attrs, slog.Any(k, fields[k]))

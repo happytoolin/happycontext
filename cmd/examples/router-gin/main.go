@@ -23,16 +23,17 @@ func main() {
 
 		hc.Add(ctx, "router", "gin")
 		hc.Add(ctx, "event_attached", hc.FromContext(ctx) != nil)
-		hc.AddMap(ctx, map[string]any{
-			"user": map[string]any{
+		hc.Add(
+			ctx,
+			"user", map[string]any{
 				"id":   id,
 				"plan": "pro",
 			},
-			"request": map[string]any{
+			"request", map[string]any{
 				"feature": "profile",
 				"tags":    []string{"examples", "router-gin"},
 			},
-		})
+		)
 		hc.SetRoute(ctx, "/users/:id")
 
 		if c.Query("debug") == "1" {

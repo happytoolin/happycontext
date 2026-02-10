@@ -27,8 +27,7 @@ func StartRequest(baseCtx context.Context, method, path string) (context.Context
 		baseCtx = context.Background()
 	}
 	ctx, event := hc.NewContext(baseCtx)
-	hc.Add(ctx, "http.method", method)
-	hc.Add(ctx, "http.path", path)
+	hc.Add(ctx, "http.method", method, "http.path", path)
 	return ctx, event
 }
 
@@ -76,8 +75,7 @@ func annotateFailures(ctx context.Context, err error, recovered any) {
 
 func annotateTiming(ctx context.Context, event *hc.Event, statusCode int) time.Duration {
 	duration := time.Since(hc.EventStartTime(event))
-	hc.Add(ctx, "duration_ms", duration.Milliseconds())
-	hc.Add(ctx, "http.status", statusCode)
+	hc.Add(ctx, "duration_ms", duration.Milliseconds(), "http.status", statusCode)
 	return duration
 }
 
