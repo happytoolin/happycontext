@@ -10,6 +10,13 @@
   * Removed `Add2`
   * `Add` now accepts variadic key/value pairs: `Add(ctx, "k1", v1, "k2", v2, ...)`
 
+## [0.1.0](https://github.com/happytoolin/happycontext/compare/happycontext-v0.0.1...happycontext-v0.1.0) (2026-02-10)
+
+
+### Features
+
+* Introduce advanced sampling options with per-level rates and custom samplers, and ensure TestSink deep copies event fields. ([537ed99](https://github.com/happytoolin/happycontext/commit/537ed994ee4a437f8d9d6531db1b212ed9e6ca9e))
+
 ## [0.0.1](https://github.com/happytoolin/happycontext/compare/happycontext-v0.0.1...happycontext-v0.0.1) (2026-02-09)
 
 
