@@ -74,26 +74,27 @@ const (
 type deepCopyFastEntry struct {
 	ptr  uintptr
 	kind deepCopyFastKind
+	size int
 	val  any
 }
 
-func (t *deepCopyTracker) lookupFast(ptr uintptr, kind deepCopyFastKind) (any, bool) {
+func (t *deepCopyTracker) lookupFast(ptr uintptr, kind deepCopyFastKind, size int) (any, bool) {
 	if ptr == 0 {
 		return nil, false
 	}
 	for i := range t.fast {
-		if t.fast[i].ptr == ptr && t.fast[i].kind == kind {
+		if t.fast[i].ptr == ptr && t.fast[i].kind == kind && t.fast[i].size == size {
 			return t.fast[i].val, true
 		}
 	}
 	return nil, false
 }
 
-func (t *deepCopyTracker) rememberFast(ptr uintptr, kind deepCopyFastKind, copied any) {
+func (t *deepCopyTracker) rememberFast(ptr uintptr, kind deepCopyFastKind, size int, copied any) {
 	if ptr == 0 {
 		return
 	}
-	t.fast = append(t.fast, deepCopyFastEntry{ptr: ptr, kind: kind, val: copied})
+	t.fast = append(t.fast, deepCopyFastEntry{ptr: ptr, kind: kind, size: size, val: copied})
 }
 
 func (t *deepCopyTracker) lookupGeneric(typ reflect.Type, ptr uintptr) (reflect.Value, bool) {
@@ -142,14 +143,14 @@ func deepCopyMapStringAny(src map[string]any, tracker *deepCopyTracker) map[stri
 	}
 
 	ptr := reflect.ValueOf(src).Pointer()
-	if copied, ok := tracker.lookupFast(ptr, deepCopyFastMap); ok {
+	if copied, ok := tracker.lookupFast(ptr, deepCopyFastMap, 0); ok {
 		if m, ok := copied.(map[string]any); ok {
 			return m
 		}
 	}
 
 	dst := make(map[string]any, len(src))
-	tracker.rememberFast(ptr, deepCopyFastMap, dst)
+	tracker.rememberFast(ptr, deepCopyFastMap, 0, dst)
 	for k, v := range src {
 		dst[k] = deepCopyAny(v, tracker)
 	}
@@ -162,14 +163,14 @@ func deepCopySliceAny(src []any, tracker *deepCopyTracker) []any {
 	}
 
 	ptr := reflect.ValueOf(src).Pointer()
-	if copied, ok := tracker.lookupFast(ptr, deepCopyFastSlice); ok {
+	if copied, ok := tracker.lookupFast(ptr, deepCopyFastSlice, len(src)); ok {
 		if s, ok := copied.([]any); ok {
 			return s
 		}
 	}
 
 	dst := make([]any, len(src))
-	tracker.rememberFast(ptr, deepCopyFastSlice, dst)
+	tracker.rememberFast(ptr, deepCopyFastSlice, len(src), dst)
 	for i := range src {
 		dst[i] = deepCopyAny(src[i], tracker)
 	}
