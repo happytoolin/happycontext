@@ -2,7 +2,8 @@ package hc
 
 import "time"
 
-// EventFields returns a deep-copied immutable field snapshot for e.
+// EventFields returns a shallow-copied field snapshot for e.
+// Nested map/slice values are shared by reference.
 func EventFields(e *Event) map[string]any {
 	if e == nil {
 		return nil

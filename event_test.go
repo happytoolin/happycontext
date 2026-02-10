@@ -17,7 +17,7 @@ func TestEventConcurrentAdd(t *testing.T) {
 	for i := 0; i < n; i++ {
 		go func(i int) {
 			defer wg.Done()
-			e.add("k"+strconv.Itoa(i), i)
+			e.addKV("k"+strconv.Itoa(i), i)
 		}(i)
 	}
 	wg.Wait()
@@ -102,7 +102,7 @@ func TestSnapshotCopiesTopLevelMap(t *testing.T) {
 			map[string]any{"scope": "billing"},
 		},
 	}
-	e.add("user", nested)
+	e.addKV("user", nested)
 
 	s := e.snapshot()
 
@@ -128,7 +128,7 @@ func TestSnapshotSupportsCyclicMapValue(t *testing.T) {
 	cyclic["self"] = cyclic
 	cyclic["name"] = "root"
 
-	e.add("node", cyclic)
+	e.addKV("node", cyclic)
 	s := e.snapshot()
 
 	node, ok := s.fields["node"].(map[string]any)
@@ -145,15 +145,15 @@ func TestSnapshotSupportsCyclicMapValue(t *testing.T) {
 	if self["name"] != "root" {
 		t.Fatalf("expected self reference to preserve fields, got %v", self["name"])
 	}
-	if reflect.ValueOf(self).Pointer() != reflect.ValueOf(node).Pointer() {
-		t.Fatalf("expected cycle to point to copied node map")
+	if reflect.ValueOf(self).Pointer() != reflect.ValueOf(cyclic).Pointer() {
+		t.Fatalf("expected shallow snapshot to preserve original cycle map")
 	}
-	if reflect.ValueOf(node).Pointer() == reflect.ValueOf(cyclic).Pointer() {
-		t.Fatalf("expected snapshot map to be a deep copy")
+	if reflect.ValueOf(node).Pointer() != reflect.ValueOf(cyclic).Pointer() {
+		t.Fatalf("expected shallow snapshot to share top-level map values")
 	}
 }
 
-func TestSnapshotDeepCopiesNestedValues(t *testing.T) {
+func TestSnapshotSharesNestedValues(t *testing.T) {
 	e := newEvent()
 	nested := map[string]any{
 		"id": "u_1",
@@ -162,7 +162,7 @@ func TestSnapshotDeepCopiesNestedValues(t *testing.T) {
 			map[string]any{"scope": "billing"},
 		},
 	}
-	e.add("user", nested)
+	e.addKV("user", nested)
 	s := e.snapshot()
 
 	nested["id"] = "u_2"
@@ -174,15 +174,15 @@ func TestSnapshotDeepCopiesNestedValues(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected user map in snapshot, got %T", s.fields["user"])
 	}
-	if user["id"] != "u_1" {
-		t.Fatalf("expected independent user.id=u_1, got %v", user["id"])
+	if user["id"] != "u_2" {
+		t.Fatalf("expected shared user.id=u_2, got %v", user["id"])
 	}
 	snapshotRoles := user["roles"].([]any)
-	if snapshotRoles[0] != "admin" {
-		t.Fatalf("expected independent role[0]=admin, got %v", snapshotRoles[0])
+	if snapshotRoles[0] != "viewer" {
+		t.Fatalf("expected shared role[0]=viewer, got %v", snapshotRoles[0])
 	}
-	if snapshotRoles[1].(map[string]any)["scope"] != "billing" {
-		t.Fatalf("expected independent nested map value, got %v", snapshotRoles[1].(map[string]any)["scope"])
+	if snapshotRoles[1].(map[string]any)["scope"] != "support" {
+		t.Fatalf("expected shared nested map value, got %v", snapshotRoles[1].(map[string]any)["scope"])
 	}
 }
 
@@ -191,13 +191,13 @@ type structPayload struct {
 	Tags []string
 }
 
-func TestSnapshotDeepCopiesStructReferenceFields(t *testing.T) {
+func TestSnapshotSharesStructReferenceFields(t *testing.T) {
 	e := newEvent()
 	p := structPayload{
 		Meta: map[string]int{"count": 1},
 		Tags: []string{"a", "b"},
 	}
-	e.add("payload", p)
+	e.addKV("payload", p)
 
 	s := e.snapshot()
 	p.Meta["count"] = 99
@@ -207,10 +207,10 @@ func TestSnapshotDeepCopiesStructReferenceFields(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected struct payload, got %T", s.fields["payload"])
 	}
-	if got.Meta["count"] != 1 {
-		t.Fatalf("expected copied map value=1, got %d", got.Meta["count"])
+	if got.Meta["count"] != 99 {
+		t.Fatalf("expected shared map value=99, got %d", got.Meta["count"])
 	}
-	if got.Tags[0] != "a" {
-		t.Fatalf("expected copied slice value=a, got %s", got.Tags[0])
+	if got.Tags[0] != "z" {
+		t.Fatalf("expected shared slice value=z, got %s", got.Tags[0])
 	}
 }

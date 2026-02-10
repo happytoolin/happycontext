@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Breaking Changes
+
+* `EventFields` now returns a shallow top-level copy. Nested maps/slices are shared references.
+* Public API simplified:
+  * Removed `AddMap`
+  * Removed `Add2`
+  * `Add` now accepts variadic key/value pairs: `Add(ctx, "k1", v1, "k2", v2, ...)`
+
 ## [0.0.1](https://github.com/happytoolin/happycontext/compare/happycontext-v0.0.1...happycontext-v0.0.1) (2026-02-09)
 
 

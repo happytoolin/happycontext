@@ -47,7 +47,7 @@
     <text x="16" y="25" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#F60">02 ENRICH</text>
     <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="13" fill="#F60">
       <text x="16" y="78">hc.Add("user_id", ...)</text>
-      <text x="16" y="108">hc.AddMap(fields)</text>
+      <text x="16" y="108">hc.Add(ctx, ...)</text>
       <text x="16" y="138">hc.Error(err)</text>
       <text x="16" y="168">hc.Warn(warn)</text>
     </g>

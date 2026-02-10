@@ -43,6 +43,7 @@ Install only the adapter and integration packages you use.
 package main
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -64,8 +65,12 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /orders/{id}", func(w http.ResponseWriter, r *http.Request) {
-		hc.Add(r.Context(), "user_id", "u_8472")
-		hc.Add(r.Context(), "feature", "checkout")
+		hc.Add(r.Context(), "user_id", "u_8472", "feature", "checkout")
+		if r.URL.Query().Get("fail") == "1" {
+			hc.Error(r.Context(), errors.New("checkout failed"))
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -151,6 +156,11 @@ mw := stdhc.Middleware(hc.Config{
 	},
 })
 ```
+
+`hc.EventFields` returns a shallow copy of top-level fields. Nested maps/slices are shared references.
+
+`hc.Add` accepts one or more key/value pairs:
+`hc.Add(ctx, "k1", v1, "k2", v2, "k3", v3)`.
 
 Built-in sampler chain:
 

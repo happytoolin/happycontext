@@ -22,16 +22,17 @@ func main() {
 
 		hc.Add(ctx, "example", "adapter-zap")
 		hc.Add(ctx, "event_attached", hc.FromContext(ctx) != nil)
-		hc.AddMap(ctx, map[string]any{
-			"user": map[string]any{
+		hc.Add(
+			ctx,
+			"user", map[string]any{
 				"id":   id,
 				"plan": "pro",
 			},
-			"request": map[string]any{
+			"request", map[string]any{
 				"feature": "checkout",
 				"tags":    []string{"examples", "zap"},
 			},
-		})
+		)
 		hc.SetRoute(ctx, "/users/{id}")
 
 		if r.URL.Query().Get("debug") == "1" {

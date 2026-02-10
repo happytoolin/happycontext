@@ -19,24 +19,17 @@ func NewContext(ctx context.Context) (context.Context, *Event) {
 	return context.WithValue(ctx, contextKey{}, e), e
 }
 
-// Add records one field on the event stored in ctx.
-func Add(ctx context.Context, key string, value any) bool {
+// Add records one or more fields on the event stored in ctx.
+//
+// Additional key/value pairs can be passed via kv:
+// Add(ctx, "a", 1, "b", 2, "c", 3).
+// kv must have even length and every key position must be a string.
+func Add(ctx context.Context, key string, value any, kv ...any) bool {
 	e := FromContext(ctx)
 	if e == nil {
 		return false
 	}
-	e.add(key, value)
-	return true
-}
-
-// AddMap merges all fields into the event stored in ctx.
-func AddMap(ctx context.Context, fields map[string]any) bool {
-	e := FromContext(ctx)
-	if e == nil {
-		return false
-	}
-	e.addMap(fields)
-	return true
+	return e.addKV(key, value, kv...)
 }
 
 // Error records err on the event stored in ctx.

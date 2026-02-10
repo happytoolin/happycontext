@@ -1,0 +1,504 @@
+package integrationbench
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/gofiber/fiber/v2"
+	fiberv3 "github.com/gofiber/fiber/v3"
+	hc "github.com/happytoolin/happycontext"
+	echohc "github.com/happytoolin/happycontext/integration/echo"
+	fiberhc "github.com/happytoolin/happycontext/integration/fiber"
+	fiberv3hc "github.com/happytoolin/happycontext/integration/fiberv3"
+	ginhc "github.com/happytoolin/happycontext/integration/gin"
+	stdhc "github.com/happytoolin/happycontext/integration/std"
+	"github.com/labstack/echo/v4"
+	"github.com/rs/zerolog"
+	"go.uber.org/zap"
+)
+
+type discardSink struct{}
+
+func (discardSink) Write(hc.Level, string, map[string]any) {}
+
+type noopSlogHandler struct{}
+
+func (noopSlogHandler) Enabled(context.Context, slog.Level) bool  { return true }
+func (noopSlogHandler) Handle(context.Context, slog.Record) error { return nil }
+func (noopSlogHandler) WithAttrs([]slog.Attr) slog.Handler        { return noopSlogHandler{} }
+func (noopSlogHandler) WithGroup(string) slog.Handler             { return noopSlogHandler{} }
+
+func BenchmarkRouter_std(b *testing.B) {
+	req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+	handlerHappycontextAPI := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hc.Add(r.Context(), "user_id", "u_1")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	b.Run("middleware_on_sink_noop", func(b *testing.B) {
+		mw := stdhc.Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1})
+		wrapped := mw(handlerHappycontextAPI)
+		b.ReportAllocs()
+		for b.Loop() {
+			rr := httptest.NewRecorder()
+			wrapped.ServeHTTP(rr, req)
+		}
+	})
+
+	b.Run("normal_logging_slog_noop_handler_no_middleware", func(b *testing.B) {
+		logger := slog.New(noopSlogHandler{})
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			logger.InfoContext(r.Context(), "request_completed",
+				slog.String("http.method", r.Method),
+				slog.String("http.path", r.URL.Path),
+				slog.Int("http.status", http.StatusNoContent),
+				slog.String("user_id", "u_1"),
+			)
+			w.WriteHeader(http.StatusNoContent)
+		})
+		b.ReportAllocs()
+		for b.Loop() {
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+		}
+	})
+
+	b.Run("normal_logging_slog_json_no_middleware", func(b *testing.B) {
+		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			logger.InfoContext(r.Context(), "request_completed",
+				slog.String("http.method", r.Method),
+				slog.String("http.path", r.URL.Path),
+				slog.Int("http.status", http.StatusNoContent),
+				slog.String("user_id", "u_1"),
+			)
+			w.WriteHeader(http.StatusNoContent)
+		})
+		b.ReportAllocs()
+		for b.Loop() {
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+		}
+	})
+
+	b.Run("normal_logging_zap_nop_no_middleware", func(b *testing.B) {
+		logger := zap.NewNop()
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			logger.Info("request_completed",
+				zap.String("http.method", r.Method),
+				zap.String("http.path", r.URL.Path),
+				zap.Int("http.status", http.StatusNoContent),
+				zap.String("user_id", "u_1"),
+			)
+			w.WriteHeader(http.StatusNoContent)
+		})
+		b.ReportAllocs()
+		for b.Loop() {
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+		}
+	})
+
+	b.Run("normal_logging_zerolog_nop_no_middleware", func(b *testing.B) {
+		logger := zerolog.Nop()
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			logger.Info().
+				Str("http.method", r.Method).
+				Str("http.path", r.URL.Path).
+				Int("http.status", http.StatusNoContent).
+				Str("user_id", "u_1").
+				Msg("request_completed")
+			w.WriteHeader(http.StatusNoContent)
+		})
+		b.ReportAllocs()
+		for b.Loop() {
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+		}
+	})
+}
+
+func BenchmarkRouter_gin(b *testing.B) {
+	gin.SetMode(gin.TestMode)
+
+	b.Run("middleware_on_sink_noop", func(b *testing.B) {
+		r := gin.New()
+		r.Use(ginhc.Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1}))
+		r.GET("/orders/:id", func(c *gin.Context) {
+			hc.Add(c.Request.Context(), "user_id", "u_1")
+			c.Status(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, req)
+		}
+	})
+
+	b.Run("normal_logging_slog_noop_handler_no_middleware", func(b *testing.B) {
+		logger := slog.New(noopSlogHandler{})
+		r := gin.New()
+		r.GET("/orders/:id", func(c *gin.Context) {
+			logger.InfoContext(c.Request.Context(), "request_completed",
+				slog.String("http.method", c.Request.Method),
+				slog.String("http.path", c.Request.URL.Path),
+				slog.Int("http.status", http.StatusNoContent),
+				slog.String("user_id", "u_1"),
+			)
+			c.Status(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, req)
+		}
+	})
+
+	b.Run("normal_logging_slog_json_no_middleware", func(b *testing.B) {
+		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+		r := gin.New()
+		r.GET("/orders/:id", func(c *gin.Context) {
+			logger.InfoContext(c.Request.Context(), "request_completed",
+				slog.String("http.method", c.Request.Method),
+				slog.String("http.path", c.Request.URL.Path),
+				slog.Int("http.status", http.StatusNoContent),
+				slog.String("user_id", "u_1"),
+			)
+			c.Status(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, req)
+		}
+	})
+
+	b.Run("normal_logging_zap_nop_no_middleware", func(b *testing.B) {
+		logger := zap.NewNop()
+		r := gin.New()
+		r.GET("/orders/:id", func(c *gin.Context) {
+			logger.Info("request_completed",
+				zap.String("http.method", c.Request.Method),
+				zap.String("http.path", c.Request.URL.Path),
+				zap.Int("http.status", http.StatusNoContent),
+				zap.String("user_id", "u_1"),
+			)
+			c.Status(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, req)
+		}
+	})
+
+	b.Run("normal_logging_zerolog_nop_no_middleware", func(b *testing.B) {
+		logger := zerolog.Nop()
+		r := gin.New()
+		r.GET("/orders/:id", func(c *gin.Context) {
+			logger.Info().
+				Str("http.method", c.Request.Method).
+				Str("http.path", c.Request.URL.Path).
+				Int("http.status", http.StatusNoContent).
+				Str("user_id", "u_1").
+				Msg("request_completed")
+			c.Status(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, req)
+		}
+	})
+}
+
+func BenchmarkRouter_echo(b *testing.B) {
+	b.Run("middleware_on_sink_noop", func(b *testing.B) {
+		e := echo.New()
+		e.Use(echohc.Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1}))
+		e.GET("/orders/:id", func(c echo.Context) error {
+			hc.Add(c.Request().Context(), "user_id", "u_1")
+			return c.NoContent(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			rr := httptest.NewRecorder()
+			e.ServeHTTP(rr, req)
+		}
+	})
+
+	b.Run("normal_logging_slog_noop_handler_no_middleware", func(b *testing.B) {
+		logger := slog.New(noopSlogHandler{})
+		e := echo.New()
+		e.GET("/orders/:id", func(c echo.Context) error {
+			logger.InfoContext(c.Request().Context(), "request_completed",
+				slog.String("http.method", c.Request().Method),
+				slog.String("http.path", c.Request().URL.Path),
+				slog.Int("http.status", http.StatusNoContent),
+				slog.String("user_id", "u_1"),
+			)
+			return c.NoContent(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			rr := httptest.NewRecorder()
+			e.ServeHTTP(rr, req)
+		}
+	})
+
+	b.Run("normal_logging_slog_json_no_middleware", func(b *testing.B) {
+		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+		e := echo.New()
+		e.GET("/orders/:id", func(c echo.Context) error {
+			logger.InfoContext(c.Request().Context(), "request_completed",
+				slog.String("http.method", c.Request().Method),
+				slog.String("http.path", c.Request().URL.Path),
+				slog.Int("http.status", http.StatusNoContent),
+				slog.String("user_id", "u_1"),
+			)
+			return c.NoContent(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			rr := httptest.NewRecorder()
+			e.ServeHTTP(rr, req)
+		}
+	})
+
+	b.Run("normal_logging_zap_nop_no_middleware", func(b *testing.B) {
+		logger := zap.NewNop()
+		e := echo.New()
+		e.GET("/orders/:id", func(c echo.Context) error {
+			logger.Info("request_completed",
+				zap.String("http.method", c.Request().Method),
+				zap.String("http.path", c.Request().URL.Path),
+				zap.Int("http.status", http.StatusNoContent),
+				zap.String("user_id", "u_1"),
+			)
+			return c.NoContent(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			rr := httptest.NewRecorder()
+			e.ServeHTTP(rr, req)
+		}
+	})
+
+	b.Run("normal_logging_zerolog_nop_no_middleware", func(b *testing.B) {
+		logger := zerolog.Nop()
+		e := echo.New()
+		e.GET("/orders/:id", func(c echo.Context) error {
+			logger.Info().
+				Str("http.method", c.Request().Method).
+				Str("http.path", c.Request().URL.Path).
+				Int("http.status", http.StatusNoContent).
+				Str("user_id", "u_1").
+				Msg("request_completed")
+			return c.NoContent(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			rr := httptest.NewRecorder()
+			e.ServeHTTP(rr, req)
+		}
+	})
+}
+
+func BenchmarkRouter_fiber(b *testing.B) {
+	b.Run("middleware_on_sink_noop", func(b *testing.B) {
+		app := fiber.New()
+		app.Use(fiberhc.Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1}))
+		app.Get("/orders/:id", func(c *fiber.Ctx) error {
+			hc.Add(c.UserContext(), "user_id", "u_1")
+			return c.SendStatus(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			_, _ = app.Test(req, -1)
+		}
+	})
+
+	b.Run("normal_logging_slog_noop_handler_no_middleware", func(b *testing.B) {
+		logger := slog.New(noopSlogHandler{})
+		app := fiber.New()
+		app.Get("/orders/:id", func(c *fiber.Ctx) error {
+			logger.InfoContext(c.UserContext(), "request_completed",
+				slog.String("http.method", c.Method()),
+				slog.String("http.path", c.Path()),
+				slog.Int("http.status", http.StatusNoContent),
+				slog.String("user_id", "u_1"),
+			)
+			return c.SendStatus(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			_, _ = app.Test(req, -1)
+		}
+	})
+
+	b.Run("normal_logging_slog_json_no_middleware", func(b *testing.B) {
+		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+		app := fiber.New()
+		app.Get("/orders/:id", func(c *fiber.Ctx) error {
+			logger.InfoContext(c.UserContext(), "request_completed",
+				slog.String("http.method", c.Method()),
+				slog.String("http.path", c.Path()),
+				slog.Int("http.status", http.StatusNoContent),
+				slog.String("user_id", "u_1"),
+			)
+			return c.SendStatus(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			_, _ = app.Test(req, -1)
+		}
+	})
+
+	b.Run("normal_logging_zap_nop_no_middleware", func(b *testing.B) {
+		logger := zap.NewNop()
+		app := fiber.New()
+		app.Get("/orders/:id", func(c *fiber.Ctx) error {
+			logger.Info("request_completed",
+				zap.String("http.method", c.Method()),
+				zap.String("http.path", c.Path()),
+				zap.Int("http.status", http.StatusNoContent),
+				zap.String("user_id", "u_1"),
+			)
+			return c.SendStatus(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			_, _ = app.Test(req, -1)
+		}
+	})
+
+	b.Run("normal_logging_zerolog_nop_no_middleware", func(b *testing.B) {
+		logger := zerolog.Nop()
+		app := fiber.New()
+		app.Get("/orders/:id", func(c *fiber.Ctx) error {
+			logger.Info().
+				Str("http.method", c.Method()).
+				Str("http.path", c.Path()).
+				Int("http.status", http.StatusNoContent).
+				Str("user_id", "u_1").
+				Msg("request_completed")
+			return c.SendStatus(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			_, _ = app.Test(req, -1)
+		}
+	})
+}
+
+func BenchmarkRouter_fiberv3(b *testing.B) {
+	b.Run("middleware_on_sink_noop", func(b *testing.B) {
+		app := fiberv3.New()
+		app.Use(fiberv3hc.Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1}))
+		app.Get("/orders/:id", func(c fiberv3.Ctx) error {
+			hc.Add(c.Context(), "user_id", "u_1")
+			return c.SendStatus(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			_, _ = app.Test(req, fiberv3.TestConfig{Timeout: -1})
+		}
+	})
+
+	b.Run("normal_logging_slog_noop_handler_no_middleware", func(b *testing.B) {
+		logger := slog.New(noopSlogHandler{})
+		app := fiberv3.New()
+		app.Get("/orders/:id", func(c fiberv3.Ctx) error {
+			logger.InfoContext(c.Context(), "request_completed",
+				slog.String("http.method", c.Method()),
+				slog.String("http.path", c.Path()),
+				slog.Int("http.status", http.StatusNoContent),
+				slog.String("user_id", "u_1"),
+			)
+			return c.SendStatus(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			_, _ = app.Test(req, fiberv3.TestConfig{Timeout: -1})
+		}
+	})
+
+	b.Run("normal_logging_slog_json_no_middleware", func(b *testing.B) {
+		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+		app := fiberv3.New()
+		app.Get("/orders/:id", func(c fiberv3.Ctx) error {
+			logger.InfoContext(c.Context(), "request_completed",
+				slog.String("http.method", c.Method()),
+				slog.String("http.path", c.Path()),
+				slog.Int("http.status", http.StatusNoContent),
+				slog.String("user_id", "u_1"),
+			)
+			return c.SendStatus(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			_, _ = app.Test(req, fiberv3.TestConfig{Timeout: -1})
+		}
+	})
+
+	b.Run("normal_logging_zap_nop_no_middleware", func(b *testing.B) {
+		logger := zap.NewNop()
+		app := fiberv3.New()
+		app.Get("/orders/:id", func(c fiberv3.Ctx) error {
+			logger.Info("request_completed",
+				zap.String("http.method", c.Method()),
+				zap.String("http.path", c.Path()),
+				zap.Int("http.status", http.StatusNoContent),
+				zap.String("user_id", "u_1"),
+			)
+			return c.SendStatus(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			_, _ = app.Test(req, fiberv3.TestConfig{Timeout: -1})
+		}
+	})
+
+	b.Run("normal_logging_zerolog_nop_no_middleware", func(b *testing.B) {
+		logger := zerolog.Nop()
+		app := fiberv3.New()
+		app.Get("/orders/:id", func(c fiberv3.Ctx) error {
+			logger.Info().
+				Str("http.method", c.Method()).
+				Str("http.path", c.Path()).
+				Int("http.status", http.StatusNoContent).
+				Str("user_id", "u_1").
+				Msg("request_completed")
+			return c.SendStatus(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
+		b.ReportAllocs()
+		for b.Loop() {
+			_, _ = app.Test(req, fiberv3.TestConfig{Timeout: -1})
+		}
+	})
+}

@@ -25,19 +25,18 @@ func BenchmarkEventAddStableKeys(b *testing.B) {
 	}
 }
 
-func BenchmarkEventAddMap(b *testing.B) {
-	template := map[string]any{
-		"user_id":      "u_8472",
-		"cart_items":   3,
-		"cart_total":   300,
-		"country":      "US",
-		"feature_flag": true,
-	}
-
+func BenchmarkEventAddMany(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		ctx, _ := hc.NewContext(context.Background())
-		hc.AddMap(ctx, template)
+		hc.Add(
+			ctx,
+			"user_id", "u_8472",
+			"cart_items", 3,
+			"cart_total", 300,
+			"country", "US",
+			"feature_flag", true,
+		)
 	}
 }
 
@@ -108,22 +107,21 @@ func BenchmarkEventSnapshotCyclic(b *testing.B) {
 }
 
 func BenchmarkCommitPath(b *testing.B) {
-	baseFields := map[string]any{
-		"http.method":    "GET",
-		"http.path":      "/checkout",
-		"http.status":    200,
-		"duration_ms":    12,
-		"user_id":        "u_8472",
-		"user_plan":      "premium",
-		"db.query_count": 3,
-	}
-
 	sink := discardSink{}
 
 	b.ReportAllocs()
 	for b.Loop() {
 		ctx, _ := hc.NewContext(context.Background())
-		hc.AddMap(ctx, baseFields)
+		hc.Add(
+			ctx,
+			"http.method", "GET",
+			"http.path", "/checkout",
+			"http.status", 200,
+			"duration_ms", 12,
+			"user_id", "u_8472",
+			"user_plan", "premium",
+			"db.query_count", 3,
+		)
 		sink.Write(hc.LevelInfo, "request_completed", hc.EventFields(hc.FromContext(ctx)))
 	}
 }
@@ -157,11 +155,14 @@ func BenchmarkNonHTTPManualLifecycle(b *testing.B) {
 	}
 
 	for name, fields := range fieldProfiles {
+		flat := flattenFields(fields)
 		b.Run(name, func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				ctx, _ := hc.NewContext(context.Background())
-				hc.AddMap(ctx, fields)
+				if flat.ok {
+					hc.Add(ctx, flat.key, flat.value, flat.kv...)
+				}
 				sink.Write(hc.LevelInfo, "job_completed", hc.EventFields(hc.FromContext(ctx)))
 			}
 		})
@@ -189,4 +190,27 @@ func buildBenchmarkFields(n int) map[string]any {
 		fields["k"+strconv.Itoa(i)] = i
 	}
 	return fields
+}
+
+type flatFields struct {
+	ok    bool
+	key   string
+	value any
+	kv    []any
+}
+
+func flattenFields(fields map[string]any) flatFields {
+	if len(fields) == 0 {
+		return flatFields{}
+	}
+	flat := make([]any, 0, len(fields)*2)
+	for k, v := range fields {
+		flat = append(flat, k, v)
+	}
+	return flatFields{
+		ok:    true,
+		key:   flat[0].(string),
+		value: flat[1],
+		kv:    flat[2:],
+	}
 }
