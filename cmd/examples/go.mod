@@ -15,6 +15,7 @@ require (
 	github.com/happytoolin/happycontext/integration/fiberv3 v0.0.0
 	github.com/happytoolin/happycontext/integration/gin v0.0.0
 	github.com/happytoolin/happycontext/integration/std v0.0.0
+	github.com/happytoolin/happycontext/integration/worker v0.0.0
 	github.com/labstack/echo/v4 v4.15.0
 	github.com/rs/zerolog v1.34.0
 	go.uber.org/zap v1.27.1
@@ -87,3 +88,5 @@ replace github.com/happytoolin/happycontext/integration/fiber => ../../integrati
 replace github.com/happytoolin/happycontext/integration/fiberv3 => ../../integration/fiberv3
 
 replace github.com/happytoolin/happycontext/integration/std => ../../integration/std
+
+replace github.com/happytoolin/happycontext/integration/worker => ../../integration/worker

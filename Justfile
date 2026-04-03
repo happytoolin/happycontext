@@ -35,6 +35,7 @@ coverage:
   (cd integration/echo && go test ./... -cover)
   (cd integration/fiber && go test ./... -cover)
   (cd integration/fiberv3 && go test ./... -cover)
+  (cd integration/worker && go test ./... -cover)
   (cd cmd/examples && go test ./... -cover)
 
 bench:

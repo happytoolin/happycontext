@@ -29,6 +29,50 @@ func NormalizeConfig(cfg hc.Config) hc.Config {
 		}
 		cfg.LevelSamplingRates = clamped
 	}
+	if len(cfg.OperationPolicies) > 0 {
+		normalized := make(map[hc.Domain]hc.OperationPolicy, len(cfg.OperationPolicies))
+		for domain, policy := range cfg.OperationPolicies {
+			d := domain
+			if d == "" {
+				d = hc.Domain("operation")
+			}
+
+			if !isValidLevel(policy.SuccessLevel) {
+				policy.SuccessLevel = hc.LevelInfo
+			}
+			if !isValidLevel(policy.FailureLevel) {
+				policy.FailureLevel = hc.LevelError
+			}
+			if !isValidLevel(policy.PanicLevel) {
+				policy.PanicLevel = hc.LevelError
+			}
+
+			if len(policy.OutcomeLevels) > 0 {
+				outcomeLevels := make(map[hc.Outcome]hc.Level, len(policy.OutcomeLevels))
+				for outcome, level := range policy.OutcomeLevels {
+					if !isValidOutcome(outcome) || !isValidLevel(level) {
+						continue
+					}
+					outcomeLevels[outcome] = level
+				}
+				policy.OutcomeLevels = outcomeLevels
+			}
+
+			if policy.SamplingRate != nil {
+				rate := *policy.SamplingRate
+				if rate < 0 {
+					rate = 0
+				}
+				if rate > 1 {
+					rate = 1
+				}
+				policy.SamplingRate = &rate
+			}
+
+			normalized[d] = policy
+		}
+		cfg.OperationPolicies = normalized
+	}
 	if cfg.Message == "" {
 		cfg.Message = DefaultMessage
 	}
@@ -64,6 +108,15 @@ func levelRank(level hc.Level) int {
 func isValidLevel(level hc.Level) bool {
 	switch level {
 	case hc.LevelDebug, hc.LevelInfo, hc.LevelWarn, hc.LevelError:
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidOutcome(outcome hc.Outcome) bool {
+	switch outcome {
+	case hc.OutcomeSuccess, hc.OutcomeFailure, hc.OutcomePanic, hc.OutcomeCanceled, hc.OutcomeTimeout, hc.OutcomeRetry:
 		return true
 	default:
 		return false

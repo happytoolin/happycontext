@@ -7,6 +7,7 @@ import (
 )
 
 func TestNormalizeConfigClampsAndDefaults(t *testing.T) {
+	policyRate := 2.0
 	tests := []struct {
 		name    string
 		cfg     hc.Config
@@ -23,6 +24,25 @@ func TestNormalizeConfigClampsAndDefaults(t *testing.T) {
 					hc.LevelDebug: 2,
 					hc.LevelInfo:  -1,
 					hc.Level("X"): 0.5,
+				},
+			},
+			wantMsg: DefaultMessage,
+			wantRat: 0,
+		},
+		{
+			name: "operation policies",
+			cfg: hc.Config{
+				OperationPolicies: map[hc.Domain]hc.OperationPolicy{
+					hc.DomainJob: {
+						SuccessLevel: hc.Level("TRACE"),
+						FailureLevel: hc.LevelWarn,
+						PanicLevel:   hc.Level("PANIC"),
+						OutcomeLevels: map[hc.Outcome]hc.Level{
+							hc.OutcomeRetry: hc.LevelWarn,
+							hc.Outcome("X"): hc.LevelError,
+						},
+						SamplingRate: &policyRate,
+					},
 				},
 			},
 			wantMsg: DefaultMessage,
@@ -48,6 +68,27 @@ func TestNormalizeConfigClampsAndDefaults(t *testing.T) {
 				}
 				if _, ok := got.LevelSamplingRates[hc.Level("X")]; ok {
 					t.Fatal("expected invalid level to be removed")
+				}
+			}
+			if tt.name == "operation policies" {
+				pol := got.OperationPolicies[hc.DomainJob]
+				if pol.SuccessLevel != hc.LevelInfo {
+					t.Fatalf("success level = %s, want INFO", pol.SuccessLevel)
+				}
+				if pol.FailureLevel != hc.LevelWarn {
+					t.Fatalf("failure level = %s, want WARN", pol.FailureLevel)
+				}
+				if pol.PanicLevel != hc.LevelError {
+					t.Fatalf("panic level = %s, want ERROR", pol.PanicLevel)
+				}
+				if pol.OutcomeLevels[hc.OutcomeRetry] != hc.LevelWarn {
+					t.Fatalf("retry level = %s, want WARN", pol.OutcomeLevels[hc.OutcomeRetry])
+				}
+				if _, ok := pol.OutcomeLevels[hc.Outcome("X")]; ok {
+					t.Fatal("expected invalid outcome mapping to be removed")
+				}
+				if pol.SamplingRate == nil || *pol.SamplingRate != 1 {
+					t.Fatalf("policy sampling = %v, want 1", pol.SamplingRate)
 				}
 			}
 		})

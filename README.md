@@ -20,7 +20,7 @@ Most application logs are high-volume but low-context.
 - Built-in sampling for healthy traffic
 - Error and panic events are always preserved
 - Works with `slog`, `zap`, and `zerolog`
-- Integrates with `net/http`, `gin`, `echo`, `fiber`, and `fiber v3`
+- Integrates with `net/http`, `gin`, `echo`, `fiber`, `fiber v3`, and worker jobs
 
 Design principle:
 
@@ -86,6 +86,43 @@ Other quick starts:
 - `gin`, `echo`, `fiber v2`, and `fiber v3` (with `slog`) are in `## More Examples`
 - Runnable reference apps are in `cmd/examples`
 
+## Quick Start (Background Job + `slog`)
+
+```go
+package main
+
+import (
+	"context"
+	"log/slog"
+	"os"
+
+	"github.com/happytoolin/happycontext"
+	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	workerhc "github.com/happytoolin/happycontext/integration/worker"
+)
+
+func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	sink := slogadapter.New(logger)
+
+	meta := workerhc.JobMeta{
+		Name:        "billing.reconcile",
+		ID:          "job_8472",
+		Queue:       "nightly",
+		Attempt:     1,
+		MaxAttempts: 3,
+	}
+
+	ctx, event := workerhc.Start(context.Background(), meta)
+	hc.Add(ctx, "tenant", "enterprise")
+
+	_ = workerhc.Finish(hc.Config{
+		Sink:         sink,
+		SamplingRate: 1,
+	}, ctx, event, meta, nil, nil)
+}
+```
+
 Example output:
 
 ```json
@@ -111,7 +148,8 @@ Example output:
 - `SamplingRate`: `0` to `1` for healthy-request sampling
 - `LevelSamplingRates`: optional level-specific sampling overrides
 - `Sampler`: optional custom sampling function (full control)
-- `Message`: final log message (defaults to `request_completed`)
+- `OperationPolicies`: optional per-domain level/sampling policy for non-HTTP operations
+- `Message`: final log message (defaults to `request_completed` for HTTP and `operation_completed` for non-HTTP)
 
 Notes:
 
@@ -185,6 +223,9 @@ mw := stdhc.Middleware(hc.Config{
 `hc.Add` accepts one or more key/value pairs:
 `hc.Add(ctx, "k1", v1, "k2", v2, "k3", v3)`.
 
+`hc.SampleInput.Method`, `Path`, and `StatusCode` are HTTP compatibility fields.
+For non-HTTP operations use `Domain`, `Operation`, `Outcome`, and `Code`.
+
 Built-in sampler chain:
 
 ```go
@@ -209,6 +250,33 @@ Sampler building blocks:
 - `hc.KeepPathPrefix("/checkout", "/admin")`: middleware that keeps matching path prefixes.
 - `hc.KeepSlowerThan(minDuration)`: middleware that keeps requests at/above a duration threshold.
 
+### Generic Operation Lifecycle API
+
+For non-HTTP flows, you can use `hc.BeginOperation` / `hc.FinishOperation` directly:
+
+```go
+ctx, event := hc.BeginOperation(context.Background(), hc.OperationStart{
+	Domain: hc.DomainJob,
+	Name:   "invoice.reconcile",
+	ID:     "job_1001",
+	Source: "nightly",
+})
+
+hc.Add(ctx, "job.queue", "nightly")
+hc.Add(ctx, "account_id", "acct_42")
+
+_ = hc.FinishOperation(cfg, hc.OperationFinish{
+	Ctx:   ctx,
+	Event: event,
+	Start: hc.OperationStart{
+		Domain: hc.DomainJob,
+		Name:   "invoice.reconcile",
+		ID:     "job_1001",
+		Source: "nightly",
+	},
+})
+```
+
 ## Integrations
 
 - `integration/std` (`net/http`)
@@ -216,6 +284,7 @@ Sampler building blocks:
 - `integration/echo`
 - `integration/fiber` (Fiber v2)
 - `integration/fiberv3` (Fiber v3)
+- `integration/worker` (background jobs)
 
 ## Logger Adapters
 
@@ -469,6 +538,7 @@ go run ./router-fiber
 go run ./router-fiberv3
 go run ./sampling-inbuilt
 go run ./sampling-custom
+go run ./worker-job
 ```
 
 ## Release Process
