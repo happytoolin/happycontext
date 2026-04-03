@@ -42,6 +42,8 @@ func Error(ctx context.Context, err error) bool {
 	return true
 }
 
+// SetMessage records a per-event message on the event stored in ctx.
+// An empty message is treated as unset during finalization.
 func SetMessage(ctx context.Context, msg string) bool {
 	e := FromContext(ctx)
 	if e == nil {

@@ -156,6 +156,29 @@ func TestFinalizeRequestAppliesEventMessage(t *testing.T) {
 	}
 }
 
+func TestFinalizeRequestFallsBackToConfigMessageWhenEventMessageEmpty(t *testing.T) {
+	ctx, event := StartRequest(context.Background(), "GET", "/x")
+	hc.SetMessage(ctx, "")
+	sink := hc.NewTestSink()
+	cfg := NormalizeConfig(hc.Config{Sink: sink, SamplingRate: 1, Message: "default message"})
+
+	FinalizeRequest(cfg, FinalizeInput{
+		Ctx:        ctx,
+		Event:      event,
+		Method:     "GET",
+		Path:       "/x",
+		StatusCode: 200,
+	})
+
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Message != "default message" {
+		t.Fatalf("Message = %s, want 'default message'", events[0].Message)
+	}
+}
+
 func TestResolveStatus(t *testing.T) {
 	if got := ResolveStatus(0, nil, nil, false, 0); got != http.StatusOK {
 		t.Fatalf("status = %d, want %d", got, http.StatusOK)
