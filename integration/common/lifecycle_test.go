@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/happycontext"
 )
 
 func TestStartRequestAddsBaseFields(t *testing.T) {
@@ -130,6 +130,29 @@ func TestFinalizeRequestAppliesRequestedLevelFloor(t *testing.T) {
 	}
 	if events[0].Level != hc.LevelWarn {
 		t.Fatalf("level = %s, want WARN", events[0].Level)
+	}
+}
+
+func TestFinalizeRequestAppliesEventMessage(t *testing.T) {
+	ctx, event := StartRequest(context.Background(), "GET", "/x")
+	hc.SetMessage(ctx, "hello world")
+	sink := hc.NewTestSink()
+	cfg := NormalizeConfig(hc.Config{Sink: sink, SamplingRate: 1, Message: "default message"})
+
+	FinalizeRequest(cfg, FinalizeInput{
+		Ctx:        ctx,
+		Event:      event,
+		Method:     "GET",
+		Path:       "/x",
+		StatusCode: 200,
+	})
+
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Message != "hello world" {
+		t.Fatalf("Message = %s, want 'hello world'", events[0].Message)
 	}
 }
 

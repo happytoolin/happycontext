@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/happycontext"
 )
 
 // FinalizeInput contains request data required for finalization.
@@ -57,7 +57,13 @@ func FinalizeRequest(cfg hc.Config, in FinalizeInput) {
 	}) {
 		return
 	}
-	cfg.Sink.Write(level, cfg.Message, hc.EventFields(in.Event))
+
+	msg := cfg.Message
+	if hc.EventHasMessage(in.Event) {
+		msg = hc.EventMessage(in.Event)
+	}
+
+	cfg.Sink.Write(level, msg, hc.EventFields(in.Event))
 }
 
 func annotateFailures(ctx context.Context, err error, recovered any) {

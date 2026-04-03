@@ -11,12 +11,27 @@ func EventFields(e *Event) map[string]any {
 	return e.snapshot().fields
 }
 
+func EventMessage(e *Event) string {
+	if e == nil {
+		return ""
+	}
+	return e.getMessage()
+}
+
 // EventHasError reports whether e has an attached error.
 func EventHasError(e *Event) bool {
 	if e == nil {
 		return false
 	}
 	return e.hasErrorValue()
+}
+
+// EventHasMessage reports whether e has an attached message.
+func EventHasMessage(e *Event) bool {
+	if e == nil {
+		return false
+	}
+	return e.hasMessageValue()
 }
 
 // EventStartTime returns e's start time.

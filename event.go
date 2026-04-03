@@ -10,6 +10,7 @@ import (
 // Event accumulates request-scoped structured fields.
 type Event struct {
 	mu                sync.RWMutex
+	message           string
 	fields            map[string]any
 	startTime         time.Time
 	hasError          bool
@@ -84,10 +85,22 @@ func (e *Event) setError(err error) {
 	}
 }
 
+func (e *Event) setMessage(msg string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.message = msg
+}
+
 func (e *Event) hasErrorValue() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.hasError
+}
+
+func (e *Event) hasMessageValue() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return len(e.message) > 0
 }
 
 func (e *Event) startedAt() time.Time {
@@ -122,4 +135,11 @@ func (e *Event) snapshot() snapshot {
 		startTime: e.startTime,
 		hasError:  e.hasError,
 	}
+}
+
+func (e *Event) getMessage() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	return e.message
 }

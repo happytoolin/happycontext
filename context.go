@@ -42,6 +42,15 @@ func Error(ctx context.Context, err error) bool {
 	return true
 }
 
+func SetMessage(ctx context.Context, msg string) bool {
+	e := FromContext(ctx)
+	if e == nil {
+		return false
+	}
+	e.setMessage(msg)
+	return true
+}
+
 // SetLevel sets a requested level override for the event in ctx.
 func SetLevel(ctx context.Context, level Level) bool {
 	e := FromContext(ctx)
