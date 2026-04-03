@@ -10,6 +10,13 @@
   * Removed `Add2`
   * `Add` now accepts variadic key/value pairs: `Add(ctx, "k1", v1, "k2", v2, ...)`
 
+## [0.2.0](https://github.com/happytoolin/happycontext/compare/happycontext-v0.1.0...happycontext-v0.2.0) (2026-04-03)
+
+
+### Features
+
+* document per-request message overrides ([1b78d4f](https://github.com/happytoolin/happycontext/commit/1b78d4f8da42dc5f5e5c4e08aad8a51b3476852a))
+
 ## [0.1.0](https://github.com/happytoolin/happycontext/compare/happycontext-v0.0.1...happycontext-v0.1.0) (2026-02-10)
 
 
