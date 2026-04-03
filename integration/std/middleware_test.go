@@ -46,6 +46,36 @@ func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {
 	}
 }
 
+func TestMiddlewareAppliesCustomMessageFromHandlerContext(t *testing.T) {
+	sink := &memorySink{}
+	mw := Middleware(Config{
+		Sink:         sink,
+		SamplingRate: 1,
+		Message:      "done",
+	})
+
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !hc.SetMessage(r.Context(), "order shipped") {
+			t.Fatal("expected SetMessage to succeed")
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/orders/123/ship", nil))
+
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Message != "order shipped" {
+		t.Fatalf("expected message %q, got %q", "order shipped", events[0].Message)
+	}
+	if events[0].Fields["http.status"] != http.StatusAccepted {
+		t.Fatalf("expected status %d, got %v", http.StatusAccepted, events[0].Fields["http.status"])
+	}
+}
+
 func TestMiddlewarePanicPropagatesAndLogsError(t *testing.T) {
 	sink := &memorySink{}
 	mw := Middleware(Config{

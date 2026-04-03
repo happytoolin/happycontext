@@ -11,6 +11,7 @@ func EventFields(e *Event) map[string]any {
 	return e.snapshot().fields
 }
 
+// EventMessage returns e's attached message, or an empty string if unset.
 func EventMessage(e *Event) string {
 	if e == nil {
 		return ""

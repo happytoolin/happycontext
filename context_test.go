@@ -19,6 +19,7 @@ func TestContextHelpers(t *testing.T) {
 	Add(ctx, "alias", true)
 	Add(ctx, "b", 2, "c", 3)
 	Error(ctx, errors.New("boom"))
+	SetMessage(ctx, "checkout completed")
 	SetLevel(ctx, LevelWarn)
 	SetRoute(ctx, "/orders/:id")
 
@@ -35,6 +36,12 @@ func TestContextHelpers(t *testing.T) {
 	}
 	if !EventHasError(e) {
 		t.Fatal("expected HasError true")
+	}
+	if !EventHasMessage(e) {
+		t.Fatal("expected HasMessage true")
+	}
+	if msg := EventMessage(e); msg != "checkout completed" {
+		t.Fatalf("expected message %q, got %q", "checkout completed", msg)
 	}
 	if fields["http.route"] != "/orders/:id" {
 		t.Fatalf("expected explicit route field, got %#v", fields["http.route"])
@@ -64,6 +71,9 @@ func TestHelpersWithNilContextAreNoop(t *testing.T) {
 	}
 	if Error(context.TODO(), errors.New("boom")) {
 		t.Fatal("expected Error(no-event-ctx, ...) to return false")
+	}
+	if SetMessage(context.TODO(), "done") {
+		t.Fatal("expected SetMessage(no-event-ctx, ...) to return false")
 	}
 	if SetLevel(context.TODO(), LevelInfo) {
 		t.Fatal("expected SetLevel(no-event-ctx, ...) to return false")
