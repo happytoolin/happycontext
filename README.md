@@ -67,10 +67,12 @@ func main() {
 	mux.HandleFunc("GET /orders/{id}", func(w http.ResponseWriter, r *http.Request) {
 		hc.Add(r.Context(), "user_id", "u_8472", "feature", "checkout")
 		if r.URL.Query().Get("fail") == "1" {
+			hc.SetMessage(r.Context(), "checkout_failed")
 			hc.Error(r.Context(), errors.New("checkout failed"))
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
+		hc.SetMessage(r.Context(), "checkout_succeeded")
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -116,6 +118,27 @@ Notes:
 - Sampling is automatically bypassed for errors and server failures.
 - If no sink is configured, requests still run; logging is skipped.
 - Sampling behavior is consistent across all integrations (`net/http`, `gin`, `echo`, `fiber`, and `fiber v3`).
+- `hc.SetMessage(ctx, "...")` overrides `Config.Message` for a single event.
+
+### Per-request Message Override
+
+Use `hc.SetMessage` when a route or handler should emit a more specific final message than the integration-wide default:
+
+```go
+func checkoutHandler(w http.ResponseWriter, r *http.Request) {
+	if err := processCheckout(r.Context()); err != nil {
+		hc.SetMessage(r.Context(), "checkout_failed")
+		hc.Error(r.Context(), err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	hc.SetMessage(r.Context(), "checkout_succeeded")
+	w.WriteHeader(http.StatusOK)
+}
+```
+
+Passing an empty string leaves the event on the configured default message.
 
 ### Sampling Customization
 
