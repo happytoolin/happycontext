@@ -3,7 +3,7 @@ module github.com/happytoolin/happycontext/adapter/zap
 go 1.24
 
 require (
-	github.com/happytoolin/happycontext v0.0.0 // x-release-please-version
+	github.com/happytoolin/happycontext v0.2.1 // x-release-please-version
 	go.uber.org/zap v1.27.1
 )
 
