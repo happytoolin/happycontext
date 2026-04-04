@@ -21,6 +21,7 @@ type Config struct {
 	Sampler Sampler
 
 	// OperationPolicies optionally customizes non-HTTP operation behavior by domain.
+	// A domain SamplingRate overrides generic level/default sampling rates.
 	OperationPolicies map[Domain]OperationPolicy
 
 	// Message is the final log message.

@@ -188,6 +188,58 @@ func TestFinishOperationPolicySamplingOverride(t *testing.T) {
 	}
 }
 
+func TestFinishOperationDomainSamplingOverridesLevelSampling(t *testing.T) {
+	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
+	sink := NewTestSink()
+	rate := 1.0
+
+	ok := FinishOperation(Config{
+		Sink:         sink,
+		SamplingRate: 0,
+		LevelSamplingRates: map[Level]float64{
+			LevelInfo: 0,
+		},
+		OperationPolicies: map[Domain]OperationPolicy{
+			DomainJob: {
+				SamplingRate: &rate,
+			},
+		},
+	}, OperationFinish{
+		Ctx:   ctx,
+		Event: event,
+		Start: OperationStart{Domain: DomainJob, Name: "cleanup"},
+	})
+	if !ok {
+		t.Fatal("expected domain sampling override to beat level sampling")
+	}
+	if len(sink.Events()) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(sink.Events()))
+	}
+}
+
+func TestFinishOperationLevelSamplingAppliesWithoutDomainOverride(t *testing.T) {
+	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
+	sink := NewTestSink()
+
+	ok := FinishOperation(Config{
+		Sink:         sink,
+		SamplingRate: 1,
+		LevelSamplingRates: map[Level]float64{
+			LevelInfo: 0,
+		},
+	}, OperationFinish{
+		Ctx:   ctx,
+		Event: event,
+		Start: OperationStart{Domain: DomainJob, Name: "cleanup"},
+	})
+	if ok {
+		t.Fatal("expected level sampling override to apply when domain has no explicit sampling policy")
+	}
+	if len(sink.Events()) != 0 {
+		t.Fatalf("expected no events, got %d", len(sink.Events()))
+	}
+}
+
 func TestFinishOperationHTTPDefaultsAndSamplerCompatibility(t *testing.T) {
 	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainHTTP, Name: "GET /x"})
 	Add(ctx, "http.method", "GET", "http.path", "/x", "http.status", 200)

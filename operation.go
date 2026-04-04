@@ -258,8 +258,7 @@ func shouldWriteOperation(cfg Config, policy OperationPolicy, in SampleInput) bo
 	rate := cfg.SamplingRate
 	if policy.SamplingRate != nil {
 		rate = *policy.SamplingRate
-	}
-	if cfg.LevelSamplingRates != nil {
+	} else if cfg.LevelSamplingRates != nil {
 		if levelRate, ok := cfg.LevelSamplingRates[in.Level]; ok {
 			rate = levelRate
 		}

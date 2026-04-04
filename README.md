@@ -148,7 +148,7 @@ Example output:
 - `SamplingRate`: `0` to `1` for healthy-request sampling
 - `LevelSamplingRates`: optional level-specific sampling overrides
 - `Sampler`: optional custom sampling function (full control)
-- `OperationPolicies`: optional per-domain level/sampling policy for non-HTTP operations
+- `OperationPolicies`: optional per-domain level/sampling policy for non-HTTP operations; domain sampling overrides generic level/default sampling
 - `Message`: final log message (defaults to `request_completed` for HTTP and `operation_completed` for non-HTTP)
 
 Notes:
