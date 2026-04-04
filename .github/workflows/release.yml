@@ -28,18 +28,63 @@ jobs:
         if: ${{ steps.release.outputs.releases_created == 'true' }}
         uses: actions/checkout@v6.0.2
 
+      - name: Configure git
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync lockstep modules
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+
+          ./scripts/sync-lockstep-release.sh "$RELEASE_TAG"
+
+          if git diff --quiet; then
+            echo "lockstep modules already aligned"
+            exit 0
+          fi
+
+          git add \
+            adapter/slog/go.mod \
+            adapter/zap/go.mod \
+            adapter/zerolog/go.mod \
+            integration/echo/go.mod \
+            integration/fiber/go.mod \
+            integration/fiberv3/go.mod \
+            integration/gin/go.mod \
+            integration/std/go.mod \
+            bench/go.mod \
+            cmd/examples/go.mod
+
+          git commit -m "chore: sync lockstep modules for ${RELEASE_TAG}"
+          git push origin HEAD:main
+
+      - name: Publish lockstep module releases
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          ./scripts/publish-lockstep-release.sh --push --github-releases "$RELEASE_TAG"
+
       - name: Refresh Go module indexes
         if: ${{ steps.release.outputs.releases_created == 'true' }}
         shell: bash
         env:
-          RELEASE_OUTPUTS: ${{ toJSON(steps.release.outputs) }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
         run: |
           set -euo pipefail
 
           refresh_module() {
             local module_path="$1"
-            local release_tag="$2"
-            local version_tag="${release_tag##*/}"
+            local version_tag="$2"
             local encoded_module="${module_path//\//%2F}"
 
             echo "== syncing ${module_path}@${version_tag} =="
@@ -55,32 +100,13 @@ jobs:
             done
           }
 
-          release_created() {
-            local key="$1"
-            jq -r --arg key "$key" '.[$key] // "false"' <<<"$RELEASE_OUTPUTS"
-          }
-
-          release_tag() {
-            local key="$1"
-            jq -r --arg key "$key" '.[$key] // empty' <<<"$RELEASE_OUTPUTS"
-          }
+          version_tag="${RELEASE_TAG#*/}"
 
           while IFS= read -r modfile; do
-            moddir="$(dirname "$modfile")"
             module_path="$(sed -n 's/^module //p' "$modfile" | head -n1)"
             if [[ -z "$module_path" ]]; then
               continue
             fi
 
-            if [[ "$moddir" == "." ]]; then
-              created="$(release_created "release_created")"
-              tag="$(release_tag "tag_name")"
-            else
-              created="$(release_created "${moddir}--release_created")"
-              tag="$(release_tag "${moddir}--tag_name")"
-            fi
-
-            if [[ "$created" == "true" && -n "$tag" ]]; then
-              refresh_module "$module_path" "$tag"
-            fi
+            refresh_module "$module_path" "$version_tag"
           done < <(printf '%s\n' go.mod && git ls-files 'adapter/*/go.mod' 'integration/*/go.mod')

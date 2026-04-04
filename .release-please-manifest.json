@@ -1,11 +1,3 @@
 {
-  ".": "0.2.3",
-  "adapter/slog": "0.2.1",
-  "adapter/zap": "0.2.1",
-  "adapter/zerolog": "0.2.1",
-  "integration/echo": "0.2.1",
-  "integration/fiber": "0.2.1",
-  "integration/fiberv3": "0.2.1",
-  "integration/gin": "0.2.1",
-  "integration/std": "0.2.1"
+  ".": "0.2.3"
 }

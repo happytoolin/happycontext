@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/gofiber/fiber/v3 v3.0.0-rc.3
-	github.com/happytoolin/happycontext v0.2.1 // x-release-please-version
+	github.com/happytoolin/happycontext v0.2.3 // x-release-please-version
 )
 
 require (
