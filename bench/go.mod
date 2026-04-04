@@ -6,7 +6,7 @@ require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/gofiber/fiber/v2 v2.52.11
 	github.com/gofiber/fiber/v3 v3.0.0-rc.3
-	github.com/happytoolin/happycontext v0.0.0
+	github.com/happytoolin/happycontext v0.2.1
 	github.com/happytoolin/happycontext/integration/echo v0.0.0
 	github.com/happytoolin/happycontext/integration/fiber v0.0.0
 	github.com/happytoolin/happycontext/integration/fiberv3 v0.0.0
