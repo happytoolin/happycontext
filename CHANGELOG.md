@@ -10,6 +10,13 @@
   * Removed `Add2`
   * `Add` now accepts variadic key/value pairs: `Add(ctx, "k1", v1, "k2", v2, ...)`
 
+## [0.2.1](https://github.com/happytoolin/happycontext/compare/v0.2.0...v0.2.1) (2026-04-04)
+
+
+### Miscellaneous Chores
+
+* fix go module release tagging ([8e318cb](https://github.com/happytoolin/happycontext/commit/8e318cbc4d544eec2da3a012b005ea7ebe967533))
+
 ## [0.2.0](https://github.com/happytoolin/happycontext/compare/happycontext-v0.1.0...happycontext-v0.2.0) (2026-04-03)
 
 
