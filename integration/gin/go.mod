@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/gin-gonic/gin v1.11.0
-	github.com/happytoolin/happycontext v0.0.0
+	github.com/happytoolin/happycontext v0.0.0 // x-release-please-version
 )
 
 require (

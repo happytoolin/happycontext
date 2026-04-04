@@ -476,6 +476,20 @@ go run ./sampling-custom
 - CI: `.github/workflows/ci.yml`
 - Release automation: `.github/workflows/release.yml`
 - Go proxy sync: `.github/workflows/go-proxy-sync.yml`
+- Root module releases must be tagged as `vX.Y.Z`.
+- Nested Go modules must be tagged as `<subdir>/vX.Y.Z` so `go list -m -versions` can discover them.
+- To backfill historical tags created with the old `happycontext-vX.Y.Z` format, run `./scripts/backfill-go-tags.sh` and push the generated tags.
+
+Published nested modules:
+
+- `adapter/slog`
+- `adapter/zap`
+- `adapter/zerolog`
+- `integration/echo`
+- `integration/fiber`
+- `integration/fiberv3`
+- `integration/gin`
+- `integration/std`
 
 ## References
 
