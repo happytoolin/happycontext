@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/happycontext"
 	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
 	workerhappycontext "github.com/happytoolin/happycontext/integration/worker"
 )
@@ -24,11 +24,11 @@ func main() {
 		ScheduledAt: time.Now().UTC().Truncate(time.Second),
 	}
 
-	ctx, event := workerhappycontext.Start(context.Background(), meta)
-	hc.Add(ctx, "tenant", "enterprise", "worker", "billing")
+	op := workerhappycontext.Start(context.Background(), meta)
+	hc.Add(op.Context(), "tenant", "enterprise", "worker", "billing")
 
 	_ = workerhappycontext.Finish(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}, ctx, event, meta, nil, nil)
+	}, op, nil, nil)
 }

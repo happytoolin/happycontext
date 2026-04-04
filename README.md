@@ -113,13 +113,13 @@ func main() {
 		MaxAttempts: 3,
 	}
 
-	ctx, event := workerhc.Start(context.Background(), meta)
-	hc.Add(ctx, "tenant", "enterprise")
+	op := workerhc.Start(context.Background(), meta)
+	hc.Add(op.Context(), "tenant", "enterprise")
 
 	_ = workerhc.Finish(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}, ctx, event, meta, nil, nil)
+	}, op, nil, nil)
 }
 ```
 
@@ -252,30 +252,23 @@ Sampler building blocks:
 
 ### Generic Operation Lifecycle API
 
-For non-HTTP flows, you can use `hc.BeginOperation` / `hc.FinishOperation` directly:
+For non-HTTP flows, use `hc.StartOperation` for the ergonomic stateful handle:
 
 ```go
-ctx, event := hc.BeginOperation(context.Background(), hc.OperationStart{
+op := hc.StartOperation(context.Background(), hc.OperationStart{
 	Domain: hc.DomainJob,
 	Name:   "invoice.reconcile",
 	ID:     "job_1001",
 	Source: "nightly",
 })
 
-hc.Add(ctx, "job.queue", "nightly")
-hc.Add(ctx, "account_id", "acct_42")
+hc.Add(op.Context(), "job.queue", "nightly")
+hc.Add(op.Context(), "account_id", "acct_42")
 
-_ = hc.FinishOperation(cfg, hc.OperationFinish{
-	Ctx:   ctx,
-	Event: event,
-	Start: hc.OperationStart{
-		Domain: hc.DomainJob,
-		Name:   "invoice.reconcile",
-		ID:     "job_1001",
-		Source: "nightly",
-	},
-})
+_ = op.Finish(cfg, hc.OperationResult{})
 ```
+
+`hc.BeginOperation` / `hc.FinishOperation` remain available for lower-level integrations.
 
 ## Integrations
 

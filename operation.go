@@ -44,6 +44,21 @@ type OperationStart struct {
 	MaxAttempts int
 }
 
+// OperationResult contains finish-time outcome data for one operation event.
+type OperationResult struct {
+	Outcome   Outcome
+	Code      int
+	Err       error
+	Recovered any
+}
+
+// Operation provides a stateful non-HTTP lifecycle handle.
+type Operation struct {
+	ctx   context.Context
+	event *Event
+	start OperationStart
+}
+
 // OperationFinish contains inputs required to finalize one operation event.
 type OperationFinish struct {
 	Ctx       context.Context
@@ -64,6 +79,16 @@ type OperationPolicy struct {
 	SamplingRate  *float64
 }
 
+// StartOperation initializes a stateful operation handle for non-HTTP flows.
+func StartOperation(baseCtx context.Context, start OperationStart) *Operation {
+	ctx, event := BeginOperation(baseCtx, start)
+	return &Operation{
+		ctx:   ctx,
+		event: event,
+		start: hydrateOperationStart(start, event),
+	}
+}
+
 // BeginOperation initializes context/event and operation envelope metadata.
 func BeginOperation(baseCtx context.Context, start OperationStart) (context.Context, *Event) {
 	if baseCtx == nil {
@@ -74,35 +99,66 @@ func BeginOperation(baseCtx context.Context, start OperationStart) (context.Cont
 	return ctx, event
 }
 
+// Context returns the operation context.
+func (op *Operation) Context() context.Context {
+	if op == nil {
+		return nil
+	}
+	return op.ctx
+}
+
+// Event returns the underlying event.
+func (op *Operation) Event() *Event {
+	if op == nil {
+		return nil
+	}
+	return op.event
+}
+
+// Finish finalizes and writes one operation event.
+func (op *Operation) Finish(cfg Config, result OperationResult) bool {
+	if op == nil {
+		return false
+	}
+	return finishOperation(cfg, op.ctx, op.event, op.start, result)
+}
+
 // FinishOperation finalizes and writes an operation event.
 func FinishOperation(cfg Config, in OperationFinish) bool {
-	if cfg.Sink == nil || in.Event == nil || in.Ctx == nil {
+	return finishOperation(cfg, in.Ctx, in.Event, hydrateOperationStart(in.Start, in.Event), OperationResult{
+		Outcome:   in.Outcome,
+		Code:      in.Code,
+		Err:       in.Err,
+		Recovered: in.Recovered,
+	})
+}
+
+func finishOperation(cfg Config, ctx context.Context, event *Event, start OperationStart, result OperationResult) bool {
+	if cfg.Sink == nil || event == nil || ctx == nil {
 		return false
 	}
 
-	cfg = normalizeOperationConfig(cfg)
-	start := hydrateOperationStart(in.Start, in.Event)
 	policy := policyForDomain(cfg, start.Domain)
 
-	applyOperationStartFields(in.Ctx, start)
-	annotateOperationFailures(in.Ctx, in.Err, in.Recovered)
+	applyOperationStartFields(ctx, start)
+	annotateOperationFailures(ctx, result.Err, result.Recovered)
 
-	duration := time.Since(EventStartTime(in.Event))
-	Add(in.Ctx, "duration_ms", duration.Milliseconds(), "op.code", in.Code)
+	duration := time.Since(EventStartTime(event))
+	Add(ctx, "duration_ms", duration.Milliseconds(), "op.code", result.Code)
 
-	outcome := resolveOutcome(in)
-	Add(in.Ctx, "op.outcome", string(outcome))
+	outcome := resolveOutcome(result)
+	Add(ctx, "op.outcome", string(outcome))
 
 	autoLevel := levelFromPolicy(policy, outcome)
-	requestedLevel, hasRequestedLevel := GetLevel(in.Ctx)
+	requestedLevel, hasRequestedLevel := GetLevel(ctx)
 	level := mergeLevelWithFloor(autoLevel, requestedLevel, hasRequestedLevel)
 
-	sampleIn := buildSampleInput(in, start, duration, outcome, level)
+	sampleIn := buildSampleInput(event, start, result, duration, outcome, level)
 	if !shouldWriteOperation(cfg, policy, sampleIn) {
 		return false
 	}
 
-	cfg.Sink.Write(level, resolveEventMessage(cfg.Message, start.Domain, in.Event), EventFields(in.Event))
+	cfg.Sink.Write(level, resolveEventMessage(cfg.Message, start.Domain, event), EventFields(event))
 	return true
 }
 
@@ -150,42 +206,42 @@ func annotateOperationFailures(ctx context.Context, err error, recovered any) {
 	}
 }
 
-func resolveOutcome(in OperationFinish) Outcome {
-	if isValidOutcome(in.Outcome) {
-		return in.Outcome
+func resolveOutcome(result OperationResult) Outcome {
+	if isValidOutcome(result.Outcome) {
+		return result.Outcome
 	}
-	if in.Recovered != nil {
+	if result.Recovered != nil {
 		return OutcomePanic
 	}
-	if in.Err != nil {
+	if result.Err != nil {
 		switch {
-		case errors.Is(in.Err, context.Canceled):
+		case errors.Is(result.Err, context.Canceled):
 			return OutcomeCanceled
-		case errors.Is(in.Err, context.DeadlineExceeded):
+		case errors.Is(result.Err, context.DeadlineExceeded):
 			return OutcomeTimeout
 		default:
 			return OutcomeFailure
 		}
 	}
-	if in.Code >= 500 {
+	if result.Code >= 500 {
 		return OutcomeFailure
 	}
 	return OutcomeSuccess
 }
 
-func buildSampleInput(in OperationFinish, start OperationStart, duration time.Duration, outcome Outcome, level Level) SampleInput {
-	fields := EventFields(in.Event)
+func buildSampleInput(event *Event, start OperationStart, result OperationResult, duration time.Duration, outcome Outcome, level Level) SampleInput {
+	fields := EventFields(event)
 
 	method, _ := fields["http.method"].(string)
 	path, _ := fields["http.path"].(string)
-	statusCode := in.Code
+	statusCode := result.Code
 	if v, ok := fields["http.status"]; ok {
 		if parsed, ok := asInt(v); ok {
 			statusCode = parsed
 		}
 	}
 
-	hasError := EventHasError(in.Event) || in.Code >= 500 || outcome != OutcomeSuccess
+	hasError := EventHasError(event) || result.Code >= 500 || outcome != OutcomeSuccess
 
 	name := start.Name
 	if name == "" {
@@ -196,14 +252,14 @@ func buildSampleInput(in OperationFinish, start OperationStart, duration time.Du
 		Domain:     normalizeDomain(start.Domain),
 		Operation:  name,
 		Outcome:    outcome,
-		Code:       in.Code,
+		Code:       result.Code,
 		Method:     method,
 		Path:       path,
 		StatusCode: statusCode,
 		Duration:   duration,
 		Level:      level,
 		HasError:   hasError,
-		Event:      in.Event,
+		Event:      event,
 	}
 }
 
@@ -255,13 +311,11 @@ func shouldWriteOperation(cfg Config, policy OperationPolicy, in SampleInput) bo
 		return true
 	}
 
-	rate := cfg.SamplingRate
+	rate := clampRate(cfg.SamplingRate)
 	if policy.SamplingRate != nil {
-		rate = *policy.SamplingRate
-	} else if cfg.LevelSamplingRates != nil {
-		if levelRate, ok := cfg.LevelSamplingRates[in.Level]; ok {
-			rate = levelRate
-		}
+		rate = clampRate(*policy.SamplingRate)
+	} else if levelRate, ok := levelSamplingRate(cfg.LevelSamplingRates, in.Level); ok {
+		rate = levelRate
 	}
 	return shouldSample(rate)
 }
@@ -319,74 +373,12 @@ func asInt(value any) (int, bool) {
 
 func policyForDomain(cfg Config, domain Domain) OperationPolicy {
 	if cfg.OperationPolicies == nil {
-		return defaultPolicy()
+		return OperationPolicy{}
 	}
 	policy, ok := cfg.OperationPolicies[normalizeDomain(domain)]
 	if !ok {
-		return defaultPolicy()
+		return OperationPolicy{}
 	}
-	return policy
-}
-
-func normalizeOperationConfig(cfg Config) Config {
-	if cfg.SamplingRate < 0 {
-		cfg.SamplingRate = 0
-	}
-	if cfg.SamplingRate > 1 {
-		cfg.SamplingRate = 1
-	}
-
-	if len(cfg.LevelSamplingRates) > 0 {
-		clamped := make(map[Level]float64, len(cfg.LevelSamplingRates))
-		for level, rate := range cfg.LevelSamplingRates {
-			if !isValidLevel(level) {
-				continue
-			}
-			clamped[level] = clampRate(rate)
-		}
-		cfg.LevelSamplingRates = clamped
-	}
-
-	if len(cfg.OperationPolicies) > 0 {
-		normalized := make(map[Domain]OperationPolicy, len(cfg.OperationPolicies))
-		for domain, policy := range cfg.OperationPolicies {
-			normalized[normalizeDomain(domain)] = normalizePolicy(policy)
-		}
-		cfg.OperationPolicies = normalized
-	}
-
-	return cfg
-}
-
-func normalizePolicy(policy OperationPolicy) OperationPolicy {
-	def := defaultPolicy()
-
-	if !isValidLevel(policy.SuccessLevel) {
-		policy.SuccessLevel = def.SuccessLevel
-	}
-	if !isValidLevel(policy.FailureLevel) {
-		policy.FailureLevel = def.FailureLevel
-	}
-	if !isValidLevel(policy.PanicLevel) {
-		policy.PanicLevel = def.PanicLevel
-	}
-
-	if len(policy.OutcomeLevels) > 0 {
-		outcomeLevels := make(map[Outcome]Level, len(policy.OutcomeLevels))
-		for outcome, level := range policy.OutcomeLevels {
-			if !isValidOutcome(outcome) || !isValidLevel(level) {
-				continue
-			}
-			outcomeLevels[outcome] = level
-		}
-		policy.OutcomeLevels = outcomeLevels
-	}
-
-	if policy.SamplingRate != nil {
-		rate := clampRate(*policy.SamplingRate)
-		policy.SamplingRate = &rate
-	}
-
 	return policy
 }
 
@@ -399,17 +391,31 @@ func defaultPolicy() OperationPolicy {
 }
 
 func levelFromPolicy(policy OperationPolicy, outcome Outcome) Level {
+	def := defaultPolicy()
 	if outcomeLevel, ok := policy.OutcomeLevels[outcome]; ok && isValidLevel(outcomeLevel) {
 		return outcomeLevel
 	}
 
+	successLevel := def.SuccessLevel
+	if isValidLevel(policy.SuccessLevel) {
+		successLevel = policy.SuccessLevel
+	}
+	failureLevel := def.FailureLevel
+	if isValidLevel(policy.FailureLevel) {
+		failureLevel = policy.FailureLevel
+	}
+	panicLevel := def.PanicLevel
+	if isValidLevel(policy.PanicLevel) {
+		panicLevel = policy.PanicLevel
+	}
+
 	switch outcome {
 	case OutcomeSuccess:
-		return policy.SuccessLevel
+		return successLevel
 	case OutcomePanic:
-		return policy.PanicLevel
+		return panicLevel
 	default:
-		return policy.FailureLevel
+		return failureLevel
 	}
 }
 
@@ -446,6 +452,17 @@ func clampRate(rate float64) float64 {
 		return 1
 	}
 	return rate
+}
+
+func levelSamplingRate(rates map[Level]float64, level Level) (float64, bool) {
+	if rates == nil {
+		return 0, false
+	}
+	rate, ok := rates[level]
+	if !ok {
+		return 0, false
+	}
+	return clampRate(rate), true
 }
 
 func isValidOutcome(outcome Outcome) bool {

@@ -40,15 +40,25 @@ func TestBeginOperationAddsEnvelopeFields(t *testing.T) {
 	}
 }
 
-func TestFinishOperationSuccessWritesDefaultOperationMessage(t *testing.T) {
-	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
+func TestStartOperationProvidesHandle(t *testing.T) {
+	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
+	if op == nil {
+		t.Fatal("expected operation handle")
+	}
+	if op.Context() == nil {
+		t.Fatal("expected operation context")
+	}
+	if op.Event() == nil {
+		t.Fatal("expected operation event")
+	}
+}
+
+func TestOperationFinishSuccessWritesDefaultOperationMessage(t *testing.T) {
+	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
 	sink := NewTestSink()
 
-	ok := FinishOperation(Config{Sink: sink, SamplingRate: 1}, OperationFinish{
-		Ctx:   ctx,
-		Event: event,
-		Start: OperationStart{Domain: DomainJob, Name: "cleanup"},
-		Code:  0,
+	ok := op.Finish(Config{Sink: sink, SamplingRate: 1}, OperationResult{
+		Code: 0,
 	})
 	if !ok {
 		t.Fatal("expected finish to write")
@@ -74,14 +84,11 @@ func TestFinishOperationSuccessWritesDefaultOperationMessage(t *testing.T) {
 
 func TestFinishOperationErrorAndPanic(t *testing.T) {
 	t.Run("error", func(t *testing.T) {
-		ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "sync"})
+		op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "sync"})
 		sink := NewTestSink()
 
-		ok := FinishOperation(Config{Sink: sink, SamplingRate: 0}, OperationFinish{
-			Ctx:   ctx,
-			Event: event,
-			Start: OperationStart{Domain: DomainJob, Name: "sync"},
-			Err:   errors.New("boom"),
+		ok := op.Finish(Config{Sink: sink, SamplingRate: 0}, OperationResult{
+			Err: errors.New("boom"),
 		})
 		if !ok {
 			t.Fatal("expected errored operation to bypass sampling")
@@ -103,13 +110,10 @@ func TestFinishOperationErrorAndPanic(t *testing.T) {
 	})
 
 	t.Run("panic", func(t *testing.T) {
-		ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "sync"})
+		op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "sync"})
 		sink := NewTestSink()
 
-		ok := FinishOperation(Config{Sink: sink, SamplingRate: 0}, OperationFinish{
-			Ctx:       ctx,
-			Event:     event,
-			Start:     OperationStart{Domain: DomainJob, Name: "sync"},
+		ok := op.Finish(Config{Sink: sink, SamplingRate: 0}, OperationResult{
 			Recovered: "panic-value",
 		})
 		if !ok {
@@ -130,6 +134,42 @@ func TestFinishOperationErrorAndPanic(t *testing.T) {
 }
 
 func TestFinishOperationAppliesPolicyAndRequestedFloor(t *testing.T) {
+	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
+	SetLevel(op.Context(), LevelWarn)
+	sink := NewTestSink()
+	rate := 2.0
+
+	ok := op.Finish(Config{
+		Sink:         sink,
+		SamplingRate: 1,
+		OperationPolicies: map[Domain]OperationPolicy{
+			DomainJob: {
+				SuccessLevel: LevelDebug,
+				SamplingRate: &rate,
+			},
+		},
+	}, OperationResult{})
+	if !ok {
+		t.Fatal("expected finish to write")
+	}
+
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Level != LevelWarn {
+		t.Fatalf("level = %s, want WARN floor", events[0].Level)
+	}
+}
+
+func TestOperationFinishNilGuard(t *testing.T) {
+	var op *Operation
+	if op.Finish(Config{Sink: NewTestSink()}, OperationResult{}) {
+		t.Fatal("expected false for nil operation")
+	}
+}
+
+func TestFinishOperationCompatibilityAppliesPolicyAndRequestedFloor(t *testing.T) {
 	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
 	SetLevel(ctx, LevelWarn)
 	sink := NewTestSink()

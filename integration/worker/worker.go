@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/happycontext"
 )
 
 // JobMeta describes background job execution metadata.
@@ -17,9 +17,9 @@ type JobMeta struct {
 	ScheduledAt time.Time
 }
 
-// Start initializes happycontext operation/event fields for a worker job.
-func Start(ctx context.Context, meta JobMeta) (context.Context, *hc.Event) {
-	ctx, event := hc.BeginOperation(ctx, hc.OperationStart{
+// Start initializes a worker operation handle.
+func Start(ctx context.Context, meta JobMeta) *hc.Operation {
+	op := hc.StartOperation(ctx, hc.OperationStart{
 		Domain:      hc.DomainJob,
 		Name:        meta.Name,
 		ID:          meta.ID,
@@ -27,24 +27,16 @@ func Start(ctx context.Context, meta JobMeta) (context.Context, *hc.Event) {
 		Attempt:     meta.Attempt,
 		MaxAttempts: meta.MaxAttempts,
 	})
-	addJobFields(ctx, meta)
-	return ctx, event
+	addJobFields(op.Context(), meta)
+	return op
 }
 
 // Finish finalizes and writes the worker operation event.
-func Finish(cfg hc.Config, ctx context.Context, event *hc.Event, meta JobMeta, err error, recovered any) bool {
-	addJobFields(ctx, meta)
-	return hc.FinishOperation(cfg, hc.OperationFinish{
-		Ctx:   ctx,
-		Event: event,
-		Start: hc.OperationStart{
-			Domain:      hc.DomainJob,
-			Name:        meta.Name,
-			ID:          meta.ID,
-			Source:      meta.Queue,
-			Attempt:     meta.Attempt,
-			MaxAttempts: meta.MaxAttempts,
-		},
+func Finish(cfg hc.Config, op *hc.Operation, err error, recovered any) bool {
+	if op == nil {
+		return false
+	}
+	return op.Finish(cfg, hc.OperationResult{
 		Err:       err,
 		Recovered: recovered,
 	})

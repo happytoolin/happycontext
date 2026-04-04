@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/happycontext"
 )
 
 func TestStartAddsWorkerFields(t *testing.T) {
 	scheduledAt := time.Date(2026, 2, 10, 8, 30, 0, 0, time.UTC)
-	ctx, event := Start(context.Background(), JobMeta{
+	op := Start(context.Background(), JobMeta{
 		Name:        "cleanup",
 		ID:          "job_1",
 		Queue:       "nightly",
@@ -19,11 +19,11 @@ func TestStartAddsWorkerFields(t *testing.T) {
 		MaxAttempts: 5,
 		ScheduledAt: scheduledAt,
 	})
-	if ctx == nil || event == nil {
-		t.Fatal("expected context and event")
+	if op == nil || op.Context() == nil || op.Event() == nil {
+		t.Fatal("expected operation handle, context, and event")
 	}
 
-	fields := hc.EventFields(event)
+	fields := hc.EventFields(op.Event())
 	if fields["op.domain"] != string(hc.DomainJob) {
 		t.Fatalf("op.domain = %v", fields["op.domain"])
 	}
@@ -42,14 +42,10 @@ func TestStartAddsWorkerFields(t *testing.T) {
 }
 
 func TestFinishSuccessDefaultMessage(t *testing.T) {
-	ctx, event := Start(context.Background(), JobMeta{Name: "cleanup", ID: "job_1", Queue: "nightly"})
+	op := Start(context.Background(), JobMeta{Name: "cleanup", ID: "job_1", Queue: "nightly"})
 	sink := hc.NewTestSink()
 
-	if !Finish(hc.Config{Sink: sink, SamplingRate: 1}, ctx, event, JobMeta{
-		Name:  "cleanup",
-		ID:    "job_1",
-		Queue: "nightly",
-	}, nil, nil) {
+	if !Finish(hc.Config{Sink: sink, SamplingRate: 1}, op, nil, nil) {
 		t.Fatal("expected finish to write")
 	}
 
@@ -67,9 +63,9 @@ func TestFinishSuccessDefaultMessage(t *testing.T) {
 
 func TestFinishErrorAndPanic(t *testing.T) {
 	t.Run("error", func(t *testing.T) {
-		ctx, event := Start(context.Background(), JobMeta{Name: "cleanup"})
+		op := Start(context.Background(), JobMeta{Name: "cleanup"})
 		sink := hc.NewTestSink()
-		if !Finish(hc.Config{Sink: sink, SamplingRate: 0}, ctx, event, JobMeta{Name: "cleanup"}, errors.New("boom"), nil) {
+		if !Finish(hc.Config{Sink: sink, SamplingRate: 0}, op, errors.New("boom"), nil) {
 			t.Fatal("expected error to bypass sampling")
 		}
 		ev := sink.Events()[0]
@@ -82,9 +78,9 @@ func TestFinishErrorAndPanic(t *testing.T) {
 	})
 
 	t.Run("panic", func(t *testing.T) {
-		ctx, event := Start(context.Background(), JobMeta{Name: "cleanup"})
+		op := Start(context.Background(), JobMeta{Name: "cleanup"})
 		sink := hc.NewTestSink()
-		if !Finish(hc.Config{Sink: sink, SamplingRate: 0}, ctx, event, JobMeta{Name: "cleanup"}, nil, "panic-value") {
+		if !Finish(hc.Config{Sink: sink, SamplingRate: 0}, op, nil, "panic-value") {
 			t.Fatal("expected panic to bypass sampling")
 		}
 		ev := sink.Events()[0]
@@ -98,14 +94,11 @@ func TestFinishErrorAndPanic(t *testing.T) {
 }
 
 func TestFinishGuards(t *testing.T) {
-	ctx, event := Start(context.Background(), JobMeta{Name: "cleanup"})
-	if Finish(hc.Config{}, ctx, event, JobMeta{Name: "cleanup"}, nil, nil) {
+	op := Start(context.Background(), JobMeta{Name: "cleanup"})
+	if Finish(hc.Config{}, op, nil, nil) {
 		t.Fatal("expected false without sink")
 	}
-	if Finish(hc.Config{Sink: hc.NewTestSink()}, nil, event, JobMeta{Name: "cleanup"}, nil, nil) {
-		t.Fatal("expected false with nil context")
-	}
-	if Finish(hc.Config{Sink: hc.NewTestSink()}, ctx, nil, JobMeta{Name: "cleanup"}, nil, nil) {
-		t.Fatal("expected false with nil event")
+	if Finish(hc.Config{Sink: hc.NewTestSink()}, nil, nil, nil) {
+		t.Fatal("expected false with nil operation")
 	}
 }

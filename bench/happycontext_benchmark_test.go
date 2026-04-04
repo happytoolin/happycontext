@@ -189,7 +189,7 @@ func BenchmarkOperationLifecycle(b *testing.B) {
 
 	b.ReportAllocs()
 	for b.Loop() {
-		ctx, event := hc.BeginOperation(context.Background(), hc.OperationStart{
+		op := hc.StartOperation(context.Background(), hc.OperationStart{
 			Domain:      hc.DomainJob,
 			Name:        "cleanup",
 			ID:          "job_8472",
@@ -197,19 +197,8 @@ func BenchmarkOperationLifecycle(b *testing.B) {
 			Attempt:     1,
 			MaxAttempts: 3,
 		})
-		hc.Add(ctx, "worker", "payments", "tenant", "enterprise")
-		hc.FinishOperation(hc.Config{Sink: sink, SamplingRate: 1}, hc.OperationFinish{
-			Ctx:   ctx,
-			Event: event,
-			Start: hc.OperationStart{
-				Domain:      hc.DomainJob,
-				Name:        "cleanup",
-				ID:          "job_8472",
-				Source:      "nightly",
-				Attempt:     1,
-				MaxAttempts: 3,
-			},
-		})
+		hc.Add(op.Context(), "worker", "payments", "tenant", "enterprise")
+		op.Finish(hc.Config{Sink: sink, SamplingRate: 1}, hc.OperationResult{})
 	}
 }
 
