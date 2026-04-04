@@ -6,7 +6,6 @@
       "type": "linked-versions",
       "groupName": "happycontext",
       "components": [
-        "happycontext",
         "adapter/slog",
         "adapter/zap",
         "adapter/zerolog",
@@ -20,7 +19,6 @@
   ],
   "packages": {
     ".": {
-      "component": "happycontext",
       "package-name": "github.com/happytoolin/happycontext",
       "include-component-in-tag": false,
       "include-v-in-tag": true,
