@@ -17,9 +17,15 @@ jobs:
       - name: Refresh Go module indexes
         shell: bash
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
+          TAG="${RELEASE_TAG##*/}"
+
+          publishable_modfiles() {
+            printf '%s\n' go.mod
+            git ls-files 'adapter/*/go.mod' 'integration/*/go.mod'
+          }
 
           while IFS= read -r modfile; do
             module_path="$(sed -n 's/^module //p' "$modfile" | head -n1)"
@@ -41,4 +47,4 @@ jobs:
               curl -fsSIL --retry 3 --retry-delay 2 "$url" >/dev/null || \
                 echo "non-fatal: could not refresh $url"
             done
-          done < <(printf '%s\n' go.mod && git ls-files '**/go.mod')
+          done < <(publishable_modfiles | sort -u)

@@ -1,11 +1,102 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "release-type": "go",
+  "plugins": [
+    {
+      "type": "linked-versions",
+      "groupName": "happycontext",
+      "components": [
+        "happycontext",
+        "adapter/slog",
+        "adapter/zap",
+        "adapter/zerolog",
+        "integration/echo",
+        "integration/fiber",
+        "integration/fiberv3",
+        "integration/gin",
+        "integration/std"
+      ]
+    }
+  ],
   "packages": {
     ".": {
-      "package-name": "happycontext",
+      "component": "happycontext",
+      "package-name": "github.com/happytoolin/happycontext",
+      "include-component-in-tag": false,
       "include-v-in-tag": true,
       "changelog-path": "CHANGELOG.md"
+    },
+    "adapter/slog": {
+      "component": "adapter/slog",
+      "package-name": "github.com/happytoolin/happycontext/adapter/slog",
+      "tag-separator": "/",
+      "skip-changelog": true,
+      "extra-files": [
+        "go.mod"
+      ]
+    },
+    "adapter/zap": {
+      "component": "adapter/zap",
+      "package-name": "github.com/happytoolin/happycontext/adapter/zap",
+      "tag-separator": "/",
+      "skip-changelog": true,
+      "extra-files": [
+        "go.mod"
+      ]
+    },
+    "adapter/zerolog": {
+      "component": "adapter/zerolog",
+      "package-name": "github.com/happytoolin/happycontext/adapter/zerolog",
+      "tag-separator": "/",
+      "skip-changelog": true,
+      "extra-files": [
+        "go.mod"
+      ]
+    },
+    "integration/echo": {
+      "component": "integration/echo",
+      "package-name": "github.com/happytoolin/happycontext/integration/echo",
+      "tag-separator": "/",
+      "skip-changelog": true,
+      "extra-files": [
+        "go.mod"
+      ]
+    },
+    "integration/fiber": {
+      "component": "integration/fiber",
+      "package-name": "github.com/happytoolin/happycontext/integration/fiber",
+      "tag-separator": "/",
+      "skip-changelog": true,
+      "extra-files": [
+        "go.mod"
+      ]
+    },
+    "integration/fiberv3": {
+      "component": "integration/fiberv3",
+      "package-name": "github.com/happytoolin/happycontext/integration/fiberv3",
+      "tag-separator": "/",
+      "skip-changelog": true,
+      "extra-files": [
+        "go.mod"
+      ]
+    },
+    "integration/gin": {
+      "component": "integration/gin",
+      "package-name": "github.com/happytoolin/happycontext/integration/gin",
+      "tag-separator": "/",
+      "skip-changelog": true,
+      "extra-files": [
+        "go.mod"
+      ]
+    },
+    "integration/std": {
+      "component": "integration/std",
+      "package-name": "github.com/happytoolin/happycontext/integration/std",
+      "tag-separator": "/",
+      "skip-changelog": true,
+      "extra-files": [
+        "go.mod"
+      ]
     }
   }
 }
