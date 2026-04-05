@@ -44,8 +44,9 @@ func TestStartAddsWorkerFields(t *testing.T) {
 func TestFinishSuccessDefaultMessage(t *testing.T) {
 	op := Start(context.Background(), JobMeta{Name: "cleanup", ID: "job_1", Queue: "nightly"})
 	sink := hc.NewTestSink()
+	var err error
 
-	if !Finish(hc.Config{Sink: sink, SamplingRate: 1}, op, nil, nil) {
+	if !op.End(hc.Config{Sink: sink, SamplingRate: 1}, &err) {
 		t.Fatal("expected finish to write")
 	}
 
@@ -65,7 +66,8 @@ func TestFinishErrorAndPanic(t *testing.T) {
 	t.Run("error", func(t *testing.T) {
 		op := Start(context.Background(), JobMeta{Name: "cleanup"})
 		sink := hc.NewTestSink()
-		if !Finish(hc.Config{Sink: sink, SamplingRate: 0}, op, errors.New("boom"), nil) {
+		err := errors.New("boom")
+		if !op.End(hc.Config{Sink: sink, SamplingRate: 0}, &err) {
 			t.Fatal("expected error to bypass sampling")
 		}
 		ev := sink.Events()[0]
@@ -80,9 +82,17 @@ func TestFinishErrorAndPanic(t *testing.T) {
 	t.Run("panic", func(t *testing.T) {
 		op := Start(context.Background(), JobMeta{Name: "cleanup"})
 		sink := hc.NewTestSink()
-		if !Finish(hc.Config{Sink: sink, SamplingRate: 0}, op, nil, "panic-value") {
-			t.Fatal("expected panic to bypass sampling")
-		}
+		func() {
+			var err error
+			defer func() {
+				recovered := recover()
+				if recovered != "panic-value" {
+					t.Fatalf("recovered = %v, want panic-value", recovered)
+				}
+			}()
+			defer op.End(hc.Config{Sink: sink, SamplingRate: 0}, &err)
+			panic("panic-value")
+		}()
 		ev := sink.Events()[0]
 		if ev.Fields["op.outcome"] != string(hc.OutcomePanic) {
 			t.Fatalf("outcome = %v", ev.Fields["op.outcome"])
@@ -93,12 +103,14 @@ func TestFinishErrorAndPanic(t *testing.T) {
 	})
 }
 
-func TestFinishGuards(t *testing.T) {
+func TestEndGuards(t *testing.T) {
 	op := Start(context.Background(), JobMeta{Name: "cleanup"})
-	if Finish(hc.Config{}, op, nil, nil) {
+	var err error
+	if op.End(hc.Config{}, &err) {
 		t.Fatal("expected false without sink")
 	}
-	if Finish(hc.Config{Sink: hc.NewTestSink()}, nil, nil, nil) {
+	var nilOp *hc.Operation
+	if nilOp.End(hc.Config{Sink: hc.NewTestSink()}, &err) {
 		t.Fatal("expected false with nil operation")
 	}
 }

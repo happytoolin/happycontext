@@ -31,17 +31,6 @@ func Start(ctx context.Context, meta JobMeta) *hc.Operation {
 	return op
 }
 
-// Finish finalizes and writes the worker operation event.
-func Finish(cfg hc.Config, op *hc.Operation, err error, recovered any) bool {
-	if op == nil {
-		return false
-	}
-	return op.Finish(cfg, hc.OperationResult{
-		Err:       err,
-		Recovered: recovered,
-	})
-}
-
 func addJobFields(ctx context.Context, meta JobMeta) {
 	kv := []any{
 		"job.name", meta.Name,

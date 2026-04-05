@@ -104,6 +104,10 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	sink := slogadapter.New(logger)
+	cfg := hc.Config{
+		Sink:         sink,
+		SamplingRate: 1,
+	}
 
 	meta := workerhc.JobMeta{
 		Name:        "billing.reconcile",
@@ -113,13 +117,15 @@ func main() {
 		MaxAttempts: 3,
 	}
 
-	op := workerhc.Start(context.Background(), meta)
-	hc.Add(op.Context(), "tenant", "enterprise")
+	_ = runJob(context.Background(), cfg, meta)
+}
 
-	_ = workerhc.Finish(hc.Config{
-		Sink:         sink,
-		SamplingRate: 1,
-	}, op, nil, nil)
+func runJob(ctx context.Context, cfg hc.Config, meta workerhc.JobMeta) (err error) {
+	op := workerhc.Start(ctx, meta)
+	defer op.End(cfg, &err)
+
+	hc.Add(op.Context(), "tenant", "enterprise")
+	return nil
 }
 ```
 
@@ -129,14 +135,21 @@ Example output:
 {
   "time": "2026-02-09T14:03:12.451Z",
   "level": "INFO",
-  "msg": "request_completed",
+  "msg": "operation_completed",
   "duration_ms": 3,
-  "feature": "checkout",
-  "http.method": "GET",
-  "http.path": "/orders/123",
-  "http.route": "GET /orders/{id}",
-  "http.status": 200,
-  "user_id": "u_8472"
+  "job.attempt": 1,
+  "job.id": "job_8472",
+  "job.max_attempts": 3,
+  "job.name": "billing.reconcile",
+  "job.queue": "nightly",
+  "op.attempt": 1,
+  "op.domain": "job",
+  "op.id": "job_8472",
+  "op.max_attempts": 3,
+  "op.name": "billing.reconcile",
+  "op.outcome": "success",
+  "op.source": "nightly",
+  "tenant": "enterprise"
 }
 ```
 
@@ -255,20 +268,23 @@ Sampler building blocks:
 For non-HTTP flows, use `hc.StartOperation` for the ergonomic stateful handle:
 
 ```go
-op := hc.StartOperation(context.Background(), hc.OperationStart{
-	Domain: hc.DomainJob,
-	Name:   "invoice.reconcile",
-	ID:     "job_1001",
-	Source: "nightly",
-})
+func runJob(cfg hc.Config) (err error) {
+	op := hc.StartOperation(context.Background(), hc.OperationStart{
+		Domain: hc.DomainJob,
+		Name:   "invoice.reconcile",
+		ID:     "job_1001",
+		Source: "nightly",
+	})
+	defer op.End(cfg, &err)
 
-hc.Add(op.Context(), "job.queue", "nightly")
-hc.Add(op.Context(), "account_id", "acct_42")
-
-_ = op.Finish(cfg, hc.OperationResult{})
+	hc.Add(op.Context(), "job.queue", "nightly")
+	hc.Add(op.Context(), "account_id", "acct_42")
+	return nil
+}
 ```
 
-`hc.BeginOperation` / `hc.FinishOperation` remain available for lower-level integrations.
+`op.End(cfg, &err)` is the default deferred completion path.
+`op.Finish(...)` and `hc.BeginOperation` / `hc.FinishOperation` remain available for lower-level or custom flows.
 
 ## Integrations
 

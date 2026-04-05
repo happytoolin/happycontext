@@ -169,6 +169,49 @@ func TestOperationFinishNilGuard(t *testing.T) {
 	}
 }
 
+func TestOperationEndUsesErrorPointer(t *testing.T) {
+	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
+	sink := NewTestSink()
+	err := errors.New("boom")
+
+	if !op.End(Config{Sink: sink, SamplingRate: 1}, &err) {
+		t.Fatal("expected end to write")
+	}
+
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Fields["op.outcome"] != string(OutcomeFailure) {
+		t.Fatalf("outcome = %v", events[0].Fields["op.outcome"])
+	}
+}
+
+func TestOperationEndCapturesAndRepanics(t *testing.T) {
+	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
+	sink := NewTestSink()
+
+	func() {
+		var err error
+		defer func() {
+			recovered := recover()
+			if recovered != "panic-value" {
+				t.Fatalf("recovered = %v, want panic-value", recovered)
+			}
+		}()
+		defer op.End(Config{Sink: sink, SamplingRate: 1}, &err)
+		panic("panic-value")
+	}()
+
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Fields["op.outcome"] != string(OutcomePanic) {
+		t.Fatalf("outcome = %v", events[0].Fields["op.outcome"])
+	}
+}
+
 func TestFinishOperationCompatibilityAppliesPolicyAndRequestedFloor(t *testing.T) {
 	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
 	SetLevel(ctx, LevelWarn)

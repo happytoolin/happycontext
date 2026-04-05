@@ -123,6 +123,34 @@ func (op *Operation) Finish(cfg Config, result OperationResult) bool {
 	return finishOperation(cfg, op.ctx, op.event, op.start, result)
 }
 
+// End finalizes an operation using the current function's error return and panic state.
+//
+// End is intended for deferred use:
+//
+//	func run() (err error) {
+//		op := StartOperation(ctx, start)
+//		defer op.End(cfg, &err)
+//		...
+//		return err
+//	}
+//
+// If the surrounding function is panicking, End records the panic and then re-panics.
+func (op *Operation) End(cfg Config, errp *error) bool {
+	var err error
+	if errp != nil {
+		err = *errp
+	}
+	recovered := recover()
+	wrote := op.Finish(cfg, OperationResult{
+		Err:       err,
+		Recovered: recovered,
+	})
+	if recovered != nil {
+		panic(recovered)
+	}
+	return wrote
+}
+
 // FinishOperation finalizes and writes an operation event.
 func FinishOperation(cfg Config, in OperationFinish) bool {
 	return finishOperation(cfg, in.Ctx, in.Event, hydrateOperationStart(in.Start, in.Event), OperationResult{

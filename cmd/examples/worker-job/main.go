@@ -14,6 +14,10 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	sink := slogadapter.New(logger)
+	cfg := hc.Config{
+		Sink:         sink,
+		SamplingRate: 1,
+	}
 
 	meta := workerhappycontext.JobMeta{
 		Name:        "billing.reconcile",
@@ -24,11 +28,15 @@ func main() {
 		ScheduledAt: time.Now().UTC().Truncate(time.Second),
 	}
 
-	op := workerhappycontext.Start(context.Background(), meta)
-	hc.Add(op.Context(), "tenant", "enterprise", "worker", "billing")
+	if err := runJob(context.Background(), cfg, meta); err != nil {
+		logger.Error("job failed", "error", err)
+	}
+}
 
-	_ = workerhappycontext.Finish(hc.Config{
-		Sink:         sink,
-		SamplingRate: 1,
-	}, op, nil, nil)
+func runJob(ctx context.Context, cfg hc.Config, meta workerhappycontext.JobMeta) (err error) {
+	op := workerhappycontext.Start(ctx, meta)
+	defer op.End(cfg, &err)
+
+	hc.Add(op.Context(), "tenant", "enterprise", "worker", "billing")
+	return nil
 }
