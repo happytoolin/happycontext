@@ -53,15 +53,14 @@ func TestStartOperationProvidesHandle(t *testing.T) {
 	}
 }
 
-func TestOperationFinishSuccessWritesDefaultOperationMessage(t *testing.T) {
+func TestOperationEndSuccessWritesDefaultOperationMessage(t *testing.T) {
 	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
 	sink := NewTestSink()
+	var err error
 
-	ok := op.Finish(Config{Sink: sink, SamplingRate: 1}, OperationResult{
-		Code: 0,
-	})
+	ok := op.End(Config{Sink: sink, SamplingRate: 1}, &err)
 	if !ok {
-		t.Fatal("expected finish to write")
+		t.Fatal("expected end to write")
 	}
 
 	events := sink.Events()
@@ -82,14 +81,13 @@ func TestOperationFinishSuccessWritesDefaultOperationMessage(t *testing.T) {
 	}
 }
 
-func TestFinishOperationErrorAndPanic(t *testing.T) {
+func TestOperationEndErrorAndPanic(t *testing.T) {
 	t.Run("error", func(t *testing.T) {
 		op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "sync"})
 		sink := NewTestSink()
+		err := errors.New("boom")
 
-		ok := op.Finish(Config{Sink: sink, SamplingRate: 0}, OperationResult{
-			Err: errors.New("boom"),
-		})
+		ok := op.End(Config{Sink: sink, SamplingRate: 0}, &err)
 		if !ok {
 			t.Fatal("expected errored operation to bypass sampling")
 		}
@@ -112,13 +110,17 @@ func TestFinishOperationErrorAndPanic(t *testing.T) {
 	t.Run("panic", func(t *testing.T) {
 		op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "sync"})
 		sink := NewTestSink()
-
-		ok := op.Finish(Config{Sink: sink, SamplingRate: 0}, OperationResult{
-			Recovered: "panic-value",
-		})
-		if !ok {
-			t.Fatal("expected panic operation to bypass sampling")
-		}
+		func() {
+			var err error
+			defer func() {
+				recovered := recover()
+				if recovered != "panic-value" {
+					t.Fatalf("recovered = %v, want panic-value", recovered)
+				}
+			}()
+			defer op.End(Config{Sink: sink, SamplingRate: 0}, &err)
+			panic("panic-value")
+		}()
 
 		events := sink.Events()
 		if len(events) != 1 {
@@ -133,13 +135,14 @@ func TestFinishOperationErrorAndPanic(t *testing.T) {
 	})
 }
 
-func TestFinishOperationAppliesPolicyAndRequestedFloor(t *testing.T) {
+func TestOperationEndAppliesPolicyAndRequestedFloor(t *testing.T) {
 	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
 	SetLevel(op.Context(), LevelWarn)
 	sink := NewTestSink()
 	rate := 2.0
+	var err error
 
-	ok := op.Finish(Config{
+	ok := op.End(Config{
 		Sink:         sink,
 		SamplingRate: 1,
 		OperationPolicies: map[Domain]OperationPolicy{
@@ -148,9 +151,9 @@ func TestFinishOperationAppliesPolicyAndRequestedFloor(t *testing.T) {
 				SamplingRate: &rate,
 			},
 		},
-	}, OperationResult{})
+	}, &err)
 	if !ok {
-		t.Fatal("expected finish to write")
+		t.Fatal("expected end to write")
 	}
 
 	events := sink.Events()
@@ -162,9 +165,10 @@ func TestFinishOperationAppliesPolicyAndRequestedFloor(t *testing.T) {
 	}
 }
 
-func TestOperationFinishNilGuard(t *testing.T) {
+func TestOperationEndNilGuard(t *testing.T) {
 	var op *Operation
-	if op.Finish(Config{Sink: NewTestSink()}, OperationResult{}) {
+	var err error
+	if op.End(Config{Sink: NewTestSink()}, &err) {
 		t.Fatal("expected false for nil operation")
 	}
 }

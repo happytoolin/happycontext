@@ -110,7 +110,7 @@ func (e *Event) startedAt() time.Time {
 }
 
 func (e *Event) setLevel(level Level) bool {
-	if !isValidLevel(level) {
+	if !IsValidLevel(level) {
 		return false
 	}
 	e.mu.Lock()

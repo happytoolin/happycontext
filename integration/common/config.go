@@ -16,7 +16,7 @@ func NormalizeConfig(cfg hc.Config) hc.Config {
 	if len(cfg.LevelSamplingRates) > 0 {
 		clamped := make(map[hc.Level]float64, len(cfg.LevelSamplingRates))
 		for level, rate := range cfg.LevelSamplingRates {
-			if !isValidLevel(level) {
+			if !hc.IsValidLevel(level) {
 				continue
 			}
 			if rate < 0 {
@@ -37,20 +37,20 @@ func NormalizeConfig(cfg hc.Config) hc.Config {
 				d = hc.Domain("operation")
 			}
 
-			if !isValidLevel(policy.SuccessLevel) {
+			if !hc.IsValidLevel(policy.SuccessLevel) {
 				policy.SuccessLevel = hc.LevelInfo
 			}
-			if !isValidLevel(policy.FailureLevel) {
+			if !hc.IsValidLevel(policy.FailureLevel) {
 				policy.FailureLevel = hc.LevelError
 			}
-			if !isValidLevel(policy.PanicLevel) {
+			if !hc.IsValidLevel(policy.PanicLevel) {
 				policy.PanicLevel = hc.LevelError
 			}
 
 			if len(policy.OutcomeLevels) > 0 {
 				outcomeLevels := make(map[hc.Outcome]hc.Level, len(policy.OutcomeLevels))
 				for outcome, level := range policy.OutcomeLevels {
-					if !isValidOutcome(outcome) || !isValidLevel(level) {
+					if !hc.IsValidOutcome(outcome) || !hc.IsValidLevel(level) {
 						continue
 					}
 					outcomeLevels[outcome] = level
@@ -81,44 +81,11 @@ func NormalizeConfig(cfg hc.Config) hc.Config {
 
 // MergeLevelWithFloor merges auto level with an optional requested level.
 func MergeLevelWithFloor(autoLevel, requestedLevel hc.Level, hasRequested bool) hc.Level {
-	if !hasRequested || !isValidLevel(requestedLevel) {
+	if !hasRequested || !hc.IsValidLevel(requestedLevel) {
 		return autoLevel
 	}
-	if levelRank(requestedLevel) > levelRank(autoLevel) {
+	if hc.LevelRank(requestedLevel) > hc.LevelRank(autoLevel) {
 		return requestedLevel
 	}
 	return autoLevel
-}
-
-func levelRank(level hc.Level) int {
-	switch level {
-	case hc.LevelDebug:
-		return 10
-	case hc.LevelInfo:
-		return 20
-	case hc.LevelWarn:
-		return 30
-	case hc.LevelError:
-		return 40
-	default:
-		return 20
-	}
-}
-
-func isValidLevel(level hc.Level) bool {
-	switch level {
-	case hc.LevelDebug, hc.LevelInfo, hc.LevelWarn, hc.LevelError:
-		return true
-	default:
-		return false
-	}
-}
-
-func isValidOutcome(outcome hc.Outcome) bool {
-	switch outcome {
-	case hc.OutcomeSuccess, hc.OutcomeFailure, hc.OutcomePanic, hc.OutcomeCanceled, hc.OutcomeTimeout, hc.OutcomeRetry:
-		return true
-	default:
-		return false
-	}
 }

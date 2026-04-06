@@ -52,7 +52,10 @@ func Middleware(cfg hc.Config) fiber.Handler {
 		finalizeErr = err
 		if err != nil {
 			if errorHandler := c.App().Config().ErrorHandler; errorHandler != nil {
-				_ = errorHandler(c, err)
+				if handlerErr := errorHandler(c, err); handlerErr != nil {
+					// Error handler failed; capture this as the final error
+					finalizeErr = handlerErr
+				}
 			}
 			err = nil
 		}
@@ -60,6 +63,10 @@ func Middleware(cfg hc.Config) fiber.Handler {
 	}
 }
 
+// statusFromFiberError extracts the HTTP status code from a Fiber error.
+// This function is duplicated in the fiberv3 middleware because the
+// context types are incompatible between fiber v2 (*fiber.Ctx) and v3 (fiber.Ctx).
+// The Error type is compatible, but the middleware signatures differ.
 func statusFromFiberError(err error) int {
 	if err == nil {
 		return 0

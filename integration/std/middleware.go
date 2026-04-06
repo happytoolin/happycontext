@@ -9,11 +9,8 @@ import (
 	"github.com/happytoolin/happycontext/integration/common"
 )
 
-// Config controls standard net/http middleware behavior.
-type Config = hc.Config
-
 // Middleware wraps an http.Handler with happycontext request lifecycle logging.
-func Middleware(cfg Config) func(http.Handler) http.Handler {
+func Middleware(cfg hc.Config) func(http.Handler) http.Handler {
 	cfg = common.NormalizeConfig(cfg)
 	sink := cfg.Sink
 

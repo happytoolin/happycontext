@@ -283,8 +283,7 @@ func runJob(cfg hc.Config) (err error) {
 }
 ```
 
-`op.End(cfg, &err)` is the default deferred completion path.
-`op.Finish(...)` and `hc.BeginOperation` / `hc.FinishOperation` remain available for lower-level or custom flows.
+`op.End(cfg, &err)` is the supported non-HTTP completion path in this API.
 
 ## Integrations
 
@@ -293,7 +292,7 @@ func runJob(cfg hc.Config) (err error) {
 - `integration/echo`
 - `integration/fiber` (Fiber v2)
 - `integration/fiberv3` (Fiber v3)
-- `integration/worker` (background jobs)
+- `integration/worker` (background jobs/non-HTTP operations)
 
 ## Logger Adapters
 

@@ -1,0 +1,85 @@
+package main
+
+import (
+	"errors"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"testing"
+
+	"github.com/happytoolin/happycontext"
+	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	echohappycontext "github.com/happytoolin/happycontext/integration/echo"
+	"github.com/labstack/echo/v4"
+)
+
+func TestRouterEchoMiddleware(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	sink := slogadapter.New(logger)
+
+	e := echo.New()
+	e.Use(echohappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	e.GET("/users/:id", func(c echo.Context) error {
+		ctx := c.Request().Context()
+		id := c.Param("id")
+
+		hc.Add(ctx, "router", "echo")
+		hc.Add(ctx, "event_attached", hc.FromContext(ctx) != nil)
+		hc.Add(
+			ctx,
+			"user", map[string]any{
+				"id":   id,
+				"plan": "pro",
+			},
+			"request", map[string]any{
+				"feature": "profile",
+				"tags":    []string{"examples", "router-echo"},
+			},
+		)
+		hc.SetRoute(ctx, "/users/:id")
+
+		if c.QueryParam("debug") == "1" {
+			hc.SetLevel(ctx, hc.LevelDebug)
+		}
+		if level, ok := hc.GetLevel(ctx); ok {
+			hc.Add(ctx, "requested_level", level)
+		}
+		if c.QueryParam("fail") == "1" {
+			hc.Error(ctx, errors.New("demo failure"))
+			return c.NoContent(http.StatusInternalServerError)
+		}
+
+		return c.NoContent(http.StatusOK)
+	})
+
+	t.Run("successful request", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/users/123", nil)
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status 200, got %d", rec.Code)
+		}
+	})
+
+	t.Run("request with debug", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/users/123?debug=1", nil)
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status 200, got %d", rec.Code)
+		}
+	})
+
+	t.Run("request with failure", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/users/123?fail=1", nil)
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("expected status 500, got %d", rec.Code)
+		}
+	})
+}

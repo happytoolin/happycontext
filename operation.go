@@ -44,8 +44,7 @@ type OperationStart struct {
 	MaxAttempts int
 }
 
-// OperationResult contains finish-time outcome data for one operation event.
-type OperationResult struct {
+type operationResult struct {
 	Outcome   Outcome
 	Code      int
 	Err       error
@@ -90,6 +89,8 @@ func StartOperation(baseCtx context.Context, start OperationStart) *Operation {
 }
 
 // BeginOperation initializes context/event and operation envelope metadata.
+//
+// BeginOperation is a low-level helper used by package integrations.
 func BeginOperation(baseCtx context.Context, start OperationStart) (context.Context, *Event) {
 	if baseCtx == nil {
 		baseCtx = context.Background()
@@ -115,14 +116,6 @@ func (op *Operation) Event() *Event {
 	return op.event
 }
 
-// Finish finalizes and writes one operation event.
-func (op *Operation) Finish(cfg Config, result OperationResult) bool {
-	if op == nil {
-		return false
-	}
-	return finishOperation(cfg, op.ctx, op.event, op.start, result)
-}
-
 // End finalizes an operation using the current function's error return and panic state.
 //
 // End is intended for deferred use:
@@ -136,12 +129,15 @@ func (op *Operation) Finish(cfg Config, result OperationResult) bool {
 //
 // If the surrounding function is panicking, End records the panic and then re-panics.
 func (op *Operation) End(cfg Config, errp *error) bool {
+	if op == nil {
+		return false
+	}
 	var err error
 	if errp != nil {
 		err = *errp
 	}
 	recovered := recover()
-	wrote := op.Finish(cfg, OperationResult{
+	wrote := finishOperation(cfg, op.ctx, op.event, op.start, operationResult{
 		Err:       err,
 		Recovered: recovered,
 	})
@@ -152,8 +148,10 @@ func (op *Operation) End(cfg Config, errp *error) bool {
 }
 
 // FinishOperation finalizes and writes an operation event.
+//
+// FinishOperation is a low-level helper used by package integrations.
 func FinishOperation(cfg Config, in OperationFinish) bool {
-	return finishOperation(cfg, in.Ctx, in.Event, hydrateOperationStart(in.Start, in.Event), OperationResult{
+	return finishOperation(cfg, in.Ctx, in.Event, hydrateOperationStart(in.Start, in.Event), operationResult{
 		Outcome:   in.Outcome,
 		Code:      in.Code,
 		Err:       in.Err,
@@ -161,7 +159,7 @@ func FinishOperation(cfg Config, in OperationFinish) bool {
 	})
 }
 
-func finishOperation(cfg Config, ctx context.Context, event *Event, start OperationStart, result OperationResult) bool {
+func finishOperation(cfg Config, ctx context.Context, event *Event, start OperationStart, result operationResult) bool {
 	if cfg.Sink == nil || event == nil || ctx == nil {
 		return false
 	}
@@ -234,8 +232,8 @@ func annotateOperationFailures(ctx context.Context, err error, recovered any) {
 	}
 }
 
-func resolveOutcome(result OperationResult) Outcome {
-	if isValidOutcome(result.Outcome) {
+func resolveOutcome(result operationResult) Outcome {
+	if IsValidOutcome(result.Outcome) {
 		return result.Outcome
 	}
 	if result.Recovered != nil {
@@ -257,7 +255,7 @@ func resolveOutcome(result OperationResult) Outcome {
 	return OutcomeSuccess
 }
 
-func buildSampleInput(event *Event, start OperationStart, result OperationResult, duration time.Duration, outcome Outcome, level Level) SampleInput {
+func buildSampleInput(event *Event, start OperationStart, result operationResult, duration time.Duration, outcome Outcome, level Level) SampleInput {
 	fields := EventFields(event)
 
 	method, _ := fields["http.method"].(string)
@@ -420,20 +418,20 @@ func defaultPolicy() OperationPolicy {
 
 func levelFromPolicy(policy OperationPolicy, outcome Outcome) Level {
 	def := defaultPolicy()
-	if outcomeLevel, ok := policy.OutcomeLevels[outcome]; ok && isValidLevel(outcomeLevel) {
+	if outcomeLevel, ok := policy.OutcomeLevels[outcome]; ok && IsValidLevel(outcomeLevel) {
 		return outcomeLevel
 	}
 
 	successLevel := def.SuccessLevel
-	if isValidLevel(policy.SuccessLevel) {
+	if IsValidLevel(policy.SuccessLevel) {
 		successLevel = policy.SuccessLevel
 	}
 	failureLevel := def.FailureLevel
-	if isValidLevel(policy.FailureLevel) {
+	if IsValidLevel(policy.FailureLevel) {
 		failureLevel = policy.FailureLevel
 	}
 	panicLevel := def.PanicLevel
-	if isValidLevel(policy.PanicLevel) {
+	if IsValidLevel(policy.PanicLevel) {
 		panicLevel = policy.PanicLevel
 	}
 
@@ -448,16 +446,18 @@ func levelFromPolicy(policy OperationPolicy, outcome Outcome) Level {
 }
 
 func mergeLevelWithFloor(autoLevel, requestedLevel Level, hasRequested bool) Level {
-	if !hasRequested || !isValidLevel(requestedLevel) {
+	if !hasRequested || !IsValidLevel(requestedLevel) {
 		return autoLevel
 	}
-	if levelRank(requestedLevel) > levelRank(autoLevel) {
+	if LevelRank(requestedLevel) > LevelRank(autoLevel) {
 		return requestedLevel
 	}
 	return autoLevel
 }
 
-func levelRank(level Level) int {
+// LevelRank returns the numeric severity rank for a level.
+// Higher values indicate more severe levels.
+func LevelRank(level Level) int {
 	switch level {
 	case LevelDebug:
 		return 10
@@ -493,7 +493,8 @@ func levelSamplingRate(rates map[Level]float64, level Level) (float64, bool) {
 	return clampRate(rate), true
 }
 
-func isValidOutcome(outcome Outcome) bool {
+// IsValidOutcome reports whether outcome is a valid operation outcome.
+func IsValidOutcome(outcome Outcome) bool {
 	switch outcome {
 	case OutcomeSuccess, OutcomeFailure, OutcomePanic, OutcomeCanceled, OutcomeTimeout, OutcomeRetry:
 		return true

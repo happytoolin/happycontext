@@ -186,19 +186,23 @@ func BenchmarkNonHTTPBackgroundJob(b *testing.B) {
 
 func BenchmarkOperationLifecycle(b *testing.B) {
 	sink := discardSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 1}
 
 	b.ReportAllocs()
 	for b.Loop() {
-		op := hc.StartOperation(context.Background(), hc.OperationStart{
-			Domain:      hc.DomainJob,
-			Name:        "cleanup",
-			ID:          "job_8472",
-			Source:      "nightly",
-			Attempt:     1,
-			MaxAttempts: 3,
-		})
-		hc.Add(op.Context(), "worker", "payments", "tenant", "enterprise")
-		op.Finish(hc.Config{Sink: sink, SamplingRate: 1}, hc.OperationResult{})
+		func() {
+			var err error
+			op := hc.StartOperation(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			})
+			defer op.End(cfg, &err)
+			hc.Add(op.Context(), "worker", "payments", "tenant", "enterprise")
+		}()
 	}
 }
 

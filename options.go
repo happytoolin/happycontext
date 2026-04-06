@@ -1,7 +1,9 @@
 package hc
 
-const defaultMessage = "request_completed"
-const defaultOperationMessage = "operation_completed"
+const (
+	defaultMessage          = "request_completed"
+	defaultOperationMessage = "operation_completed"
+)
 
 // Config controls event finalization behavior.
 type Config struct {
