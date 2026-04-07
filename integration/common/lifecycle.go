@@ -2,9 +2,7 @@ package common
 
 import (
 	"context"
-	"fmt"
 	"net/http"
-	"time"
 
 	hc "github.com/happytoolin/happycontext"
 )
@@ -13,8 +11,6 @@ import (
 type FinalizeInput struct {
 	Ctx        context.Context
 	Event      *hc.Event
-	Method     string
-	Path       string
 	Route      string
 	StatusCode int
 	Err        error
@@ -23,75 +19,37 @@ type FinalizeInput struct {
 
 // StartRequest initializes request context and base HTTP fields.
 func StartRequest(baseCtx context.Context, method, path string) (context.Context, *hc.Event) {
-	if baseCtx == nil {
-		baseCtx = context.Background()
-	}
-	ctx, event := hc.NewContext(baseCtx)
+	ctx, event := hc.BeginOperation(baseCtx, hc.OperationStart{
+		Domain: hc.DomainHTTP,
+		Name:   "request",
+	})
 	hc.Add(ctx, "http.method", method, "http.path", path)
 	return ctx, event
 }
 
 // FinalizeRequest computes status/level/sampling and writes the final snapshot.
 func FinalizeRequest(cfg hc.Config, in FinalizeInput) {
-	if cfg.Sink == nil || in.Event == nil || in.Ctx == nil {
-		return
-	}
-
-	annotateFailures(in.Ctx, in.Err, in.Recovered)
 	if in.Route != "" {
 		hc.SetRoute(in.Ctx, in.Route)
 	}
+	hc.Add(in.Ctx, "http.status", in.StatusCode)
 
-	duration := annotateTiming(in.Ctx, in.Event, in.StatusCode)
-	hasError := hc.EventHasError(in.Event) || in.StatusCode >= 500
-	level := resolveLevel(in.Ctx, hasError)
-	if !shouldWriteEvent(cfg, sampleInput{
-		Method:     in.Method,
-		Path:       in.Path,
-		HasError:   hasError,
-		StatusCode: in.StatusCode,
-		Duration:   duration,
-		Level:      level,
-		Rate:       cfg.SamplingRate,
-		Event:      in.Event,
-	}) {
-		return
+	name := "request"
+	if in.Route != "" {
+		name = in.Route
 	}
 
-	msg := cfg.Message
-	if hc.EventHasMessage(in.Event) {
-		msg = hc.EventMessage(in.Event)
-	}
-
-	cfg.Sink.Write(level, msg, hc.EventFields(in.Event))
-}
-
-func annotateFailures(ctx context.Context, err error, recovered any) {
-	if recovered != nil {
-		hc.Add(ctx, "panic", map[string]any{
-			"type":  fmt.Sprintf("%T", recovered),
-			"value": fmt.Sprint(recovered),
-		})
-		hc.Error(ctx, fmt.Errorf("panic: %v", recovered))
-	}
-	if err != nil {
-		hc.Error(ctx, err)
-	}
-}
-
-func annotateTiming(ctx context.Context, event *hc.Event, statusCode int) time.Duration {
-	duration := time.Since(hc.EventStartTime(event))
-	hc.Add(ctx, "duration_ms", duration.Milliseconds(), "http.status", statusCode)
-	return duration
-}
-
-func resolveLevel(ctx context.Context, hasError bool) hc.Level {
-	autoLevel := hc.LevelInfo
-	if hasError {
-		autoLevel = hc.LevelError
-	}
-	requestedLevel, hasRequestedLevel := hc.GetLevel(ctx)
-	return MergeLevelWithFloor(autoLevel, requestedLevel, hasRequestedLevel)
+	hc.FinishOperation(cfg, hc.OperationFinish{
+		Ctx:   in.Ctx,
+		Event: in.Event,
+		Start: hc.OperationStart{
+			Domain: hc.DomainHTTP,
+			Name:   name,
+		},
+		Code:      in.StatusCode,
+		Err:       in.Err,
+		Recovered: in.Recovered,
+	})
 }
 
 // ResolveStatus determines the final HTTP status to log.

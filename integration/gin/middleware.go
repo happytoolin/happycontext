@@ -1,4 +1,4 @@
-package ginhappycontext
+package ginhc
 
 import (
 	"github.com/gin-gonic/gin"
@@ -23,14 +23,14 @@ func Middleware(cfg hc.Config) gin.HandlerFunc {
 			recovered := recover()
 			var err error
 			if len(c.Errors) > 0 {
-				err = c.Errors.Last()
+				if last := c.Errors.Last(); last != nil {
+					err = last.Err
+				}
 			}
 			status := common.ResolveStatus(c.Writer.Status(), err, recovered, c.Writer.Written(), 0)
 			common.FinalizeRequest(cfg, common.FinalizeInput{
 				Ctx:        ctx,
 				Event:      event,
-				Method:     c.Request.Method,
-				Path:       c.Request.URL.Path,
 				Route:      c.FullPath(),
 				StatusCode: status,
 				Err:        err,

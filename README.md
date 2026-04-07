@@ -20,7 +20,7 @@ Most application logs are high-volume but low-context.
 - Built-in sampling for healthy traffic
 - Error and panic events are always preserved
 - Works with `slog`, `zap`, and `zerolog`
-- Integrates with `net/http`, `gin`, `echo`, `fiber`, and `fiber v3`
+- Integrates with `net/http`, `gin`, `echo`, `fiber`, `fiber v3`, and worker jobs
 
 Design principle:
 
@@ -48,19 +48,19 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	hc "github.com/happytoolin/happycontext"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
 	stdhc "github.com/happytoolin/happycontext/integration/std"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
 	mw := stdhc.Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1.0,
-		Message:      "request_completed",
+		Message:      hc.DefaultMessage,
 	})
 
 	mux := http.NewServeMux()
@@ -86,20 +86,70 @@ Other quick starts:
 - `gin`, `echo`, `fiber v2`, and `fiber v3` (with `slog`) are in `## More Examples`
 - Runnable reference apps are in `cmd/examples`
 
+## Quick Start (Background Job + `slog`)
+
+```go
+package main
+
+import (
+	"context"
+	"log/slog"
+	"os"
+
+	hc "github.com/happytoolin/happycontext"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
+	workerhc "github.com/happytoolin/happycontext/integration/worker"
+)
+
+func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	sink := sloghc.New(logger)
+	cfg := hc.Config{
+		Sink:         sink,
+		SamplingRate: 1,
+	}
+
+	meta := workerhc.JobMeta{
+		Name:        "billing.reconcile",
+		ID:          "job_8472",
+		Queue:       "nightly",
+		Attempt:     1,
+		MaxAttempts: 3,
+	}
+
+	_ = runJob(context.Background(), cfg, meta)
+}
+
+func runJob(ctx context.Context, cfg hc.Config, meta workerhc.JobMeta) (err error) {
+	op := workerhc.Start(ctx, meta)
+	defer op.End(cfg, &err)
+
+	hc.Add(op.Context(), "tenant", "enterprise")
+	return nil
+}
+```
+
 Example output:
 
 ```json
 {
   "time": "2026-02-09T14:03:12.451Z",
   "level": "INFO",
-  "msg": "request_completed",
+  "msg": "operation_completed",
   "duration_ms": 3,
-  "feature": "checkout",
-  "http.method": "GET",
-  "http.path": "/orders/123",
-  "http.route": "GET /orders/{id}",
-  "http.status": 200,
-  "user_id": "u_8472"
+  "job.attempt": 1,
+  "job.id": "job_8472",
+  "job.max_attempts": 3,
+  "job.name": "billing.reconcile",
+  "job.queue": "nightly",
+  "op.attempt": 1,
+  "op.domain": "job",
+  "op.id": "job_8472",
+  "op.max_attempts": 3,
+  "op.name": "billing.reconcile",
+  "op.outcome": "success",
+  "op.source": "nightly",
+  "tenant": "enterprise"
 }
 ```
 
@@ -111,7 +161,8 @@ Example output:
 - `SamplingRate`: `0` to `1` for healthy-request sampling
 - `LevelSamplingRates`: optional level-specific sampling overrides
 - `Sampler`: optional custom sampling function (full control)
-- `Message`: final log message (defaults to `request_completed`)
+- `OperationPolicies`: optional per-domain level/sampling policy for all lifecycle domains, including HTTP and background operations; domain sampling overrides generic level/default sampling
+- `Message`: final log message (defaults to `hc.DefaultMessage` for HTTP and `hc.DefaultOperationMessage` for non-HTTP)
 
 Notes:
 
@@ -139,6 +190,17 @@ func checkoutHandler(w http.ResponseWriter, r *http.Request) {
 ```
 
 Passing an empty string leaves the event on the configured default message.
+
+Errors are recorded as structured metadata:
+
+```json
+{
+  "error": {
+    "message": "checkout failed",
+    "type": "*errors.errorString"
+  }
+}
+```
 
 ### Sampling Customization
 
@@ -185,6 +247,9 @@ mw := stdhc.Middleware(hc.Config{
 `hc.Add` accepts one or more key/value pairs:
 `hc.Add(ctx, "k1", v1, "k2", v2, "k3", v3)`.
 
+`hc.SampleInput.Method`, `Path`, and `StatusCode` are HTTP compatibility fields.
+For non-HTTP operations use `Domain`, `Operation`, `Outcome`, and `Code`.
+
 Built-in sampler chain:
 
 ```go
@@ -209,6 +274,28 @@ Sampler building blocks:
 - `hc.KeepPathPrefix("/checkout", "/admin")`: middleware that keeps matching path prefixes.
 - `hc.KeepSlowerThan(minDuration)`: middleware that keeps requests at/above a duration threshold.
 
+### Generic Operation Lifecycle API
+
+For non-HTTP flows, use `hc.StartOperation` for the ergonomic stateful handle:
+
+```go
+func runJob(cfg hc.Config) (err error) {
+	op := hc.StartOperation(context.Background(), hc.OperationStart{
+		Domain: hc.DomainJob,
+		Name:   "invoice.reconcile",
+		ID:     "job_1001",
+		Source: "nightly",
+	})
+	defer op.End(cfg, &err)
+
+	hc.Add(op.Context(), "job.queue", "nightly")
+	hc.Add(op.Context(), "account_id", "acct_42")
+	return nil
+}
+```
+
+`op.End(cfg, &err)` is the supported non-HTTP completion path in this API.
+
 ## Integrations
 
 - `integration/std` (`net/http`)
@@ -216,12 +303,15 @@ Sampler building blocks:
 - `integration/echo`
 - `integration/fiber` (Fiber v2)
 - `integration/fiberv3` (Fiber v3)
+- `integration/worker` (background jobs/non-HTTP operations)
 
 ## Logger Adapters
 
 - `adapter/slog`
 - `adapter/zap`
 - `adapter/zerolog`
+
+All adapters expose `NewWithOptions` plus `SinkOptions{DeterministicOrder: true}` when you need stable field ordering.
 
 ## More Examples
 
@@ -236,14 +326,14 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	hc "github.com/happytoolin/happycontext"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
 	stdhc "github.com/happytoolin/happycontext/integration/std"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
 
 	mux := http.NewServeMux()
@@ -269,14 +359,14 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	hc "github.com/happytoolin/happycontext"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
 	ginhc "github.com/happytoolin/happycontext/integration/gin"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
 	r := gin.New()
 	r.Use(ginhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
@@ -302,14 +392,14 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	hc "github.com/happytoolin/happycontext"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
 	fiberhc "github.com/happytoolin/happycontext/integration/fiber"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
 	app := fiber.New()
 	app.Use(fiberhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
@@ -335,14 +425,14 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	hc "github.com/happytoolin/happycontext"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
 	fiberv3hc "github.com/happytoolin/happycontext/integration/fiberv3"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
 	app := fiber.New()
 	app.Use(fiberv3hc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
@@ -367,15 +457,15 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	hc "github.com/happytoolin/happycontext"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
 	echohc "github.com/happytoolin/happycontext/integration/echo"
 	"github.com/labstack/echo/v4"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
 	e := echo.New()
 	e.Use(echohc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
@@ -399,15 +489,15 @@ package main
 import (
 	"net/http"
 
-	"github.com/happytoolin/happycontext"
-	zapadapter "github.com/happytoolin/happycontext/adapter/zap"
+	hc "github.com/happytoolin/happycontext"
+	zaphc "github.com/happytoolin/happycontext/adapter/zap"
 	stdhc "github.com/happytoolin/happycontext/integration/std"
 	"go.uber.org/zap"
 )
 
 func main() {
 	logger := zap.NewExample()
-	sink := zapadapter.New(logger)
+	sink := zaphc.New(logger)
 	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
 
 	mux := http.NewServeMux()
@@ -432,15 +522,15 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/happytoolin/happycontext"
-	zerologadapter "github.com/happytoolin/happycontext/adapter/zerolog"
+	hc "github.com/happytoolin/happycontext"
+	zerologhc "github.com/happytoolin/happycontext/adapter/zerolog"
 	stdhc "github.com/happytoolin/happycontext/integration/std"
 	"github.com/rs/zerolog"
 )
 
 func main() {
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
-	sink := zerologadapter.New(&logger)
+	sink := zerologhc.New(&logger)
 	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
 
 	mux := http.NewServeMux()
@@ -469,6 +559,7 @@ go run ./router-fiber
 go run ./router-fiberv3
 go run ./sampling-inbuilt
 go run ./sampling-custom
+go run ./worker-job
 ```
 
 ## Release Process

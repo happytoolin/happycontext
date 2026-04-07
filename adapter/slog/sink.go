@@ -1,4 +1,4 @@
-package slogadapter
+package sloghc
 
 import (
 	"context"
@@ -37,7 +37,7 @@ type Sink struct {
 
 // New creates a slog-backed sink with default options.
 func New(l *slog.Logger) *Sink {
-	return &Sink{logger: l}
+	return NewWithOptions(l, SinkOptions{})
 }
 
 // NewWithOptions creates a slog-backed sink with options.
@@ -52,7 +52,7 @@ func (s *Sink) Write(level hc.Level, message string, fields map[string]any) {
 	}
 
 	if message == "" {
-		message = "request_completed"
+		message = hc.DefaultMessage
 	}
 
 	slogLevel := slog.LevelInfo

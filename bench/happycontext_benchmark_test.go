@@ -63,7 +63,7 @@ func BenchmarkEventSnapshot(b *testing.B) {
 	for _, n := range []int{8, 32, 128} {
 		b.Run("fields_"+strconv.Itoa(n), func(b *testing.B) {
 			ctx, _ := hc.NewContext(context.Background())
-			for i := 0; i < n; i++ {
+			for i := range n {
 				hc.Add(ctx, "k"+strconv.Itoa(i), i)
 			}
 
@@ -184,9 +184,31 @@ func BenchmarkNonHTTPBackgroundJob(b *testing.B) {
 	}
 }
 
+func BenchmarkOperationLifecycle(b *testing.B) {
+	sink := discardSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 1}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			op := hc.StartOperation(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			})
+			defer op.End(cfg, &err)
+			hc.Add(op.Context(), "worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
 func buildBenchmarkFields(n int) map[string]any {
 	fields := make(map[string]any, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		fields["k"+strconv.Itoa(i)] = i
 	}
 	return fields

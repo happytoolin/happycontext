@@ -1,4 +1,4 @@
-package ginhappycontext
+package ginhc
 
 import (
 	"errors"
@@ -184,6 +184,36 @@ func TestMiddlewareGinErrorKeepsCommittedStatus(t *testing.T) {
 	}
 	if events[0].Level != hc.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level)
+	}
+}
+
+func TestMiddlewareGinErrorUsesUnderlyingErrorMetadata(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	sink := &memorySink{}
+	r := gin.New()
+	r.Use(Middleware(hc.Config{
+		Sink:         sink,
+		SamplingRate: 1,
+	}))
+	r.GET("/err", func(c *gin.Context) {
+		_ = c.Error(errors.New("boom"))
+		c.AbortWithStatus(http.StatusInternalServerError)
+	})
+
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/err", nil))
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	errField, ok := events[0].Fields["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected structured error field")
+	}
+	if errField["message"] != "boom" {
+		t.Fatalf("message = %v, want boom", errField["message"])
+	}
+	if errField["type"] != "*errors.errorString" {
+		t.Fatalf("type = %v, want *errors.errorString", errField["type"])
 	}
 }
 

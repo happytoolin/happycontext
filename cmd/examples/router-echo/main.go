@@ -6,17 +6,17 @@ import (
 	"os"
 
 	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
-	echohappycontext "github.com/happytoolin/happycontext/integration/echo"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
+	echohc "github.com/happytoolin/happycontext/integration/echo"
 	"github.com/labstack/echo/v4"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
 	e := echo.New()
-	e.Use(echohappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	e.Use(echohc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	e.GET("/users/:id", func(c echo.Context) error {
 		ctx := c.Request().Context()
 		id := c.Param("id")

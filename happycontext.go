@@ -11,9 +11,16 @@ func Commit(ctx context.Context, sink Sink, level Level) bool {
 	if e == nil {
 		return false
 	}
-	if !isValidLevel(level) {
+	if !IsValidLevel(level) {
 		return false
 	}
-	sink.Write(level, defaultMessage, EventFields(e))
+	snap := e.snapshot()
+	start := hydrateOperationStart(OperationStart{}, e)
+	domain := DomainHTTP
+	if start.Domain != "" {
+		domain = start.Domain
+	}
+	message := resolveEventMessage("", domain, snap.message)
+	sink.Write(level, message, snap.fields)
 	return true
 }

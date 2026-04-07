@@ -1,7 +1,6 @@
 package hc
 
 import (
-	"fmt"
 	"maps"
 	"sync"
 	"time"
@@ -22,6 +21,9 @@ type snapshot struct {
 	fields    map[string]any
 	startTime time.Time
 	hasError  bool
+	message   string
+	level     Level
+	hasLevel  bool
 }
 
 func newEvent() *Event {
@@ -44,10 +46,7 @@ func (e *Event) addKV(key string, value any, kv ...any) bool {
 	defer e.mu.Unlock()
 	if e.fields == nil {
 		pairs := 1 + len(kv)/2
-		capHint := 8
-		if pairs > capHint {
-			capHint = pairs
-		}
+		capHint := max(pairs, 8)
 		e.fields = make(map[string]any, capHint)
 	}
 	e.fields[key] = value
@@ -79,10 +78,7 @@ func (e *Event) setError(err error) {
 		e.fields = make(map[string]any, 8)
 	}
 	e.hasError = true
-	e.fields["error"] = map[string]any{
-		"message": err.Error(),
-		"type":    fmt.Sprintf("%T", err),
-	}
+	e.fields["error"] = structuredErrorField(err)
 }
 
 func (e *Event) setMessage(msg string) {
@@ -110,7 +106,7 @@ func (e *Event) startedAt() time.Time {
 }
 
 func (e *Event) setLevel(level Level) bool {
-	if !isValidLevel(level) {
+	if !IsValidLevel(level) {
 		return false
 	}
 	e.mu.Lock()
@@ -134,6 +130,9 @@ func (e *Event) snapshot() snapshot {
 		fields:    maps.Clone(e.fields),
 		startTime: e.startTime,
 		hasError:  e.hasError,
+		message:   e.message,
+		level:     e.requestedLevel,
+		hasLevel:  e.hasRequestedLevel,
 	}
 }
 

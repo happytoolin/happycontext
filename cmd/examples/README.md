@@ -16,12 +16,15 @@ go run ./router-fiber
 go run ./router-fiberv3
 go run ./sampling-inbuilt
 go run ./sampling-custom
+go run ./worker-job
 ```
 
 All examples now use a consistent request route shape:
 
 - net/http: `/users/{id}`
 - gin/echo/fiber: `/users/:id`
+
+`worker-job` is a non-HTTP background-job example that emits one operation event and exits.
 
 Port map:
 

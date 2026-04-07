@@ -1,4 +1,4 @@
-package zapadapter
+package zaphc
 
 import (
 	"io"
@@ -21,7 +21,7 @@ var benchFieldsSmall = map[string]any{
 
 func benchFieldsMedium() map[string]any {
 	m := make(map[string]any, 15)
-	for i := 0; i < 15; i++ {
+	for i := range 15 {
 		m["k"+strconv.Itoa(i)] = i
 	}
 	m["http.status"] = 200

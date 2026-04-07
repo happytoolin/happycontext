@@ -13,11 +13,11 @@ import (
 	fiberv3 "github.com/gofiber/fiber/v3"
 	recoverv3 "github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/happytoolin/happycontext"
-	echohappycontext "github.com/happytoolin/happycontext/integration/echo"
-	fiberhappycontext "github.com/happytoolin/happycontext/integration/fiber"
-	fiberv3happycontext "github.com/happytoolin/happycontext/integration/fiberv3"
-	ginhappycontext "github.com/happytoolin/happycontext/integration/gin"
-	stdhappycontext "github.com/happytoolin/happycontext/integration/std"
+	echohc "github.com/happytoolin/happycontext/integration/echo"
+	fiberhc "github.com/happytoolin/happycontext/integration/fiber"
+	fiberv3hc "github.com/happytoolin/happycontext/integration/fiberv3"
+	ginhc "github.com/happytoolin/happycontext/integration/gin"
+	stdhc "github.com/happytoolin/happycontext/integration/std"
 	"github.com/labstack/echo/v4"
 )
 
@@ -27,13 +27,16 @@ type runResult struct {
 }
 
 type comparableResult struct {
-	level    hc.Level
-	status   int
-	message  string
-	method   string
-	path     string
-	hasError bool
-	hasPanic bool
+	level        hc.Level
+	status       int
+	message      string
+	method       string
+	path         string
+	hasError     bool
+	hasPanic     bool
+	errorMessage string
+	panicType    string
+	panicValue   string
 }
 
 func TestIntegrationConsistency(t *testing.T) {
@@ -105,6 +108,9 @@ func assertConsistency(t *testing.T, mode string, out runResult) {
 		if _, ok := out.event.Fields["error"].(map[string]any); !ok {
 			t.Fatalf("expected structured error field")
 		}
+		if _, errorType := errorDetails(out.event.Fields["error"]); errorType == "" {
+			t.Fatalf("expected concrete error type")
+		}
 	case "panic":
 		if !out.panicObserved {
 			t.Fatal("expected panic propagation/observation")
@@ -155,7 +161,7 @@ func TestIntegrationImplicitErrorStatusConsistency(t *testing.T) {
 func runStd(t *testing.T, mode string) runResult {
 	t.Helper()
 	sink := hc.NewTestSink()
-	mw := stdhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
+	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /orders/{id}", func(w http.ResponseWriter, r *http.Request) {
 		switch mode {
@@ -184,7 +190,7 @@ func runGin(t *testing.T, mode string) runResult {
 	t.Helper()
 	sink := hc.NewTestSink()
 	r := gin.New()
-	r.Use(ginhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	r.Use(ginhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	r.GET("/orders/:id", func(c *gin.Context) {
 		switch mode {
 		case "error":
@@ -212,7 +218,7 @@ func runEcho(t *testing.T, mode string) runResult {
 	t.Helper()
 	sink := hc.NewTestSink()
 	e := echo.New()
-	e.Use(echohappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	e.Use(echohc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	e.GET("/orders/:id", func(c echo.Context) error {
 		switch mode {
 		case "error":
@@ -239,7 +245,7 @@ func runFiber(t *testing.T, mode string) runResult {
 	sink := hc.NewTestSink()
 	app := fiber.New()
 	app.Use(recoverv2.New())
-	app.Use(fiberhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	app.Get("/orders/:id", func(c *fiber.Ctx) error {
 		switch mode {
 		case "error":
@@ -260,7 +266,7 @@ func runFiberV3(t *testing.T, mode string) runResult {
 	sink := hc.NewTestSink()
 	app := fiberv3.New()
 	app.Use(recoverv3.New())
-	app.Use(fiberv3happycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberv3hc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	app.Get("/orders/:id", func(c fiberv3.Ctx) error {
 		switch mode {
 		case "error":
@@ -280,7 +286,7 @@ func runGinImplicitError(t *testing.T) runResult {
 	t.Helper()
 	sink := hc.NewTestSink()
 	r := gin.New()
-	r.Use(ginhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	r.Use(ginhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	r.GET("/orders/:id", func(c *gin.Context) {
 		_ = c.Error(errors.New("boom"))
 	})
@@ -292,7 +298,7 @@ func runEchoImplicitError(t *testing.T) runResult {
 	t.Helper()
 	sink := hc.NewTestSink()
 	e := echo.New()
-	e.Use(echohappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	e.Use(echohc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	e.GET("/orders/:id", func(c echo.Context) error {
 		return errors.New("boom")
 	})
@@ -304,7 +310,7 @@ func runFiberImplicitError(t *testing.T) runResult {
 	t.Helper()
 	sink := hc.NewTestSink()
 	app := fiber.New()
-	app.Use(fiberhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	app.Get("/orders/:id", func(c *fiber.Ctx) error {
 		return errors.New("boom")
 	})
@@ -316,7 +322,7 @@ func runFiberV3ImplicitError(t *testing.T) runResult {
 	t.Helper()
 	sink := hc.NewTestSink()
 	app := fiberv3.New()
-	app.Use(fiberv3happycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberv3hc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	app.Get("/orders/:id", func(c fiberv3.Ctx) error {
 		return errors.New("boom")
 	})
@@ -340,14 +346,19 @@ func normalizeResult(t *testing.T, out runResult) comparableResult {
 	_, hasPanic := out.event.Fields["panic"].(map[string]any)
 	method, _ := out.event.Fields["http.method"].(string)
 	path, _ := out.event.Fields["http.path"].(string)
+	errorMessage, _ := errorDetails(out.event.Fields["error"])
+	panicType, panicValue := panicDetails(out.event.Fields["panic"])
 	return comparableResult{
-		level:    out.event.Level,
-		status:   statusFromField(t, out.event.Fields["http.status"]),
-		message:  out.event.Message,
-		method:   method,
-		path:     path,
-		hasError: hasError,
-		hasPanic: hasPanic,
+		level:        out.event.Level,
+		status:       statusFromField(t, out.event.Fields["http.status"]),
+		message:      out.event.Message,
+		method:       method,
+		path:         path,
+		hasError:     hasError,
+		hasPanic:     hasPanic,
+		errorMessage: errorMessage,
+		panicType:    panicType,
+		panicValue:   panicValue,
 	}
 }
 
@@ -359,4 +370,24 @@ func statusFromField(t *testing.T, value any) int {
 		t.Fatalf("expected int status, got %T (%v)", value, value)
 	}
 	return status
+}
+
+func errorDetails(value any) (message, typ string) {
+	field, ok := value.(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	message, _ = field["message"].(string)
+	typ, _ = field["type"].(string)
+	return message, typ
+}
+
+func panicDetails(value any) (typ, panicValue string) {
+	field, ok := value.(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	typ, _ = field["type"].(string)
+	panicValue, _ = field["value"].(string)
+	return typ, panicValue
 }
