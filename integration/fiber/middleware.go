@@ -35,8 +35,6 @@ func Middleware(cfg hc.Config) fiber.Handler {
 			common.FinalizeRequest(cfg, common.FinalizeInput{
 				Ctx:        ctx,
 				Event:      event,
-				Method:     c.Method(),
-				Path:       c.Path(),
 				Route:      routePath,
 				StatusCode: status,
 				Err:        finalizeErr,

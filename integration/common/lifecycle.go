@@ -11,8 +11,6 @@ import (
 type FinalizeInput struct {
 	Ctx        context.Context
 	Event      *hc.Event
-	Method     string
-	Path       string
 	Route      string
 	StatusCode int
 	Err        error
@@ -34,13 +32,11 @@ func FinalizeRequest(cfg hc.Config, in FinalizeInput) {
 	if in.Route != "" {
 		hc.SetRoute(in.Ctx, in.Route)
 	}
-	hc.Add(in.Ctx, "http.method", in.Method, "http.path", in.Path, "http.status", in.StatusCode)
+	hc.Add(in.Ctx, "http.status", in.StatusCode)
 
 	name := "request"
 	if in.Route != "" {
 		name = in.Route
-	} else if in.Method != "" {
-		name = in.Method
 	}
 
 	hc.FinishOperation(cfg, hc.OperationFinish{

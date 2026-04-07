@@ -94,27 +94,3 @@ func TestNormalizeConfigClampsAndDefaults(t *testing.T) {
 		})
 	}
 }
-
-func TestMergeLevelWithFloor(t *testing.T) {
-	tests := []struct {
-		name         string
-		auto         hc.Level
-		requested    hc.Level
-		hasRequested bool
-		want         hc.Level
-	}{
-		{name: "no request", auto: hc.LevelInfo, want: hc.LevelInfo},
-		{name: "invalid request", auto: hc.LevelInfo, requested: hc.Level("TRACE"), hasRequested: true, want: hc.LevelInfo},
-		{name: "raise level", auto: hc.LevelInfo, requested: hc.LevelWarn, hasRequested: true, want: hc.LevelWarn},
-		{name: "keep floor", auto: hc.LevelError, requested: hc.LevelDebug, hasRequested: true, want: hc.LevelError},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := MergeLevelWithFloor(tt.auto, tt.requested, tt.hasRequested)
-			if got != tt.want {
-				t.Fatalf("level = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}

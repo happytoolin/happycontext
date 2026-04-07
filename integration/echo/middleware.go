@@ -39,8 +39,6 @@ func Middleware(cfg hc.Config) echo.MiddlewareFunc {
 				common.FinalizeRequest(cfg, common.FinalizeInput{
 					Ctx:        ctx,
 					Event:      event,
-					Method:     c.Request().Method,
-					Path:       c.Request().URL.Path,
 					Route:      route,
 					StatusCode: status,
 					Err:        finalizeErr,

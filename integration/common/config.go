@@ -13,8 +13,3 @@ func NormalizeConfig(cfg hc.Config) hc.Config {
 	}
 	return cfg
 }
-
-// MergeLevelWithFloor merges auto level with an optional requested level.
-func MergeLevelWithFloor(autoLevel, requestedLevel hc.Level, hasRequested bool) hc.Level {
-	return hc.MergeLevelWithFloor(autoLevel, requestedLevel, hasRequested)
-}

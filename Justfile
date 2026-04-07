@@ -12,6 +12,7 @@ default:
 # Maintain clean dependencies.
 tidy:
   go fmt ./...
+  go fix ./...
   go mod tidy
   gofumpt -l -w .
 

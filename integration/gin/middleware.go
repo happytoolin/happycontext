@@ -29,8 +29,6 @@ func Middleware(cfg hc.Config) gin.HandlerFunc {
 			common.FinalizeRequest(cfg, common.FinalizeInput{
 				Ctx:        ctx,
 				Event:      event,
-				Method:     c.Request.Method,
-				Path:       c.Request.URL.Path,
 				Route:      c.FullPath(),
 				StatusCode: status,
 				Err:        err,
