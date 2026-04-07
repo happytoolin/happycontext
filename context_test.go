@@ -103,7 +103,8 @@ func TestAddRejectsInvalidPairs(t *testing.T) {
 }
 
 func TestNewContextNilFallsBackToBackground(t *testing.T) {
-	ctx, event := NewContext(nil)
+	var parent context.Context
+	ctx, event := NewContext(parent)
 	if ctx == nil {
 		t.Fatal("expected context")
 	}

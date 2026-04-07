@@ -7,7 +7,8 @@ import (
 )
 
 func TestBeginOperationAddsEnvelopeFields(t *testing.T) {
-	ctx, event := BeginOperation(nil, OperationStart{
+	var parent context.Context
+	ctx, event := BeginOperation(parent, OperationStart{
 		Domain:      DomainJob,
 		Name:        "cleanup",
 		ID:          "job_1",
