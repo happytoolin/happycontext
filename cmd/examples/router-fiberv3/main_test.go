@@ -11,16 +11,16 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
-	fiberv3happycontext "github.com/happytoolin/happycontext/integration/fiberv3"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
+	fiberv3hc "github.com/happytoolin/happycontext/integration/fiberv3"
 )
 
 func TestRouterFiberv3Middleware(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
 	app := fiber.New()
-	app.Use(fiberv3happycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberv3hc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	app.Get("/users/:id", func(c fiber.Ctx) error {
 		ctx := c.Context()
 		id := c.Params("id")

@@ -1,4 +1,4 @@
-package ginhappycontext
+package ginhc
 
 import (
 	"github.com/gin-gonic/gin"

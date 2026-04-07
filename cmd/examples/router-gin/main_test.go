@@ -10,18 +10,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
-	ginhappycontext "github.com/happytoolin/happycontext/integration/gin"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
+	ginhc "github.com/happytoolin/happycontext/integration/gin"
 )
 
 func TestRouterGinMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
 	r := gin.New()
-	r.Use(ginhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	r.Use(ginhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	r.GET("/users/:id", func(c *gin.Context) {
 		ctx := c.Request.Context()
 		id := c.Param("id")

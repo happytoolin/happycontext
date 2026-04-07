@@ -101,3 +101,16 @@ func TestAddRejectsInvalidPairs(t *testing.T) {
 		t.Fatalf("expected no writes on invalid input, got %#v", fields)
 	}
 }
+
+func TestNewContextNilFallsBackToBackground(t *testing.T) {
+	ctx, event := NewContext(nil)
+	if ctx == nil {
+		t.Fatal("expected context")
+	}
+	if event == nil {
+		t.Fatal("expected event")
+	}
+	if got := FromContext(ctx); got != event {
+		t.Fatal("expected event to round-trip through context")
+	}
+}

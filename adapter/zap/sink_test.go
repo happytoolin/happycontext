@@ -1,6 +1,8 @@
-package zapadapter
+package zaphc
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/happytoolin/happycontext"
@@ -26,7 +28,7 @@ func TestSinkWriteMapsLevelAndMessage(t *testing.T) {
 	if entry.Level != zapcore.ErrorLevel {
 		t.Fatalf("expected error level, got %v", entry.Level)
 	}
-	if entry.Message != "request_completed" {
+	if entry.Message != hc.DefaultMessage {
 		t.Fatalf("expected default message, got %q", entry.Message)
 	}
 	if got := entry.ContextMap()["http.status"]; got != int64(500) {
@@ -70,6 +72,30 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 				t.Fatalf("missing field, got %v", got)
 			}
 		})
+	}
+}
+
+func TestSinkDeterministicOrderSortsKeys(t *testing.T) {
+	var buf bytes.Buffer
+	encoderCfg := zap.NewProductionEncoderConfig()
+	core := zapcore.NewCore(zapcore.NewJSONEncoder(encoderCfg), zapcore.AddSync(&buf), zapcore.DebugLevel)
+	sink := NewWithOptions(zap.New(core), SinkOptions{DeterministicOrder: true})
+
+	sink.Write(hc.LevelInfo, "done", map[string]any{
+		"z": 1,
+		"a": 2,
+		"m": 3,
+	})
+
+	output := buf.String()
+	aIdx := strings.Index(output, `"a":2`)
+	mIdx := strings.Index(output, `"m":3`)
+	zIdx := strings.Index(output, `"z":1`)
+	if aIdx == -1 || mIdx == -1 || zIdx == -1 {
+		t.Fatalf("expected ordered keys in output, got %q", output)
+	}
+	if !(aIdx < mIdx && mIdx < zIdx) {
+		t.Fatalf("expected key order a,m,z in output, got %q", output)
 	}
 }
 

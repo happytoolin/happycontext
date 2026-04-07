@@ -1,4 +1,4 @@
-package stdhappycontext
+package stdhc
 
 import (
 	"bufio"
@@ -17,7 +17,7 @@ import (
 
 func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {
 	sink := &memorySink{}
-	mw := Middleware(Config{
+	mw := Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 		Message:      "done",
@@ -48,7 +48,7 @@ func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {
 
 func TestMiddlewareAppliesCustomMessageFromHandlerContext(t *testing.T) {
 	sink := &memorySink{}
-	mw := Middleware(Config{
+	mw := Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 		Message:      "done",
@@ -78,7 +78,7 @@ func TestMiddlewareAppliesCustomMessageFromHandlerContext(t *testing.T) {
 
 func TestMiddlewarePanicPropagatesAndLogsError(t *testing.T) {
 	sink := &memorySink{}
-	mw := Middleware(Config{
+	mw := Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})
@@ -118,7 +118,7 @@ func TestMiddlewarePanicPropagatesAndLogsError(t *testing.T) {
 
 func TestMiddlewareWriteHeaderTwiceLogsFirstCommittedStatus(t *testing.T) {
 	backend := &memorySink{}
-	mw := Middleware(Config{
+	mw := Middleware(hc.Config{
 		Sink:         backend,
 		SamplingRate: 1,
 	})
@@ -146,7 +146,7 @@ func TestMiddlewareWriteHeaderTwiceLogsFirstCommittedStatus(t *testing.T) {
 
 func TestMiddlewarePanicAfterCommittedStatusKeepsCommittedStatus(t *testing.T) {
 	backend := &memorySink{}
-	mw := Middleware(Config{
+	mw := Middleware(hc.Config{
 		Sink:         backend,
 		SamplingRate: 1,
 	})
@@ -188,7 +188,7 @@ func TestMiddlewarePanicAfterCommittedStatusKeepsCommittedStatus(t *testing.T) {
 
 func TestMiddlewareSetsRouteFromRequestPattern(t *testing.T) {
 	sink := &memorySink{}
-	mw := Middleware(Config{
+	mw := Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})
@@ -214,7 +214,7 @@ func TestMiddlewareSetsRouteFromRequestPattern(t *testing.T) {
 
 func TestMiddlewarePreservesOptionalInterfaces(t *testing.T) {
 	sink := &memorySink{}
-	mw := Middleware(Config{
+	mw := Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})
@@ -265,7 +265,7 @@ func TestMiddlewarePreservesOptionalInterfaces(t *testing.T) {
 
 func TestMiddlewareWriteSetsStatusCode(t *testing.T) {
 	sink := &memorySink{}
-	mw := Middleware(Config{
+	mw := Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})
@@ -291,7 +291,7 @@ func TestMiddlewareWriteSetsStatusCode(t *testing.T) {
 
 func TestMiddlewareReadFromSetsStatusCode(t *testing.T) {
 	sink := &memorySink{}
-	mw := Middleware(Config{
+	mw := Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})
@@ -320,7 +320,7 @@ func TestMiddlewareReadFromSetsStatusCode(t *testing.T) {
 }
 
 func TestMiddlewareNilSinkStillRunsHandler(t *testing.T) {
-	mw := Middleware(Config{})
+	mw := Middleware(hc.Config{})
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 	}))
@@ -333,7 +333,7 @@ func TestMiddlewareNilSinkStillRunsHandler(t *testing.T) {
 
 func TestMiddlewareSamplingDropForHealthyRequest(t *testing.T) {
 	sink := &memorySink{}
-	mw := Middleware(Config{
+	mw := Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 0,
 	})

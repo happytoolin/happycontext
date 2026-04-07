@@ -7,19 +7,19 @@ import (
 	"time"
 
 	hc "github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
-	workerhappycontext "github.com/happytoolin/happycontext/integration/worker"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
+	workerhc "github.com/happytoolin/happycontext/integration/worker"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 	cfg := hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}
 
-	meta := workerhappycontext.JobMeta{
+	meta := workerhc.JobMeta{
 		Name:        "billing.reconcile",
 		ID:          "job_8472",
 		Queue:       "nightly",
@@ -33,8 +33,8 @@ func main() {
 	}
 }
 
-func runJob(ctx context.Context, cfg hc.Config, meta workerhappycontext.JobMeta) (err error) {
-	op := workerhappycontext.Start(ctx, meta)
+func runJob(ctx context.Context, cfg hc.Config, meta workerhc.JobMeta) (err error) {
+	op := workerhc.Start(ctx, meta)
 	defer op.End(cfg, &err)
 
 	hc.Add(op.Context(), "tenant", "enterprise", "worker", "billing")

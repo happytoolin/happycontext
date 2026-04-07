@@ -1,4 +1,4 @@
-package echohappycontext
+package echohc
 
 import (
 	"errors"

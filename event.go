@@ -1,7 +1,6 @@
 package hc
 
 import (
-	"fmt"
 	"maps"
 	"sync"
 	"time"
@@ -44,10 +43,7 @@ func (e *Event) addKV(key string, value any, kv ...any) bool {
 	defer e.mu.Unlock()
 	if e.fields == nil {
 		pairs := 1 + len(kv)/2
-		capHint := 8
-		if pairs > capHint {
-			capHint = pairs
-		}
+		capHint := max(pairs, 8)
 		e.fields = make(map[string]any, capHint)
 	}
 	e.fields[key] = value
@@ -79,10 +75,7 @@ func (e *Event) setError(err error) {
 		e.fields = make(map[string]any, 8)
 	}
 	e.hasError = true
-	e.fields["error"] = map[string]any{
-		"message": err.Error(),
-		"type":    fmt.Sprintf("%T", err),
-	}
+	e.fields["error"] = structuredErrorField(err)
 }
 
 func (e *Event) setMessage(msg string) {

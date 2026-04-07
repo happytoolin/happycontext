@@ -14,6 +14,10 @@ func Commit(ctx context.Context, sink Sink, level Level) bool {
 	if !IsValidLevel(level) {
 		return false
 	}
-	sink.Write(level, defaultMessage, EventFields(e))
+	message := DefaultMessage
+	if EventHasMessage(e) {
+		message = EventMessage(e)
+	}
+	sink.Write(level, message, EventFields(e))
 	return true
 }

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/happytoolin/happycontext"
-	zapadapter "github.com/happytoolin/happycontext/adapter/zap"
+	zaphc "github.com/happytoolin/happycontext/adapter/zap"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -17,7 +17,7 @@ func TestZapAdapterWritesStructuredLogs(t *testing.T) {
 	core := zapcore.NewCore(encoder, zapcore.AddSync(&buf), zapcore.InfoLevel)
 	logger := zap.New(core)
 
-	sink := zapadapter.New(logger)
+	sink := zaphc.New(logger)
 	if sink == nil {
 		t.Fatal("expected sink to be created")
 	}
@@ -39,7 +39,7 @@ func TestZapAdapterWritesStructuredLogs(t *testing.T) {
 }
 
 func TestZapAdapterWithNilLogger(t *testing.T) {
-	sink := zapadapter.New(nil)
+	sink := zaphc.New(nil)
 	if sink == nil {
 		t.Fatal("expected sink to be created even with nil logger")
 	}
@@ -56,7 +56,7 @@ func TestZapAdapterAllLevels(t *testing.T) {
 		encoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
 		core := zapcore.NewCore(encoder, zapcore.AddSync(&buf), zapcore.DebugLevel)
 		logger := zap.New(core)
-		sink := zapadapter.New(logger)
+		sink := zaphc.New(logger)
 
 		sink.Write(level, "level test", map[string]any{"level": string(level)})
 

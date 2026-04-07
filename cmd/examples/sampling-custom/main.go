@@ -8,15 +8,15 @@ import (
 	"time"
 
 	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
-	stdhappycontext "github.com/happytoolin/happycontext/integration/std"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
+	stdhc "github.com/happytoolin/happycontext/integration/std"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
-	mw := stdhappycontext.Middleware(hc.Config{
+	mw := stdhc.Middleware(hc.Config{
 		Sink: sink,
 		Sampler: func(in hc.SampleInput) bool {
 			if in.HasError || in.StatusCode >= 500 {

@@ -15,6 +15,9 @@ func FromContext(ctx context.Context) *Event {
 
 // NewContext attaches a new event to ctx and returns both.
 func NewContext(ctx context.Context) (context.Context, *Event) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	e := newEvent()
 	return context.WithValue(ctx, contextKey{}, e), e
 }

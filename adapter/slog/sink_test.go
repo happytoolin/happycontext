@@ -1,4 +1,4 @@
-package slogadapter
+package sloghc
 
 import (
 	"context"
@@ -21,7 +21,7 @@ func TestSinkWriteMapsLevelAndDefaultsMessage(t *testing.T) {
 	if len(h.records) != 1 {
 		t.Fatalf("expected 1 record, got %d", len(h.records))
 	}
-	if h.records[0].Message != "request_completed" {
+	if h.records[0].Message != hc.DefaultMessage {
 		t.Fatalf("expected default message, got %q", h.records[0].Message)
 	}
 	if h.records[0].Level != slog.LevelWarn {

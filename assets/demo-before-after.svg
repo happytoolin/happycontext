@@ -43,12 +43,13 @@
       <text x="22" y="82">{</text>
       <text x="38" y="112">"level": "ERROR",</text>
       <text x="38" y="140">"msg": "request_completed",</text>
-      <text x="38" y="168">"path": "/api/v1/user",</text>
+      <text x="38" y="168">"http.path": "/api/v1/user",</text>
       <text x="38" y="196">"user_id": "123",</text>
-      <text x="38" y="224">"error": "payment_failed",</text>
-      <text x="38" y="252">"status": 500,</text>
-      <text x="38" y="280">"duration_ms": 45</text>
-      <text x="22" y="308">}</text>
+      <text x="38" y="224">"error": {"message": "payment_failed",</text>
+      <text x="38" y="252">          "type": "*errors.errorString"},</text>
+      <text x="38" y="280">"http.status": 500,</text>
+      <text x="38" y="308">"duration_ms": 45</text>
+      <text x="22" y="336">}</text>
     </g>
     <line x1="22" y1="320" x2="498" y2="320" stroke="#F60" stroke-opacity="0.45" stroke-width="2" />
     <text x="22" y="340" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#F60">One complete, queryable event record.</text>

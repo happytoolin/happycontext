@@ -48,19 +48,19 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	hc "github.com/happytoolin/happycontext"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
 	stdhc "github.com/happytoolin/happycontext/integration/std"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
 	mw := stdhc.Middleware(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1.0,
-		Message:      "request_completed",
+		Message:      hc.DefaultMessage,
 	})
 
 	mux := http.NewServeMux()
@@ -96,14 +96,14 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	hc "github.com/happytoolin/happycontext"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
 	workerhc "github.com/happytoolin/happycontext/integration/worker"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 	cfg := hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
@@ -162,7 +162,7 @@ Example output:
 - `LevelSamplingRates`: optional level-specific sampling overrides
 - `Sampler`: optional custom sampling function (full control)
 - `OperationPolicies`: optional per-domain level/sampling policy for non-HTTP operations; domain sampling overrides generic level/default sampling
-- `Message`: final log message (defaults to `request_completed` for HTTP and `operation_completed` for non-HTTP)
+- `Message`: final log message (defaults to `hc.DefaultMessage` for HTTP and `hc.DefaultOperationMessage` for non-HTTP)
 
 Notes:
 
@@ -190,6 +190,17 @@ func checkoutHandler(w http.ResponseWriter, r *http.Request) {
 ```
 
 Passing an empty string leaves the event on the configured default message.
+
+Errors are recorded as structured metadata:
+
+```json
+{
+  "error": {
+    "message": "checkout failed",
+    "type": "*errors.errorString"
+  }
+}
+```
 
 ### Sampling Customization
 
@@ -300,6 +311,8 @@ func runJob(cfg hc.Config) (err error) {
 - `adapter/zap`
 - `adapter/zerolog`
 
+All adapters expose `NewWithOptions` plus `SinkOptions{DeterministicOrder: true}` when you need stable field ordering.
+
 ## More Examples
 
 <details>
@@ -313,14 +326,14 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	hc "github.com/happytoolin/happycontext"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
 	stdhc "github.com/happytoolin/happycontext/integration/std"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
 
 	mux := http.NewServeMux()
@@ -346,14 +359,14 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	hc "github.com/happytoolin/happycontext"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
 	ginhc "github.com/happytoolin/happycontext/integration/gin"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
 	r := gin.New()
 	r.Use(ginhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
@@ -379,14 +392,14 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	hc "github.com/happytoolin/happycontext"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
 	fiberhc "github.com/happytoolin/happycontext/integration/fiber"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
 	app := fiber.New()
 	app.Use(fiberhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
@@ -412,14 +425,14 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	hc "github.com/happytoolin/happycontext"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
 	fiberv3hc "github.com/happytoolin/happycontext/integration/fiberv3"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
 	app := fiber.New()
 	app.Use(fiberv3hc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
@@ -444,15 +457,15 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
+	hc "github.com/happytoolin/happycontext"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
 	echohc "github.com/happytoolin/happycontext/integration/echo"
 	"github.com/labstack/echo/v4"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
 	e := echo.New()
 	e.Use(echohc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
@@ -476,15 +489,15 @@ package main
 import (
 	"net/http"
 
-	"github.com/happytoolin/happycontext"
-	zapadapter "github.com/happytoolin/happycontext/adapter/zap"
+	hc "github.com/happytoolin/happycontext"
+	zaphc "github.com/happytoolin/happycontext/adapter/zap"
 	stdhc "github.com/happytoolin/happycontext/integration/std"
 	"go.uber.org/zap"
 )
 
 func main() {
 	logger := zap.NewExample()
-	sink := zapadapter.New(logger)
+	sink := zaphc.New(logger)
 	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
 
 	mux := http.NewServeMux()
@@ -509,15 +522,15 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/happytoolin/happycontext"
-	zerologadapter "github.com/happytoolin/happycontext/adapter/zerolog"
+	hc "github.com/happytoolin/happycontext"
+	zerologhc "github.com/happytoolin/happycontext/adapter/zerolog"
 	stdhc "github.com/happytoolin/happycontext/integration/std"
 	"github.com/rs/zerolog"
 )
 
 func main() {
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
-	sink := zerologadapter.New(&logger)
+	sink := zerologhc.New(&logger)
 	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
 
 	mux := http.NewServeMux()

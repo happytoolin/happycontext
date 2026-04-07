@@ -63,7 +63,7 @@ func BenchmarkEventSnapshot(b *testing.B) {
 	for _, n := range []int{8, 32, 128} {
 		b.Run("fields_"+strconv.Itoa(n), func(b *testing.B) {
 			ctx, _ := hc.NewContext(context.Background())
-			for i := 0; i < n; i++ {
+			for i := range n {
 				hc.Add(ctx, "k"+strconv.Itoa(i), i)
 			}
 
@@ -208,7 +208,7 @@ func BenchmarkOperationLifecycle(b *testing.B) {
 
 func buildBenchmarkFields(n int) map[string]any {
 	fields := make(map[string]any, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		fields["k"+strconv.Itoa(i)] = i
 	}
 	return fields

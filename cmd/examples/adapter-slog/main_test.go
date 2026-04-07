@@ -9,15 +9,15 @@ import (
 	"testing"
 
 	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
-	stdhappycontext "github.com/happytoolin/happycontext/integration/std"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
+	stdhc "github.com/happytoolin/happycontext/integration/std"
 )
 
 func TestAdapterSlogMiddleware(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	sink := slogadapter.New(logger)
-	mw := stdhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1, Message: "request handled"})
+	sink := sloghc.New(logger)
+	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1, Message: "request handled"})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {

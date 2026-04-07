@@ -10,16 +10,16 @@ import (
 	"time"
 
 	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
-	stdhappycontext "github.com/happytoolin/happycontext/integration/std"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
+	stdhc "github.com/happytoolin/happycontext/integration/std"
 )
 
 func TestSamplingInbuiltMiddleware(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
-	mw := stdhappycontext.Middleware(hc.Config{
+	mw := stdhc.Middleware(hc.Config{
 		Sink: sink,
 		Sampler: hc.ChainSampler(
 			hc.RateSampler(0.05),

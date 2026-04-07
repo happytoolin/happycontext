@@ -5,15 +5,15 @@ import (
 	"net/http"
 
 	"github.com/happytoolin/happycontext"
-	zapadapter "github.com/happytoolin/happycontext/adapter/zap"
-	stdhappycontext "github.com/happytoolin/happycontext/integration/std"
+	zaphc "github.com/happytoolin/happycontext/adapter/zap"
+	stdhc "github.com/happytoolin/happycontext/integration/std"
 	"go.uber.org/zap"
 )
 
 func main() {
 	logger := zap.NewExample()
-	sink := zapadapter.New(logger)
-	mw := stdhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
+	sink := zaphc.New(logger)
+	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {

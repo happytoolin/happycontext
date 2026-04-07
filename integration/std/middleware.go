@@ -1,4 +1,4 @@
-package stdhappycontext
+package stdhc
 
 import (
 	"io"

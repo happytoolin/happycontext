@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/happytoolin/happycontext"
-	zerologadapter "github.com/happytoolin/happycontext/adapter/zerolog"
+	zerologhc "github.com/happytoolin/happycontext/adapter/zerolog"
 	"github.com/rs/zerolog"
 )
 
@@ -14,7 +14,7 @@ func TestZerologAdapterWritesStructuredLogs(t *testing.T) {
 	var buf bytes.Buffer
 	logger := zerolog.New(&buf)
 
-	sink := zerologadapter.New(&logger)
+	sink := zerologhc.New(&logger)
 	if sink == nil {
 		t.Fatal("expected sink to be created")
 	}
@@ -36,7 +36,7 @@ func TestZerologAdapterWritesStructuredLogs(t *testing.T) {
 }
 
 func TestZerologAdapterWithNilLogger(t *testing.T) {
-	sink := zerologadapter.New(nil)
+	sink := zerologhc.New(nil)
 	if sink == nil {
 		t.Fatal("expected sink to be created even with nil logger")
 	}
@@ -51,7 +51,7 @@ func TestZerologAdapterAllLevels(t *testing.T) {
 	for _, level := range levels {
 		var buf bytes.Buffer
 		logger := zerolog.New(&buf)
-		sink := zerologadapter.New(&logger)
+		sink := zerologhc.New(&logger)
 
 		sink.Write(level, "level test", map[string]any{"level": string(level)})
 

@@ -9,20 +9,20 @@ import (
 	"time"
 
 	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
-	workerhappycontext "github.com/happytoolin/happycontext/integration/worker"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
+	workerhc "github.com/happytoolin/happycontext/integration/worker"
 )
 
 func TestWorkerJobExecution(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 	cfg := hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}
 
-	meta := workerhappycontext.JobMeta{
+	meta := workerhc.JobMeta{
 		Name:        "billing.reconcile",
 		ID:          "job_8472",
 		Queue:       "nightly",
@@ -52,7 +52,7 @@ func TestWorkerJobExecution(t *testing.T) {
 
 	t.Run("job with different metadata", func(t *testing.T) {
 		buf.Reset()
-		customMeta := workerhappycontext.JobMeta{
+		customMeta := workerhc.JobMeta{
 			Name:        "email.send",
 			ID:          "job_9999",
 			Queue:       "high-priority",
@@ -76,18 +76,18 @@ func TestWorkerJobExecution(t *testing.T) {
 func TestWorkerJobMetaValidation(t *testing.T) {
 	tests := []struct {
 		name string
-		meta workerhappycontext.JobMeta
+		meta workerhc.JobMeta
 	}{
 		{
 			name: "minimal metadata",
-			meta: workerhappycontext.JobMeta{
+			meta: workerhc.JobMeta{
 				Name: "minimal.job",
 				ID:   "job_min",
 			},
 		},
 		{
 			name: "full metadata",
-			meta: workerhappycontext.JobMeta{
+			meta: workerhc.JobMeta{
 				Name:        "full.job",
 				ID:          "job_full",
 				Queue:       "default",
@@ -100,7 +100,7 @@ func TestWorkerJobMetaValidation(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 	cfg := hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,

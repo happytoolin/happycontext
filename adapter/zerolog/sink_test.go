@@ -1,9 +1,10 @@
-package zerologadapter
+package zerologhc
 
 import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,7 +29,7 @@ func TestSinkWriteMapsLevelAndFields(t *testing.T) {
 	if payload["level"] != "warn" {
 		t.Fatalf("expected warn level, got %v", payload["level"])
 	}
-	if payload["message"] != "request_completed" {
+	if payload["message"] != hc.DefaultMessage {
 		t.Fatalf("expected default message, got %v", payload["message"])
 	}
 	if payload["http.status"] != float64(429) {
@@ -92,7 +93,7 @@ func TestSinkWriteMapsAllLevelsAndMessageBehavior(t *testing.T) {
 		{name: "debug", level: hc.LevelDebug, message: "m", wantLevel: "debug", wantMessage: "m"},
 		{name: "warn", level: hc.LevelWarn, message: "m", wantLevel: "warn", wantMessage: "m"},
 		{name: "error", level: hc.LevelError, message: "m", wantLevel: "error", wantMessage: "m"},
-		{name: "default", level: "UNKNOWN", message: "", wantLevel: "info", wantMessage: "request_completed"},
+		{name: "default", level: "UNKNOWN", message: "", wantLevel: "info", wantMessage: hc.DefaultMessage},
 	}
 
 	for _, tt := range tests {
@@ -113,6 +114,29 @@ func TestSinkWriteMapsAllLevelsAndMessageBehavior(t *testing.T) {
 				t.Fatalf("message = %v, want %v", payload["message"], tt.wantMessage)
 			}
 		})
+	}
+}
+
+func TestSinkDeterministicOrderSortsKeys(t *testing.T) {
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf)
+	sink := NewWithOptions(&logger, SinkOptions{DeterministicOrder: true})
+
+	sink.Write(hc.LevelInfo, "done", map[string]any{
+		"z": 1,
+		"a": 2,
+		"m": 3,
+	})
+
+	output := buf.String()
+	aIdx := strings.Index(output, `"a":2`)
+	mIdx := strings.Index(output, `"m":3`)
+	zIdx := strings.Index(output, `"z":1`)
+	if aIdx == -1 || mIdx == -1 || zIdx == -1 {
+		t.Fatalf("expected ordered keys in output, got %q", output)
+	}
+	if !(aIdx < mIdx && mIdx < zIdx) {
+		t.Fatalf("expected key order a,m,z in output, got %q", output)
 	}
 }
 

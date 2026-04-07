@@ -1,8 +1,10 @@
 package hc
 
 const (
-	defaultMessage          = "request_completed"
-	defaultOperationMessage = "operation_completed"
+	// DefaultMessage is the fallback final message for HTTP request events.
+	DefaultMessage = "request_completed"
+	// DefaultOperationMessage is the fallback final message for non-HTTP operation events.
+	DefaultOperationMessage = "operation_completed"
 )
 
 // Config controls event finalization behavior.

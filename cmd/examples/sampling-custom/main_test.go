@@ -13,7 +13,7 @@ import (
 func TestSamplingCustomSampler(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
 	// Create a custom sampler that keeps errors and slow requests
 	customSampler := func(in hc.SampleInput) bool {

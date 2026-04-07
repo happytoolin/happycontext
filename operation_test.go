@@ -67,8 +67,8 @@ func TestOperationEndSuccessWritesDefaultOperationMessage(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Message != defaultOperationMessage {
-		t.Fatalf("message = %q, want %q", events[0].Message, defaultOperationMessage)
+	if events[0].Message != DefaultOperationMessage {
+		t.Fatalf("message = %q, want %q", events[0].Message, DefaultOperationMessage)
 	}
 	if events[0].Level != LevelInfo {
 		t.Fatalf("level = %s, want INFO", events[0].Level)
@@ -358,8 +358,8 @@ func TestFinishOperationHTTPDefaultsAndSamplerCompatibility(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Message != defaultMessage {
-		t.Fatalf("message = %q, want %q", events[0].Message, defaultMessage)
+	if events[0].Message != DefaultMessage {
+		t.Fatalf("message = %q, want %q", events[0].Message, DefaultMessage)
 	}
 }
 

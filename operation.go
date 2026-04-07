@@ -160,6 +160,7 @@ func FinishOperation(cfg Config, in OperationFinish) bool {
 }
 
 func finishOperation(cfg Config, ctx context.Context, event *Event, start OperationStart, result operationResult) bool {
+	cfg = NormalizeConfig(cfg)
 	if cfg.Sink == nil || event == nil || ctx == nil {
 		return false
 	}
@@ -177,7 +178,7 @@ func finishOperation(cfg Config, ctx context.Context, event *Event, start Operat
 
 	autoLevel := levelFromPolicy(policy, outcome)
 	requestedLevel, hasRequestedLevel := GetLevel(ctx)
-	level := mergeLevelWithFloor(autoLevel, requestedLevel, hasRequestedLevel)
+	level := MergeLevelWithFloor(autoLevel, requestedLevel, hasRequestedLevel)
 
 	sampleIn := buildSampleInput(event, start, result, duration, outcome, level)
 	if !shouldWriteOperation(cfg, policy, sampleIn) {
@@ -218,10 +219,7 @@ func applyOperationStartFields(ctx context.Context, start OperationStart) {
 
 func annotateOperationFailures(ctx context.Context, err error, recovered any) {
 	if recovered != nil {
-		Add(ctx, "panic", map[string]any{
-			"type":  fmt.Sprintf("%T", recovered),
-			"value": fmt.Sprint(recovered),
-		})
+		Add(ctx, "panic", structuredPanicField(recovered))
 	}
 
 	switch {
@@ -351,9 +349,9 @@ func resolveMessage(configured string, domain Domain) string {
 		return configured
 	}
 	if normalizeDomain(domain) == DomainHTTP {
-		return defaultMessage
+		return DefaultMessage
 	}
-	return defaultOperationMessage
+	return DefaultOperationMessage
 }
 
 func resolveEventMessage(configured string, domain Domain, event *Event) string {
@@ -442,33 +440,6 @@ func levelFromPolicy(policy OperationPolicy, outcome Outcome) Level {
 		return panicLevel
 	default:
 		return failureLevel
-	}
-}
-
-func mergeLevelWithFloor(autoLevel, requestedLevel Level, hasRequested bool) Level {
-	if !hasRequested || !IsValidLevel(requestedLevel) {
-		return autoLevel
-	}
-	if LevelRank(requestedLevel) > LevelRank(autoLevel) {
-		return requestedLevel
-	}
-	return autoLevel
-}
-
-// LevelRank returns the numeric severity rank for a level.
-// Higher values indicate more severe levels.
-func LevelRank(level Level) int {
-	switch level {
-	case LevelDebug:
-		return 10
-	case LevelInfo:
-		return 20
-	case LevelWarn:
-		return 30
-	case LevelError:
-		return 40
-	default:
-		return 20
 	}
 }
 
