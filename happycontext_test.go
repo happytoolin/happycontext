@@ -60,3 +60,23 @@ func TestCommitUsesEventMessageWhenPresent(t *testing.T) {
 		t.Fatalf("message = %q, want %q", events[0].Message, "checkout_failed")
 	}
 }
+
+func TestCommitUsesOperationDefaultMessageForNonHTTPContext(t *testing.T) {
+	ctx, _ := BeginOperation(context.Background(), OperationStart{
+		Domain: DomainJob,
+		Name:   "cleanup",
+	})
+	sink := NewTestSink()
+
+	if !Commit(ctx, sink, LevelInfo) {
+		t.Fatal("expected commit to write")
+	}
+
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Message != DefaultOperationMessage {
+		t.Fatalf("message = %q, want %q", events[0].Message, DefaultOperationMessage)
+	}
+}

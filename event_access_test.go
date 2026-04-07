@@ -88,3 +88,26 @@ func TestEventFieldsMutation(t *testing.T) {
 		t.Errorf("fields[key2] = %v, want 42", fields["key2"])
 	}
 }
+
+func TestEventFieldsReturnsShallowCopy(t *testing.T) {
+	ctx, event := NewContext(context.Background())
+	nested := map[string]any{"inner": "value"}
+	Add(ctx, "top", "original", "nested", nested)
+
+	fields := EventFields(event)
+	fields["top"] = "mutated"
+	nestedFromSnapshot := fields["nested"].(map[string]any)
+	nestedFromSnapshot["inner"] = "changed"
+
+	freshFields := EventFields(event)
+	if freshFields["top"] != "original" {
+		t.Fatalf("top-level mutation leaked back into event: got %v", freshFields["top"])
+	}
+	nestedAgain, ok := freshFields["nested"].(map[string]any)
+	if !ok {
+		t.Fatalf("nested field type = %T, want map[string]any", freshFields["nested"])
+	}
+	if nestedAgain["inner"] != "changed" {
+		t.Fatalf("nested mutation should be shared by reference, got %v", nestedAgain["inner"])
+	}
+}

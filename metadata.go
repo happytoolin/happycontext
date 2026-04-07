@@ -8,10 +8,18 @@ import (
 
 func structuredErrorField(err error) map[string]any {
 	normalized := normalizeStructuredError(err)
-	return map[string]any{
+	field := map[string]any{
 		"message": normalized.Error(),
 		"type":    fmt.Sprintf("%T", normalized),
 	}
+
+	if cause := deepestUnwrappedError(err); cause != nil && cause != err {
+		normalizedCause := normalizeStructuredError(cause)
+		field["cause.message"] = normalizedCause.Error()
+		field["cause.type"] = fmt.Sprintf("%T", normalizedCause)
+	}
+
+	return field
 }
 
 func structuredPanicField(recovered any) map[string]any {
@@ -24,10 +32,6 @@ func structuredPanicField(recovered any) map[string]any {
 func normalizeStructuredError(err error) error {
 	if err == nil {
 		return nil
-	}
-
-	if unwrapped := deepestUnwrappedError(err); unwrapped != err {
-		return unwrapped
 	}
 
 	if message, ok := frameworkStyleErrorMessage(err); ok {

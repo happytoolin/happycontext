@@ -53,6 +53,17 @@ func TestStartOperationProvidesHandle(t *testing.T) {
 	}
 }
 
+func TestOperationNilAccessors(t *testing.T) {
+	var op *Operation
+
+	if op.Context() != nil {
+		t.Fatalf("nil operation context = %v, want nil", op.Context())
+	}
+	if op.Event() != nil {
+		t.Fatalf("nil operation event = %v, want nil", op.Event())
+	}
+}
+
 func TestOperationEndSuccessWritesDefaultOperationMessage(t *testing.T) {
 	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
 	sink := NewTestSink()

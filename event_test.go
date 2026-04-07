@@ -91,7 +91,7 @@ func (e *frameworkStyleError) Error() string {
 	return "code=500, message=" + e.Message
 }
 
-func TestSetErrorUnwrapsWrappedErrors(t *testing.T) {
+func TestSetErrorPreservesWrappedErrorContext(t *testing.T) {
 	e := newEvent()
 	e.setError(wrappedError{err: errors.New("boom")})
 
@@ -99,11 +99,17 @@ func TestSetErrorUnwrapsWrappedErrors(t *testing.T) {
 	if !ok {
 		t.Fatal("expected structured error field")
 	}
-	if errField["message"] != "boom" {
+	if errField["message"] != "wrapped: boom" {
 		t.Fatalf("unexpected error message: %v", errField["message"])
 	}
-	if errField["type"] != "*errors.errorString" {
+	if errField["type"] != "hc.wrappedError" {
 		t.Fatalf("unexpected error type: %v", errField["type"])
+	}
+	if errField["cause.message"] != "boom" {
+		t.Fatalf("unexpected cause message: %v", errField["cause.message"])
+	}
+	if errField["cause.type"] != "*errors.errorString" {
+		t.Fatalf("unexpected cause type: %v", errField["cause.type"])
 	}
 }
 

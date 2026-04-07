@@ -71,3 +71,27 @@ func TestIsValidOutcome(t *testing.T) {
 		})
 	}
 }
+
+func TestMergeLevelWithFloor(t *testing.T) {
+	tests := []struct {
+		name         string
+		auto         Level
+		requested    Level
+		hasRequested bool
+		want         Level
+	}{
+		{name: "no requested floor", auto: LevelInfo, requested: LevelWarn, hasRequested: false, want: LevelInfo},
+		{name: "invalid requested floor ignored", auto: LevelInfo, requested: Level("trace"), hasRequested: true, want: LevelInfo},
+		{name: "higher requested floor wins", auto: LevelInfo, requested: LevelWarn, hasRequested: true, want: LevelWarn},
+		{name: "lower requested floor does not downgrade", auto: LevelError, requested: LevelInfo, hasRequested: true, want: LevelError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := MergeLevelWithFloor(tt.auto, tt.requested, tt.hasRequested)
+			if got != tt.want {
+				t.Fatalf("MergeLevelWithFloor(%q, %q, %v) = %q, want %q", tt.auto, tt.requested, tt.hasRequested, got, tt.want)
+			}
+		})
+	}
+}
