@@ -21,6 +21,9 @@ type snapshot struct {
 	fields    map[string]any
 	startTime time.Time
 	hasError  bool
+	message   string
+	level     Level
+	hasLevel  bool
 }
 
 func newEvent() *Event {
@@ -127,6 +130,9 @@ func (e *Event) snapshot() snapshot {
 		fields:    maps.Clone(e.fields),
 		startTime: e.startTime,
 		hasError:  e.hasError,
+		message:   e.message,
+		level:     e.requestedLevel,
+		hasLevel:  e.hasRequestedLevel,
 	}
 }
 
