@@ -124,7 +124,7 @@ func TestSetErrorNormalizesFrameworkStyleErrors(t *testing.T) {
 	if errField["message"] != "boom" {
 		t.Fatalf("unexpected error message: %v", errField["message"])
 	}
-	if errField["type"] != "*errors.errorString" {
+	if errField["type"] != "*hc.frameworkStyleError" {
 		t.Fatalf("unexpected error type: %v", errField["type"])
 	}
 }

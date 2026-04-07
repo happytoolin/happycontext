@@ -161,7 +161,7 @@ Example output:
 - `SamplingRate`: `0` to `1` for healthy-request sampling
 - `LevelSamplingRates`: optional level-specific sampling overrides
 - `Sampler`: optional custom sampling function (full control)
-- `OperationPolicies`: optional per-domain level/sampling policy for non-HTTP operations; domain sampling overrides generic level/default sampling
+- `OperationPolicies`: optional per-domain level/sampling policy for all lifecycle domains, including HTTP and background operations; domain sampling overrides generic level/default sampling
 - `Message`: final log message (defaults to `hc.DefaultMessage` for HTTP and `hc.DefaultOperationMessage` for non-HTTP)
 
 Notes:

@@ -35,7 +35,6 @@ type comparableResult struct {
 	hasError     bool
 	hasPanic     bool
 	errorMessage string
-	errorType    string
 	panicType    string
 	panicValue   string
 }
@@ -108,6 +107,9 @@ func assertConsistency(t *testing.T, mode string, out runResult) {
 		}
 		if _, ok := out.event.Fields["error"].(map[string]any); !ok {
 			t.Fatalf("expected structured error field")
+		}
+		if _, errorType := errorDetails(out.event.Fields["error"]); errorType == "" {
+			t.Fatalf("expected concrete error type")
 		}
 	case "panic":
 		if !out.panicObserved {
@@ -344,7 +346,7 @@ func normalizeResult(t *testing.T, out runResult) comparableResult {
 	_, hasPanic := out.event.Fields["panic"].(map[string]any)
 	method, _ := out.event.Fields["http.method"].(string)
 	path, _ := out.event.Fields["http.path"].(string)
-	errorMessage, errorType := errorDetails(out.event.Fields["error"])
+	errorMessage, _ := errorDetails(out.event.Fields["error"])
 	panicType, panicValue := panicDetails(out.event.Fields["panic"])
 	return comparableResult{
 		level:        out.event.Level,
@@ -355,7 +357,6 @@ func normalizeResult(t *testing.T, out runResult) comparableResult {
 		hasError:     hasError,
 		hasPanic:     hasPanic,
 		errorMessage: errorMessage,
-		errorType:    errorType,
 		panicType:    panicType,
 		panicValue:   panicValue,
 	}

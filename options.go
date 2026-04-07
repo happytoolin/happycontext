@@ -24,7 +24,7 @@ type Config struct {
 	// Return true to keep and write the event.
 	Sampler Sampler
 
-	// OperationPolicies optionally customizes non-HTTP operation behavior by domain.
+	// OperationPolicies optionally customizes lifecycle behavior by domain.
 	// A domain SamplingRate overrides generic level/default sampling rates.
 	OperationPolicies map[Domain]OperationPolicy
 

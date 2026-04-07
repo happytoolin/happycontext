@@ -18,41 +18,48 @@ func NormalizeConfig(cfg Config) Config {
 	if len(cfg.OperationPolicies) > 0 {
 		normalized := make(map[Domain]OperationPolicy, len(cfg.OperationPolicies))
 		for domain, policy := range cfg.OperationPolicies {
-			d := domain
-			if d == "" {
-				d = defaultDomainValue
+			if domain == "" {
+				continue
 			}
-
-			if !IsValidLevel(policy.SuccessLevel) {
-				policy.SuccessLevel = LevelInfo
+			normalized[domain] = normalizeOperationPolicy(policy)
+		}
+		if aliasPolicy, ok := cfg.OperationPolicies[""]; ok {
+			if _, exists := normalized[defaultDomainValue]; !exists {
+				normalized[defaultDomainValue] = normalizeOperationPolicy(aliasPolicy)
 			}
-			if !IsValidLevel(policy.FailureLevel) {
-				policy.FailureLevel = LevelError
-			}
-			if !IsValidLevel(policy.PanicLevel) {
-				policy.PanicLevel = LevelError
-			}
-
-			if len(policy.OutcomeLevels) > 0 {
-				outcomeLevels := make(map[Outcome]Level, len(policy.OutcomeLevels))
-				for outcome, level := range policy.OutcomeLevels {
-					if !IsValidOutcome(outcome) || !IsValidLevel(level) {
-						continue
-					}
-					outcomeLevels[outcome] = level
-				}
-				policy.OutcomeLevels = outcomeLevels
-			}
-
-			if policy.SamplingRate != nil {
-				rate := clampRate(*policy.SamplingRate)
-				policy.SamplingRate = &rate
-			}
-
-			normalized[d] = policy
 		}
 		cfg.OperationPolicies = normalized
 	}
 
 	return cfg
+}
+
+func normalizeOperationPolicy(policy OperationPolicy) OperationPolicy {
+	if !IsValidLevel(policy.SuccessLevel) {
+		policy.SuccessLevel = LevelInfo
+	}
+	if !IsValidLevel(policy.FailureLevel) {
+		policy.FailureLevel = LevelError
+	}
+	if !IsValidLevel(policy.PanicLevel) {
+		policy.PanicLevel = LevelError
+	}
+
+	if len(policy.OutcomeLevels) > 0 {
+		outcomeLevels := make(map[Outcome]Level, len(policy.OutcomeLevels))
+		for outcome, level := range policy.OutcomeLevels {
+			if !IsValidOutcome(outcome) || !IsValidLevel(level) {
+				continue
+			}
+			outcomeLevels[outcome] = level
+		}
+		policy.OutcomeLevels = outcomeLevels
+	}
+
+	if policy.SamplingRate != nil {
+		rate := clampRate(*policy.SamplingRate)
+		policy.SamplingRate = &rate
+	}
+
+	return policy
 }

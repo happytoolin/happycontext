@@ -23,7 +23,11 @@ lint:
   staticcheck ./...
 
 test:
-  go test ./...
+  while IFS= read -r modfile; do \
+    moddir="$(dirname "$modfile")"; \
+    echo "== testing $moddir =="; \
+    (cd "$moddir" && go test ./...); \
+  done < <(printf '%s\n' go.mod && git ls-files '**/go.mod')
 
 coverage:
   go test ./... -cover

@@ -68,3 +68,32 @@ func TestNormalizeConfigClampsAndFiltersValues(t *testing.T) {
 		t.Fatalf("NormalizeConfig should not mutate caller sampling pointer, rate = %v", rate)
 	}
 }
+
+func TestNormalizeConfigCanonicalDomainOverridesAlias(t *testing.T) {
+	aliasRate := 0.25
+	canonicalRate := 0.75
+
+	cfg := NormalizeConfig(Config{
+		OperationPolicies: map[Domain]OperationPolicy{
+			"": {
+				SuccessLevel: LevelDebug,
+				SamplingRate: &aliasRate,
+			},
+			defaultDomainValue: {
+				SuccessLevel: LevelWarn,
+				SamplingRate: &canonicalRate,
+			},
+		},
+	})
+
+	if len(cfg.OperationPolicies) != 1 {
+		t.Fatalf("expected 1 canonical policy, got %d", len(cfg.OperationPolicies))
+	}
+	policy := cfg.OperationPolicies[defaultDomainValue]
+	if policy.SuccessLevel != LevelWarn {
+		t.Fatalf("SuccessLevel = %q, want %q", policy.SuccessLevel, LevelWarn)
+	}
+	if policy.SamplingRate == nil || *policy.SamplingRate != canonicalRate {
+		t.Fatalf("SamplingRate = %v, want %v", policy.SamplingRate, canonicalRate)
+	}
+}
