@@ -96,7 +96,7 @@ func finishOperation(cfg Config, ctx context.Context, event *Event, start Operat
 
 	policy := policyForDomain(cfg, start.Domain)
 
-	applyOperationStartFields(ctx, start)
+	applyOperationStartFieldsToEvent(event, start)
 	outcome := resolveOutcome(result)
 	annotateOperationFailures(event, result.Err, result.Recovered)
 
@@ -119,6 +119,10 @@ func finishOperation(cfg Config, ctx context.Context, event *Event, start Operat
 
 func applyOperationStartFields(ctx context.Context, start OperationStart) {
 	event := FromContext(ctx)
+	applyOperationStartFieldsToEvent(event, start)
+}
+
+func applyOperationStartFieldsToEvent(event *Event, start OperationStart) {
 	if event == nil {
 		return
 	}

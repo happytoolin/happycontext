@@ -15,7 +15,7 @@ func structuredErrorField(err error) map[string]any {
 		"type":    fmt.Sprintf("%T", err),
 	}
 
-	if cause := deepestUnwrappedError(err); cause != nil && cause != err {
+	if cause := deepestUnwrappedError(err); cause != nil && !sameError(cause, err) {
 		field["cause.message"] = structuredErrorMessage(cause)
 		field["cause.type"] = fmt.Sprintf("%T", cause)
 	}
@@ -44,13 +44,44 @@ func structuredErrorMessage(err error) string {
 
 func deepestUnwrappedError(err error) error {
 	current := err
-	for {
+	seen := make(map[error]struct{})
+	for depth := 0; current != nil; depth++ {
+		if depth >= 100 {
+			return current
+		}
+		if isComparableError(current) {
+			if _, ok := seen[current]; ok {
+				return current
+			}
+			seen[current] = struct{}{}
+		}
 		next := errors.Unwrap(current)
 		if next == nil {
 			return current
 		}
 		current = next
 	}
+	return nil
+}
+
+func sameError(a, b error) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if reflect.TypeOf(a) != reflect.TypeOf(b) {
+		return false
+	}
+	if !isComparableError(a) {
+		return false
+	}
+	return a == b
+}
+
+func isComparableError(err error) bool {
+	if err == nil {
+		return true
+	}
+	return reflect.TypeOf(err).Comparable()
 }
 
 func frameworkStyleErrorMessage(err error) (string, bool) {

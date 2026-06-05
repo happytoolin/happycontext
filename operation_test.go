@@ -398,6 +398,39 @@ func TestFinishOperationAppliesEventMessage(t *testing.T) {
 	}
 }
 
+func TestFinishOperationAppliesStartFieldsToProvidedEvent(t *testing.T) {
+	mismatchedCtx, _ := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "wrong"})
+	_, event := NewContext(context.Background())
+	sink := NewTestSink()
+
+	ok := FinishOperation(Config{Sink: sink, SamplingRate: 1}, OperationFinish{
+		Ctx:   mismatchedCtx,
+		Event: event,
+		Start: OperationStart{
+			Domain: DomainCLI,
+			Name:   "right",
+			ID:     "op_1",
+		},
+	})
+	if !ok {
+		t.Fatal("expected finish to write")
+	}
+
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Fields["op.domain"] != string(DomainCLI) {
+		t.Fatalf("op.domain = %v, want %s", events[0].Fields["op.domain"], DomainCLI)
+	}
+	if events[0].Fields["op.name"] != "right" {
+		t.Fatalf("op.name = %v, want right", events[0].Fields["op.name"])
+	}
+	if events[0].Fields["op.id"] != "op_1" {
+		t.Fatalf("op.id = %v, want op_1", events[0].Fields["op.id"])
+	}
+}
+
 func TestFinishOperationGuardPaths(t *testing.T) {
 	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
 	if FinishOperation(Config{}, OperationFinish{Ctx: ctx, Event: event}) {

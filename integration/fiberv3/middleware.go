@@ -53,6 +53,8 @@ func Middleware(cfg hc.Config) fiber.Handler {
 				if handlerErr := errorHandler(c, err); handlerErr != nil {
 					// Error handler failed; capture this as the final error
 					finalizeErr = handlerErr
+					err = handlerErr
+					return err
 				}
 			}
 			err = nil

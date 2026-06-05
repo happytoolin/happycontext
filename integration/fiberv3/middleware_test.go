@@ -217,6 +217,47 @@ func TestMiddlewareLogsStatusFromCustomFiberErrorHandler(t *testing.T) {
 	}
 }
 
+func TestMiddlewareReturnsCustomFiberErrorHandlerFailure(t *testing.T) {
+	handlerErr := errors.New("handler failed")
+	app := fiber.New(fiber.Config{
+		ErrorHandler: func(c fiber.Ctx, err error) error {
+			return handlerErr
+		},
+	})
+	sink := &memorySink{}
+	var upstreamErr error
+	app.Use(func(c fiber.Ctx) error {
+		upstreamErr = c.Next()
+		return upstreamErr
+	})
+	app.Use(Middleware(hc.Config{
+		Sink:         sink,
+		SamplingRate: 1,
+	}))
+	app.Get("/custom-err-failure", func(c fiber.Ctx) error {
+		return errors.New("boom")
+	})
+
+	if _, err := app.Test(httptest.NewRequest(http.MethodGet, "/custom-err-failure", nil)); err != nil {
+		t.Fatalf("fiber v3 request failed: %v", err)
+	}
+	if !errors.Is(upstreamErr, handlerErr) {
+		t.Fatalf("upstream error = %v, want %v", upstreamErr, handlerErr)
+	}
+
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	errField, ok := events[0].Fields["error"].(map[string]any)
+	if !ok {
+		t.Fatal("expected structured error field")
+	}
+	if errField["message"] != "handler failed" {
+		t.Fatalf("error message = %v, want handler failed", errField["message"])
+	}
+}
+
 type memoryEvent struct {
 	Level   hc.Level
 	Message string
