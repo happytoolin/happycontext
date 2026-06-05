@@ -135,7 +135,7 @@ func TestSinkDeterministicOrderSortsKeys(t *testing.T) {
 	if aIdx == -1 || mIdx == -1 || zIdx == -1 {
 		t.Fatalf("expected ordered keys in output, got %q", output)
 	}
-	if !(aIdx < mIdx && mIdx < zIdx) {
+	if aIdx >= mIdx || mIdx >= zIdx {
 		t.Fatalf("expected key order a,m,z in output, got %q", output)
 	}
 }

@@ -53,7 +53,8 @@ func BenchmarkRouter_std(b *testing.B) {
 	b.Run("normal_logging_slog_noop_handler_no_middleware", func(b *testing.B) {
 		logger := slog.New(noopSlogHandler{})
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			logger.InfoContext(r.Context(), "request_completed",
+			logger.InfoContext(
+				r.Context(), "request_completed",
 				slog.String("http.method", r.Method),
 				slog.String("http.path", r.URL.Path),
 				slog.Int("http.status", http.StatusNoContent),
@@ -71,7 +72,8 @@ func BenchmarkRouter_std(b *testing.B) {
 	b.Run("normal_logging_slog_json_no_middleware", func(b *testing.B) {
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			logger.InfoContext(r.Context(), "request_completed",
+			logger.InfoContext(
+				r.Context(), "request_completed",
 				slog.String("http.method", r.Method),
 				slog.String("http.path", r.URL.Path),
 				slog.Int("http.status", http.StatusNoContent),
@@ -89,7 +91,8 @@ func BenchmarkRouter_std(b *testing.B) {
 	b.Run("normal_logging_zap_nop_no_middleware", func(b *testing.B) {
 		logger := zap.NewNop()
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			logger.Info("request_completed",
+			logger.Info(
+				"request_completed",
 				zap.String("http.method", r.Method),
 				zap.String("http.path", r.URL.Path),
 				zap.Int("http.status", http.StatusNoContent),
@@ -145,7 +148,8 @@ func BenchmarkRouter_gin(b *testing.B) {
 		logger := slog.New(noopSlogHandler{})
 		r := gin.New()
 		r.GET("/orders/:id", func(c *gin.Context) {
-			logger.InfoContext(c.Request.Context(), "request_completed",
+			logger.InfoContext(
+				c.Request.Context(), "request_completed",
 				slog.String("http.method", c.Request.Method),
 				slog.String("http.path", c.Request.URL.Path),
 				slog.Int("http.status", http.StatusNoContent),
@@ -165,7 +169,8 @@ func BenchmarkRouter_gin(b *testing.B) {
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 		r := gin.New()
 		r.GET("/orders/:id", func(c *gin.Context) {
-			logger.InfoContext(c.Request.Context(), "request_completed",
+			logger.InfoContext(
+				c.Request.Context(), "request_completed",
 				slog.String("http.method", c.Request.Method),
 				slog.String("http.path", c.Request.URL.Path),
 				slog.Int("http.status", http.StatusNoContent),
@@ -185,7 +190,8 @@ func BenchmarkRouter_gin(b *testing.B) {
 		logger := zap.NewNop()
 		r := gin.New()
 		r.GET("/orders/:id", func(c *gin.Context) {
-			logger.Info("request_completed",
+			logger.Info(
+				"request_completed",
 				zap.String("http.method", c.Request.Method),
 				zap.String("http.path", c.Request.URL.Path),
 				zap.Int("http.status", http.StatusNoContent),
@@ -242,7 +248,8 @@ func BenchmarkRouter_echo(b *testing.B) {
 		logger := slog.New(noopSlogHandler{})
 		e := echo.New()
 		e.GET("/orders/:id", func(c echo.Context) error {
-			logger.InfoContext(c.Request().Context(), "request_completed",
+			logger.InfoContext(
+				c.Request().Context(), "request_completed",
 				slog.String("http.method", c.Request().Method),
 				slog.String("http.path", c.Request().URL.Path),
 				slog.Int("http.status", http.StatusNoContent),
@@ -262,7 +269,8 @@ func BenchmarkRouter_echo(b *testing.B) {
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 		e := echo.New()
 		e.GET("/orders/:id", func(c echo.Context) error {
-			logger.InfoContext(c.Request().Context(), "request_completed",
+			logger.InfoContext(
+				c.Request().Context(), "request_completed",
 				slog.String("http.method", c.Request().Method),
 				slog.String("http.path", c.Request().URL.Path),
 				slog.Int("http.status", http.StatusNoContent),
@@ -282,7 +290,8 @@ func BenchmarkRouter_echo(b *testing.B) {
 		logger := zap.NewNop()
 		e := echo.New()
 		e.GET("/orders/:id", func(c echo.Context) error {
-			logger.Info("request_completed",
+			logger.Info(
+				"request_completed",
 				zap.String("http.method", c.Request().Method),
 				zap.String("http.path", c.Request().URL.Path),
 				zap.Int("http.status", http.StatusNoContent),
@@ -338,7 +347,8 @@ func BenchmarkRouter_fiber(b *testing.B) {
 		logger := slog.New(noopSlogHandler{})
 		app := fiber.New()
 		app.Get("/orders/:id", func(c *fiber.Ctx) error {
-			logger.InfoContext(c.UserContext(), "request_completed",
+			logger.InfoContext(
+				c.UserContext(), "request_completed",
 				slog.String("http.method", c.Method()),
 				slog.String("http.path", c.Path()),
 				slog.Int("http.status", http.StatusNoContent),
@@ -357,7 +367,8 @@ func BenchmarkRouter_fiber(b *testing.B) {
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 		app := fiber.New()
 		app.Get("/orders/:id", func(c *fiber.Ctx) error {
-			logger.InfoContext(c.UserContext(), "request_completed",
+			logger.InfoContext(
+				c.UserContext(), "request_completed",
 				slog.String("http.method", c.Method()),
 				slog.String("http.path", c.Path()),
 				slog.Int("http.status", http.StatusNoContent),
@@ -376,7 +387,8 @@ func BenchmarkRouter_fiber(b *testing.B) {
 		logger := zap.NewNop()
 		app := fiber.New()
 		app.Get("/orders/:id", func(c *fiber.Ctx) error {
-			logger.Info("request_completed",
+			logger.Info(
+				"request_completed",
 				zap.String("http.method", c.Method()),
 				zap.String("http.path", c.Path()),
 				zap.Int("http.status", http.StatusNoContent),
@@ -430,7 +442,8 @@ func BenchmarkRouter_fiberv3(b *testing.B) {
 		logger := slog.New(noopSlogHandler{})
 		app := fiberv3.New()
 		app.Get("/orders/:id", func(c fiberv3.Ctx) error {
-			logger.InfoContext(c.Context(), "request_completed",
+			logger.InfoContext(
+				c.Context(), "request_completed",
 				slog.String("http.method", c.Method()),
 				slog.String("http.path", c.Path()),
 				slog.Int("http.status", http.StatusNoContent),
@@ -449,7 +462,8 @@ func BenchmarkRouter_fiberv3(b *testing.B) {
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 		app := fiberv3.New()
 		app.Get("/orders/:id", func(c fiberv3.Ctx) error {
-			logger.InfoContext(c.Context(), "request_completed",
+			logger.InfoContext(
+				c.Context(), "request_completed",
 				slog.String("http.method", c.Method()),
 				slog.String("http.path", c.Path()),
 				slog.Int("http.status", http.StatusNoContent),
@@ -468,7 +482,8 @@ func BenchmarkRouter_fiberv3(b *testing.B) {
 		logger := zap.NewNop()
 		app := fiberv3.New()
 		app.Get("/orders/:id", func(c fiberv3.Ctx) error {
-			logger.Info("request_completed",
+			logger.Info(
+				"request_completed",
 				zap.String("http.method", c.Method()),
 				zap.String("http.path", c.Path()),
 				zap.Int("http.status", http.StatusNoContent),

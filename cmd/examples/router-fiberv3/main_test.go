@@ -63,8 +63,13 @@ func TestRouterFiberv3Middleware(t *testing.T) {
 		if resp.StatusCode != http.StatusOK {
 			t.Errorf("expected status 200, got %d", resp.StatusCode)
 		}
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("close body: %v", err)
+		}
 		if string(body) != "OK" {
 			t.Errorf("expected body 'OK', got %q", string(body))
 		}
