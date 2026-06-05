@@ -33,5 +33,5 @@ go.work.sum
 # .vscode/
 
 .desloppify/
-
+.agents/
 .gocache/

@@ -3,7 +3,7 @@
   "release-type": "go",
   "packages": {
     ".": {
-      "package-name": "happycontext",
+      "include-component-in-tag": false,
       "include-v-in-tag": true,
       "changelog-path": "CHANGELOG.md"
     }

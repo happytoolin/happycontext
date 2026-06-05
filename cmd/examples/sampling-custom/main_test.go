@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/happytoolin/happycontext"
-	"github.com/happytoolin/happycontext/adapter/slog"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
 )
 
 func TestSamplingCustomSampler(t *testing.T) {

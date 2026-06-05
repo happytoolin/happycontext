@@ -158,7 +158,7 @@ Example output:
 `hc.Config` gives you the core controls:
 
 - `Sink`: destination logger adapter (required to emit events)
-- `SamplingRate`: `0` to `1` for healthy-request sampling
+- `SamplingRate`: `0` drops healthy events, `1` keeps all healthy events
 - `LevelSamplingRates`: optional level-specific sampling overrides
 - `Sampler`: optional custom sampling function (full control)
 - `OperationPolicies`: optional per-domain level/sampling policy for all lifecycle domains, including HTTP and background operations; domain sampling overrides generic level/default sampling

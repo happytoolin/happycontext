@@ -1,4 +1,4 @@
-package zaphc
+package zapadapter
 
 import (
 	"sort"

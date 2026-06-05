@@ -1,4 +1,4 @@
-package stdhc
+package stdhappycontext
 
 import (
 	"bufio"

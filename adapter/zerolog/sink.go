@@ -1,4 +1,4 @@
-package zerologhc
+package zerologadapter
 
 import (
 	"sort"

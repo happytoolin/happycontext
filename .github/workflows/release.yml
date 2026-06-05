@@ -23,3 +23,91 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: .release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      - name: Checkout
+        if: ${{ steps.release.outputs.releases_created == 'true' }}
+        uses: actions/checkout@v6.0.2
+
+      - name: Configure git
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync lockstep modules
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+
+          ./scripts/sync-lockstep-release.sh "$RELEASE_TAG"
+
+          if git diff --quiet; then
+            echo "lockstep modules already aligned"
+            exit 0
+          fi
+
+          git add \
+            adapter/slog/go.mod \
+            adapter/zap/go.mod \
+            adapter/zerolog/go.mod \
+            integration/echo/go.mod \
+            integration/fiber/go.mod \
+            integration/fiberv3/go.mod \
+            integration/gin/go.mod \
+            integration/std/go.mod \
+            integration/worker/go.mod \
+            bench/go.mod \
+            cmd/examples/go.mod
+
+          git commit -m "chore: sync lockstep modules for ${RELEASE_TAG}"
+          git push origin HEAD:main
+
+      - name: Publish lockstep module releases
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          ./scripts/publish-lockstep-release.sh --push --github-releases "$RELEASE_TAG"
+
+      - name: Refresh Go module indexes
+        if: ${{ steps.release.outputs.releases_created == 'true' }}
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+
+          refresh_module() {
+            local module_path="$1"
+            local version_tag="$2"
+            local encoded_module="${module_path//\//%2F}"
+
+            echo "== syncing ${module_path}@${version_tag} =="
+
+            for url in \
+              "https://proxy.golang.org/${encoded_module}/@v/${version_tag}.info" \
+              "https://proxy.golang.org/${encoded_module}/@latest" \
+              "https://pkg.go.dev/${module_path}@${version_tag}"
+            do
+              echo "request: $url"
+              curl -fsSIL --retry 3 --retry-delay 2 "$url" >/dev/null || \
+                echo "non-fatal: could not refresh $url"
+            done
+          }
+
+          version_tag="${RELEASE_TAG#*/}"
+
+          while IFS= read -r modfile; do
+            module_path="$(sed -n 's/^module //p' "$modfile" | head -n1)"
+            if [[ -z "$module_path" ]]; then
+              continue
+            fi
+
+            refresh_module "$module_path" "$version_tag"
+          done < <(printf '%s\n' go.mod && git ls-files 'adapter/*/go.mod' 'integration/*/go.mod')
