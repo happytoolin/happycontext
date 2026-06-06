@@ -10,6 +10,35 @@
   * Removed `Add2`
   * `Add` now accepts variadic key/value pairs: `Add(ctx, "k1", v1, "k2", v2, ...)`
 
+## [0.2.4](https://github.com/happytoolin/happycontext/compare/v0.2.3...v0.2.4) (2026-04-04)
+
+
+### Miscellaneous Chores
+
+* release 0.2.4 ([4719b58](https://github.com/happytoolin/happycontext/commit/4719b58222ec6b3f38a2a361bb3b48193ae6357f))
+
+## [0.2.3](https://github.com/happytoolin/happycontext/compare/v0.2.2...v0.2.3) (2026-04-04)
+
+
+### Bug Fixes
+
+* repair root release-please tag matching ([590dcce](https://github.com/happytoolin/happycontext/commit/590dccec72e91c5c444c46c310cc5158c37817fa))
+* stop root package-name from shadowing root tags ([68fb797](https://github.com/happytoolin/happycontext/commit/68fb7973f126eb268f3268af22fc4a382b77960f))
+
+## [0.2.2](https://github.com/happytoolin/happycontext/compare/v0.2.1...v0.2.2) (2026-04-04)
+
+
+### Bug Fixes
+
+* align workspace module requirements ([50f82b3](https://github.com/happytoolin/happycontext/commit/50f82b36d02769e80445c6d1a7919cb086929a4c))
+
+## [0.2.1](https://github.com/happytoolin/happycontext/compare/v0.2.0...v0.2.1) (2026-04-04)
+
+
+### Miscellaneous Chores
+
+* fix go module release tagging ([8e318cb](https://github.com/happytoolin/happycontext/commit/8e318cbc4d544eec2da3a012b005ea7ebe967533))
+
 ## [0.2.0](https://github.com/happytoolin/happycontext/compare/happycontext-v0.1.0...happycontext-v0.2.0) (2026-04-03)
 
 
