@@ -46,6 +46,7 @@ done < <(
     integration/fiberv3/go.mod \
     integration/gin/go.mod \
     integration/std/go.mod \
+    integration/worker/go.mod \
     bench/go.mod \
     cmd/examples/go.mod
 )

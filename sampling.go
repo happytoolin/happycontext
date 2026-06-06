@@ -6,8 +6,14 @@ import (
 	"time"
 )
 
-// SampleInput contains finalized request data used for sampling decisions.
+// SampleInput contains finalized operation data used for sampling decisions.
 type SampleInput struct {
+	Domain    Domain
+	Operation string
+	Outcome   Outcome
+	Code      int
+
+	// HTTP compatibility fields. For non-HTTP operations, these may be empty/zero.
 	Method     string
 	Path       string
 	StatusCode int
@@ -61,7 +67,7 @@ func AlwaysSampler() Sampler {
 func KeepErrors() SamplerMiddleware {
 	return func(next Sampler) Sampler {
 		return func(in SampleInput) bool {
-			return in.HasError || in.StatusCode >= 500 || next(in)
+			return in.HasError || in.Code >= 500 || in.StatusCode >= 500 || next(in)
 		}
 	}
 }
@@ -117,6 +123,16 @@ func RateSampler(rate float64) Sampler {
 			return nextSampleFloat64() < rate
 		}
 	}
+}
+
+func shouldSample(rate float64) bool {
+	if rate <= 0 {
+		return false
+	}
+	if rate >= 1 {
+		return true
+	}
+	return nextSampleFloat64() < rate
 }
 
 func nextSampleFloat64() float64 {

@@ -12,6 +12,7 @@ default:
 # Maintain clean dependencies.
 tidy:
   go fmt ./...
+  go fix ./...
   go mod tidy
   gofumpt -l -w .
 
@@ -22,7 +23,11 @@ lint:
   staticcheck ./...
 
 test:
-  go test ./...
+  while IFS= read -r modfile; do \
+    moddir="$(dirname "$modfile")"; \
+    echo "== testing $moddir =="; \
+    (cd "$moddir" && go test ./...); \
+  done < <(printf '%s\n' go.mod && git ls-files '**/go.mod')
 
 coverage:
   go test ./... -cover
@@ -35,6 +40,7 @@ coverage:
   (cd integration/echo && go test ./... -cover)
   (cd integration/fiber && go test ./... -cover)
   (cd integration/fiberv3 && go test ./... -cover)
+  (cd integration/worker && go test ./... -cover)
   (cd cmd/examples && go test ./... -cover)
 
 bench:

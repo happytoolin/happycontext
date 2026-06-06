@@ -40,8 +40,6 @@ func Middleware(cfg Config) func(http.Handler) http.Handler {
 				common.FinalizeRequest(cfg, common.FinalizeInput{
 					Ctx:        ctx,
 					Event:      event,
-					Method:     req.Method,
-					Path:       req.URL.Path,
 					Route:      req.Pattern,
 					StatusCode: status,
 					Recovered:  recovered,

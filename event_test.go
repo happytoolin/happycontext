@@ -1,6 +1,7 @@
 package hc
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"strconv"
@@ -14,7 +15,7 @@ func TestEventConcurrentAdd(t *testing.T) {
 
 	wg := sync.WaitGroup{}
 	wg.Add(n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		go func(i int) {
 			defer wg.Done()
 			e.addKV("k"+strconv.Itoa(i), i)
@@ -43,6 +44,9 @@ func TestSetError(t *testing.T) {
 	if errField["message"] != "x" {
 		t.Fatalf("unexpected error message: %v", errField["message"])
 	}
+	if errField["type"] != "*errors.errorString" {
+		t.Fatalf("unexpected error type: %v", errField["type"])
+	}
 }
 
 func TestSetErrorNilDoesNothing(t *testing.T) {
@@ -50,6 +54,78 @@ func TestSetErrorNilDoesNothing(t *testing.T) {
 	e.setError(nil)
 	if e.hasErrorValue() {
 		t.Fatalf("expected HasError=false")
+	}
+}
+
+func TestSetErrorUsesConsistentTypeMetadata(t *testing.T) {
+	e := newEvent()
+	e.setError(context.Canceled)
+
+	errField, ok := e.snapshot().fields["error"].(map[string]any)
+	if !ok {
+		t.Fatal("expected structured error field")
+	}
+	if errField["type"] != "*errors.errorString" {
+		t.Fatalf("unexpected error type: %v", errField["type"])
+	}
+}
+
+type wrappedError struct {
+	err error
+}
+
+func (e wrappedError) Error() string {
+	return "wrapped: " + e.err.Error()
+}
+
+func (e wrappedError) Unwrap() error {
+	return e.err
+}
+
+type frameworkStyleError struct {
+	Code    int
+	Message string
+}
+
+func (e *frameworkStyleError) Error() string {
+	return "code=500, message=" + e.Message
+}
+
+func TestSetErrorPreservesWrappedErrorContext(t *testing.T) {
+	e := newEvent()
+	e.setError(wrappedError{err: errors.New("boom")})
+
+	errField, ok := e.snapshot().fields["error"].(map[string]any)
+	if !ok {
+		t.Fatal("expected structured error field")
+	}
+	if errField["message"] != "wrapped: boom" {
+		t.Fatalf("unexpected error message: %v", errField["message"])
+	}
+	if errField["type"] != "hc.wrappedError" {
+		t.Fatalf("unexpected error type: %v", errField["type"])
+	}
+	if errField["cause.message"] != "boom" {
+		t.Fatalf("unexpected cause message: %v", errField["cause.message"])
+	}
+	if errField["cause.type"] != "*errors.errorString" {
+		t.Fatalf("unexpected cause type: %v", errField["cause.type"])
+	}
+}
+
+func TestSetErrorNormalizesFrameworkStyleErrors(t *testing.T) {
+	e := newEvent()
+	e.setError(&frameworkStyleError{Code: 500, Message: "boom"})
+
+	errField, ok := e.snapshot().fields["error"].(map[string]any)
+	if !ok {
+		t.Fatal("expected structured error field")
+	}
+	if errField["message"] != "boom" {
+		t.Fatalf("unexpected error message: %v", errField["message"])
+	}
+	if errField["type"] != "*hc.frameworkStyleError" {
+		t.Fatalf("unexpected error type: %v", errField["type"])
 	}
 }
 

@@ -44,8 +44,6 @@ func TestFinalizeRequestRespectsSamplingDrop(t *testing.T) {
 	FinalizeRequest(cfg, FinalizeInput{
 		Ctx:        ctx,
 		Event:      event,
-		Method:     "GET",
-		Path:       "/x",
 		StatusCode: 200,
 	})
 
@@ -62,8 +60,6 @@ func TestFinalizeRequestMarksErrorAndRoute(t *testing.T) {
 	FinalizeRequest(cfg, FinalizeInput{
 		Ctx:        ctx,
 		Event:      event,
-		Method:     "POST",
-		Path:       "/payments",
 		Route:      "/payments/:id",
 		StatusCode: 200,
 		Err:        errors.New("handler failed"),
@@ -92,8 +88,6 @@ func TestFinalizeRequestPanicAddsMetadata(t *testing.T) {
 	FinalizeRequest(cfg, FinalizeInput{
 		Ctx:        ctx,
 		Event:      event,
-		Method:     "GET",
-		Path:       "/panic",
 		StatusCode: 500,
 		Recovered:  "boom",
 	})
@@ -119,8 +113,6 @@ func TestFinalizeRequestAppliesRequestedLevelFloor(t *testing.T) {
 	FinalizeRequest(cfg, FinalizeInput{
 		Ctx:        ctx,
 		Event:      event,
-		Method:     "GET",
-		Path:       "/x",
 		StatusCode: 200,
 	})
 
@@ -142,8 +134,6 @@ func TestFinalizeRequestAppliesEventMessage(t *testing.T) {
 	FinalizeRequest(cfg, FinalizeInput{
 		Ctx:        ctx,
 		Event:      event,
-		Method:     "GET",
-		Path:       "/x",
 		StatusCode: 200,
 	})
 
@@ -165,8 +155,6 @@ func TestFinalizeRequestFallsBackToConfigMessageWhenEventMessageEmpty(t *testing
 	FinalizeRequest(cfg, FinalizeInput{
 		Ctx:        ctx,
 		Event:      event,
-		Method:     "GET",
-		Path:       "/x",
 		StatusCode: 200,
 	})
 

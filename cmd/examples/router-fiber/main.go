@@ -7,16 +7,16 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
-	fiberhappycontext "github.com/happytoolin/happycontext/integration/fiber"
+	sloghc "github.com/happytoolin/happycontext/adapter/slog"
+	fiberhc "github.com/happytoolin/happycontext/integration/fiber"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := slogadapter.New(logger)
+	sink := sloghc.New(logger)
 
 	app := fiber.New()
-	app.Use(fiberhappycontext.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
 	app.Get("/users/:id", func(c *fiber.Ctx) error {
 		ctx := c.UserContext()
 		id := c.Params("id")
