@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.3.0](https://github.com/happytoolin/happycontext/compare/v0.2.4...v0.3.0) (2026-06-06)
+
 ### Breaking Changes
 
 * `EventFields` now returns a shallow top-level copy. Nested maps/slices are shared references.
@@ -9,6 +11,18 @@
   * Removed `AddMap`
   * Removed `Add2`
   * `Add` now accepts variadic key/value pairs: `Add(ctx, "k1", v1, "k2", v2, ...)`
+
+### Features
+
+* add generic operation lifecycle and worker integration ([eec5979](https://github.com/happytoolin/happycontext/commit/eec597988a8a1bd25c6815b83f1f56bd8795923d))
+* add stateful and deferred operation handle APIs ([5043b2a](https://github.com/happytoolin/happycontext/commit/5043b2a27a549fe2a994325c3f9ff258a812f070), [0a551a3](https://github.com/happytoolin/happycontext/commit/0a551a3aa23af91ab6e7fed5c2b1515a657fe161))
+* add operation policies, structured lifecycle metadata, and event accessors ([3da301a](https://github.com/happytoolin/happycontext/commit/3da301a16d73b3082da4e8d41bd81b9d6976bdbe), [6754177](https://github.com/happytoolin/happycontext/commit/6754177ca1a505c5945401b4e7dec80cc1838200))
+
+### Bug Fixes
+
+* harden lifecycle edge cases ([5b811f2](https://github.com/happytoolin/happycontext/commit/5b811f271d221517735bb7a5ab59924e156c37d1))
+* preserve package compatibility ([f5963f1](https://github.com/happytoolin/happycontext/commit/f5963f109bfd7cd88b579e30be50caef4f909f93))
+* fix operation sampling precedence ([ad9afba](https://github.com/happytoolin/happycontext/commit/ad9afbadb607d25b4f8fad961829f82b8810af87))
 
 ## [0.2.4](https://github.com/happytoolin/happycontext/compare/v0.2.3...v0.2.4) (2026-04-04)
 
