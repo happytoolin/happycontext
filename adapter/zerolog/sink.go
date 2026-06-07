@@ -145,6 +145,17 @@ func (z *Sink) WriteFieldsWithCompletion(level hc.Level, message string, fields 
 	if message == "" {
 		message = hc.DefaultMessage
 	}
+	if z.deterministicOrder {
+		m := mapFromFields(fields)
+		if m == nil {
+			m = make(map[string]any, 3)
+		}
+		m["duration_ms"] = durationMS
+		m["op.code"] = code
+		m["op.outcome"] = string(outcome)
+		z.Write(level, message, m)
+		return
+	}
 
 	for _, field := range fields {
 		event = appendField(event, field.Key, field.Value)
@@ -163,6 +174,17 @@ func (z *Sink) WriteBorrowedFieldsWithCompletion(level hc.Level, message string,
 	}
 	if message == "" {
 		message = hc.DefaultMessage
+	}
+	if z.deterministicOrder {
+		m := mapFromBorrowedFields(fields)
+		if m == nil {
+			m = make(map[string]any, 3)
+		}
+		m["duration_ms"] = durationMS
+		m["op.code"] = code
+		m["op.outcome"] = string(outcome)
+		z.Write(level, message, m)
+		return
 	}
 
 	for _, field := range fields {
@@ -183,6 +205,18 @@ func (z *Sink) WriteFieldsWithOperationCompletion(level hc.Level, message string
 	if message == "" {
 		message = hc.DefaultMessage
 	}
+	if z.deterministicOrder {
+		m := mapFromFields(fields)
+		if m == nil {
+			m = make(map[string]any, 9)
+		}
+		addOperationFieldsToMap(m, start)
+		m["duration_ms"] = durationMS
+		m["op.code"] = code
+		m["op.outcome"] = string(outcome)
+		z.Write(level, message, m)
+		return
+	}
 
 	for _, field := range fields {
 		event = appendField(event, field.Key, field.Value)
@@ -202,6 +236,18 @@ func (z *Sink) WriteBorrowedFieldsWithOperationCompletion(level hc.Level, messag
 	}
 	if message == "" {
 		message = hc.DefaultMessage
+	}
+	if z.deterministicOrder {
+		m := mapFromBorrowedFields(fields)
+		if m == nil {
+			m = make(map[string]any, 9)
+		}
+		addOperationFieldsToMap(m, start)
+		m["duration_ms"] = durationMS
+		m["op.code"] = code
+		m["op.outcome"] = string(outcome)
+		z.Write(level, message, m)
+		return
 	}
 
 	for _, field := range fields {
@@ -229,6 +275,23 @@ func appendOperationFields(event *zerolog.Event, start hc.OperationStart) *zerol
 		event = event.Int("op.max_attempts", start.MaxAttempts)
 	}
 	return event
+}
+
+func addOperationFieldsToMap(m map[string]any, start hc.OperationStart) {
+	m["op.domain"] = string(start.Domain)
+	m["op.name"] = start.Name
+	if start.ID != "" {
+		m["op.id"] = start.ID
+	}
+	if start.Source != "" {
+		m["op.source"] = start.Source
+	}
+	if start.Attempt > 0 {
+		m["op.attempt"] = start.Attempt
+	}
+	if start.MaxAttempts > 0 {
+		m["op.max_attempts"] = start.MaxAttempts
+	}
 }
 
 func (z *Sink) newEvent(level hc.Level) *zerolog.Event {

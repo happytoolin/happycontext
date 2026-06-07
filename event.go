@@ -469,18 +469,6 @@ func (e *Event) promoteFieldMapLocked() {
 	e.fieldList = nil
 }
 
-func (e *Event) fieldValueLocked(key string) any {
-	if e.fieldMap != nil {
-		return e.fieldMap[key]
-	}
-	for i := range e.fieldList {
-		if e.fieldList[i].Key == key {
-			return e.fieldList[i].Any()
-		}
-	}
-	return nil
-}
-
 func (e *Event) stringFieldValueLocked(key string) (string, bool) {
 	if e.fieldMap != nil {
 		value, ok := e.fieldMap[key].(string)

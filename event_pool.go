@@ -20,6 +20,7 @@ func releaseEvent(event *Event) {
 		return
 	}
 	event.resetLocal()
+	clear(event.fieldBuf[:])
 	event.pooled = false
 	eventPool.Put(event)
 }

@@ -19,7 +19,7 @@ type FinalizeInput struct {
 
 // StartRequest initializes request context and base HTTP fields.
 func StartRequest(baseCtx context.Context, method, path string) (context.Context, *hc.Event) {
-	ctx, event := hc.NewPooledContext(baseCtx)
+	ctx, event := hc.NewContext(baseCtx)
 	event.Add2Strings("http.method", method, "http.path", path)
 	return ctx, event
 }
@@ -32,8 +32,6 @@ func FinalizeRequest(cfg hc.Config, in FinalizeInput) {
 // FinalizePreparedRequest computes status/level/sampling and writes the final
 // snapshot using config prepared once at middleware construction.
 func FinalizePreparedRequest(prepared PreparedRequestConfig, in FinalizeInput) {
-	defer hc.ReleasePooledContext(in.Ctx)
-
 	if in.Ctx != nil && in.Event != nil {
 		if in.Route != "" {
 			in.Event.SetRoute(in.Route)
@@ -54,7 +52,6 @@ func FinalizePreparedRequest(prepared PreparedRequestConfig, in FinalizeInput) {
 			Name:   name,
 		},
 		StartComplete: true,
-		UnsafeEvent:   true,
 		Code:          in.StatusCode,
 		Err:           in.Err,
 		Recovered:     in.Recovered,

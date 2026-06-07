@@ -1,13 +1,14 @@
 package hc
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 )
 
 func TestEventDirectFieldMethods(t *testing.T) {
-	_, event := NewContext(nil)
+	_, event := NewContext(context.Background())
 
 	if !event.AddString("tenant", "enterprise") {
 		t.Fatal("AddString returned false")
@@ -133,7 +134,7 @@ func TestEventDirectFieldMethodsNilEvent(t *testing.T) {
 }
 
 func TestEventDirectDuplicateFieldsUseLastValue(t *testing.T) {
-	_, event := NewContext(nil)
+	_, event := NewContext(context.Background())
 
 	if !event.Add2Strings("same", "old", "same", "new") {
 		t.Fatal("Add2Strings returned false")
@@ -151,7 +152,7 @@ func TestEventDirectDuplicateFieldsUseLastValue(t *testing.T) {
 }
 
 func TestEventSetRouteIgnoresEmptyRoute(t *testing.T) {
-	_, event := NewContext(nil)
+	_, event := NewContext(context.Background())
 
 	if event.SetRoute("") {
 		t.Fatal("SetRoute returned true for an empty route")
@@ -162,7 +163,7 @@ func TestEventSetRouteIgnoresEmptyRoute(t *testing.T) {
 }
 
 func TestEventDirectLifecycleMetadataMethods(t *testing.T) {
-	_, event := NewContext(nil)
+	_, event := NewContext(context.Background())
 
 	if !event.SetMessage("request_complete") {
 		t.Fatal("SetMessage returned false")

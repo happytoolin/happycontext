@@ -263,6 +263,10 @@ func TestMiddlewarePreservesOptionalInterfaces(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected io.ReaderFrom")
 		}
+		closeNotifier, ok := w.(closeNotifier)
+		if !ok {
+			t.Fatalf("expected http.CloseNotifier")
+		}
 		flusher.Flush()
 		if _, err := readerFrom.ReadFrom(strings.NewReader("x")); err != nil {
 			t.Fatalf("read from failed: %v", err)
@@ -272,6 +276,9 @@ func TestMiddlewarePreservesOptionalInterfaces(t *testing.T) {
 		}
 		if _, _, err := hijacker.Hijack(); !errors.Is(err, errHijackNotAvailable) {
 			t.Fatalf("unexpected hijack error: %v", err)
+		}
+		if ch := closeNotifier.CloseNotify(); ch == nil {
+			t.Fatalf("expected close notify channel")
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -287,6 +294,9 @@ func TestMiddlewarePreservesOptionalInterfaces(t *testing.T) {
 	}
 	if !base.hijackCalled {
 		t.Fatalf("expected hijack to be forwarded")
+	}
+	if !base.closeNotifyCalled {
+		t.Fatalf("expected close notify to be forwarded")
 	}
 }
 
@@ -309,6 +319,9 @@ func TestMiddlewareDoesNotAddMissingOptionalInterfaces(t *testing.T) {
 		}
 		if _, ok := w.(io.ReaderFrom); ok {
 			t.Fatalf("did not expect io.ReaderFrom")
+		}
+		if _, ok := w.(closeNotifier); ok {
+			t.Fatalf("did not expect CloseNotify")
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -460,9 +473,10 @@ var errHijackNotAvailable = errors.New("hijack unavailable in test writer")
 
 type fullOptionalWriter struct {
 	testOptionalWriter
-	flushed      bool
-	pushCalled   bool
-	hijackCalled bool
+	flushed           bool
+	pushCalled        bool
+	hijackCalled      bool
+	closeNotifyCalled bool
 }
 
 func (w *fullOptionalWriter) Flush() {
@@ -484,4 +498,9 @@ func (w *fullOptionalWriter) ReadFrom(src io.Reader) (int64, error) {
 		w.code = http.StatusOK
 	}
 	return io.Copy(&w.body, src)
+}
+
+func (w *fullOptionalWriter) CloseNotify() <-chan bool {
+	w.closeNotifyCalled = true
+	return make(chan bool)
 }

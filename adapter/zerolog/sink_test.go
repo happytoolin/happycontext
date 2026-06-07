@@ -140,10 +140,55 @@ func TestSinkDeterministicOrderSortsKeys(t *testing.T) {
 	}
 }
 
+func TestSinkDeterministicOrderSortsCompletionKeys(t *testing.T) {
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf)
+	sink := NewWithOptions(&logger, SinkOptions{DeterministicOrder: true})
+
+	sink.WriteFieldsWithOperationCompletion(
+		hc.LevelInfo,
+		"done",
+		[]hc.Field{
+			hc.Int("z", 1),
+			hc.Int("a", 2),
+		},
+		hc.OperationStart{Domain: hc.DomainJob, Name: "cleanup"},
+		7,
+		0,
+		hc.OutcomeSuccess,
+	)
+
+	output := buf.String()
+	assertKeyOrder(t, output,
+		`"a":2`,
+		`"duration_ms":7`,
+		`"op.code":0`,
+		`"op.domain":"job"`,
+		`"op.name":"cleanup"`,
+		`"op.outcome":"success"`,
+		`"z":1`,
+	)
+}
+
 func TestSinkWriteNilSafety(t *testing.T) {
 	var nilSink *Sink
 	nilSink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
 
 	sink := New(nil)
 	sink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
+}
+
+func assertKeyOrder(t *testing.T, output string, keys ...string) {
+	t.Helper()
+	last := -1
+	for _, key := range keys {
+		idx := strings.Index(output, key)
+		if idx == -1 {
+			t.Fatalf("expected key %s in output %q", key, output)
+		}
+		if idx <= last {
+			t.Fatalf("expected key %s after previous keys in output %q", key, output)
+		}
+		last = idx
+	}
 }

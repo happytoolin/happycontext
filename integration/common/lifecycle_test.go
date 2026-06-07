@@ -30,7 +30,6 @@ func TestSwapRequestContextUnsafeMutatesAndRestores(t *testing.T) {
 	base := context.WithValue(context.Background(), requestContextTestKey{}, "base")
 	req := httptest.NewRequest(http.MethodGet, "/x", nil).WithContext(base)
 	ctx, event := StartRequest(base, "GET", "/x")
-	defer hc.ReleasePooledContext(ctx)
 
 	oldCtx, ok := SwapRequestContextUnsafe(req, ctx)
 	if !ok {
@@ -49,6 +48,24 @@ func TestSwapRequestContextUnsafeMutatesAndRestores(t *testing.T) {
 	}
 	if req.Context() != base {
 		t.Fatal("expected original request context after restore")
+	}
+}
+
+func TestFinalizeRequestKeepsContextUsable(t *testing.T) {
+	ctx, event := StartRequest(context.Background(), "GET", "/x")
+	sink := hc.NewTestSink()
+
+	FinalizeRequest(hc.Config{Sink: sink, SamplingRate: 1}, FinalizeInput{
+		Ctx:        ctx,
+		Event:      event,
+		StatusCode: http.StatusOK,
+	})
+
+	if hc.FromContext(ctx) != event {
+		t.Fatal("expected finalized request context to keep its event")
+	}
+	if !hc.Add(ctx, "after_finalize", true) {
+		t.Fatal("expected finalized request context to remain usable")
 	}
 }
 
