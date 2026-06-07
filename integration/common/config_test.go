@@ -94,3 +94,19 @@ func TestNormalizeConfigClampsAndDefaults(t *testing.T) {
 		})
 	}
 }
+
+func TestPrepareRequestConfigNormalizesAndPrepares(t *testing.T) {
+	prepared := PrepareRequestConfig(hc.Config{
+		Sink:         hc.NewTestSink(),
+		SamplingRate: 2,
+	})
+	if prepared.Config.Message != DefaultMessage {
+		t.Fatalf("message = %q, want default", prepared.Config.Message)
+	}
+	if prepared.Config.SamplingRate != 1 {
+		t.Fatalf("sampling rate = %v, want 1", prepared.Config.SamplingRate)
+	}
+	if prepared.Prepared.Config().SamplingRate != 1 {
+		t.Fatalf("prepared sampling rate = %v, want 1", prepared.Prepared.Config().SamplingRate)
+	}
+}

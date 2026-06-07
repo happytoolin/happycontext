@@ -8,16 +8,20 @@ import (
 
 // Middleware returns a Gin middleware that captures one event per request.
 func Middleware(cfg hc.Config) gin.HandlerFunc {
-	cfg = common.NormalizeConfig(cfg)
-	if cfg.Sink == nil {
+	prepared := common.PrepareRequestConfig(cfg)
+	if prepared.Config.Sink == nil {
 		return func(c *gin.Context) {
 			c.Next()
 		}
 	}
 
 	return func(c *gin.Context) {
-		ctx, event := common.StartRequest(c.Request.Context(), c.Request.Method, c.Request.URL.Path)
-		c.Request = c.Request.WithContext(ctx)
+		req := c.Request
+		ctx, event := common.StartRequest(req.Context(), req.Method, req.URL.Path)
+		oldCtx, swappedCtx := common.SwapRequestContextUnsafe(req, ctx)
+		if !swappedCtx {
+			c.Request = req.WithContext(ctx)
+		}
 
 		defer func() {
 			recovered := recover()
@@ -28,7 +32,10 @@ func Middleware(cfg hc.Config) gin.HandlerFunc {
 				}
 			}
 			status := common.ResolveStatus(c.Writer.Status(), err, recovered, c.Writer.Written(), 0)
-			common.FinalizeRequest(cfg, common.FinalizeInput{
+			if swappedCtx {
+				_, _ = common.SwapRequestContextUnsafe(req, oldCtx)
+			}
+			common.FinalizePreparedRequest(prepared, common.FinalizeInput{
 				Ctx:        ctx,
 				Event:      event,
 				Route:      c.FullPath(),

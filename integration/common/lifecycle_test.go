@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	hc "github.com/happytoolin/happycontext"
 )
+
+type requestContextTestKey struct{}
 
 func TestStartRequestAddsBaseFields(t *testing.T) {
 	ctx, event := StartRequest(context.Background(), "GET", "/orders/1")
@@ -20,6 +23,32 @@ func TestStartRequestAddsBaseFields(t *testing.T) {
 	}
 	if fields["http.path"] != "/orders/1" {
 		t.Fatalf("path field = %v", fields["http.path"])
+	}
+}
+
+func TestSwapRequestContextUnsafeMutatesAndRestores(t *testing.T) {
+	base := context.WithValue(context.Background(), requestContextTestKey{}, "base")
+	req := httptest.NewRequest(http.MethodGet, "/x", nil).WithContext(base)
+	ctx, event := StartRequest(base, "GET", "/x")
+	defer hc.ReleasePooledContext(ctx)
+
+	oldCtx, ok := SwapRequestContextUnsafe(req, ctx)
+	if !ok {
+		t.Fatal("expected request context layout to be supported")
+	}
+	if oldCtx != base {
+		t.Fatalf("old context = %#v, want base context", oldCtx)
+	}
+	if hc.FromContext(req.Context()) != event {
+		t.Fatal("expected swapped request context to expose event")
+	}
+
+	_, ok = SwapRequestContextUnsafe(req, oldCtx)
+	if !ok {
+		t.Fatal("expected restore to use unsafe swap")
+	}
+	if req.Context() != base {
+		t.Fatal("expected original request context after restore")
 	}
 }
 

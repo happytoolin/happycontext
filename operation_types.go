@@ -47,20 +47,29 @@ type operationResult struct {
 
 // Operation provides a stateful non-HTTP lifecycle handle.
 type Operation struct {
-	ctx   context.Context
-	event *Event
-	start OperationStart
+	ctx              context.Context
+	event            *Event
+	start            OperationStart
+	startMono        int64
+	deferStartFields bool
+	unsafeEvent      bool
+	noTiming         bool
 }
 
 // OperationFinish contains inputs required to finalize one operation event.
 type OperationFinish struct {
-	Ctx       context.Context
-	Event     *Event
-	Start     OperationStart
-	Outcome   Outcome
-	Code      int
-	Err       error
-	Recovered any
+	Ctx           context.Context
+	Event         *Event
+	Start         OperationStart
+	StartComplete bool
+	// UnsafeEvent skips event locks during finalization. Use only when the
+	// caller owns the event lifecycle and no goroutine can mutate it while
+	// finalization is running.
+	UnsafeEvent bool
+	Outcome     Outcome
+	Code        int
+	Err         error
+	Recovered   any
 }
 
 // OperationPolicy customizes lifecycle defaults per domain.

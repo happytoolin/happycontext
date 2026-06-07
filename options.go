@@ -1,11 +1,16 @@
 package hc
 
+import "context"
+
 const (
 	// DefaultMessage is the fallback final message for HTTP request events.
 	DefaultMessage = "request_completed"
 	// DefaultOperationMessage is the fallback final message for non-HTTP operation events.
 	DefaultOperationMessage = "operation_completed"
 )
+
+// Enricher can add or update fields before sampling and writing.
+type Enricher func(ctx context.Context, event *Event)
 
 // Config controls event finalization behavior.
 type Config struct {
@@ -27,6 +32,13 @@ type Config struct {
 	// OperationPolicies optionally customizes lifecycle behavior by domain.
 	// A domain SamplingRate overrides generic level/default sampling rates.
 	OperationPolicies map[Domain]OperationPolicy
+
+	// Enrichers add or update fields after lifecycle fields are finalized.
+	// They run before sampling, so custom samplers can inspect enriched fields.
+	Enrichers []Enricher
+
+	// FieldMapper transforms or drops fields after sampling and before Sink.Write.
+	FieldMapper FieldMapper
 
 	// Message is the final log message.
 	Message string

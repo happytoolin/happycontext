@@ -8,7 +8,7 @@ func EventFields(e *Event) map[string]any {
 	if e == nil {
 		return nil
 	}
-	return e.snapshot().fields
+	return e.fieldsSnapshot()
 }
 
 // EventMessage returns e's attached message, or an empty string if unset.
@@ -35,7 +35,10 @@ func EventHasMessage(e *Event) bool {
 	return e.hasMessageValue()
 }
 
-// EventStartTime returns e's start time.
+// EventStartTime returns e's wall-clock start time.
+//
+// Local, in-place, and pooled integration APIs use monotonic-only timing for
+// duration and return a zero wall-clock start time.
 func EventStartTime(e *Event) time.Time {
 	if e == nil {
 		return time.Time{}

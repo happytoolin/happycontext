@@ -111,3 +111,24 @@ func TestEventFieldsReturnsShallowCopy(t *testing.T) {
 		t.Fatalf("nested mutation should be shared by reference, got %v", nestedAgain["inner"])
 	}
 }
+
+func TestNewPooledContextStoresEventAndDelegatesParentValues(t *testing.T) {
+	type parentKey struct{}
+
+	parent := context.WithValue(context.Background(), parentKey{}, "parent-value")
+	ctx, event := NewPooledContext(parent)
+	if event == nil {
+		t.Fatal("expected pooled event")
+	}
+	if FromContext(ctx) != event {
+		t.Fatal("FromContext did not return pooled event")
+	}
+	if !EventStartTime(event).IsZero() {
+		t.Fatal("expected pooled event to use monotonic-only timing")
+	}
+	if got := ctx.Value(parentKey{}); got != "parent-value" {
+		t.Fatalf("parent value = %v, want parent-value", got)
+	}
+
+	ReleasePooledContext(ctx)
+}

@@ -9,11 +9,69 @@ import (
 
 // StartOperation initializes a stateful operation handle for non-HTTP flows.
 func StartOperation(baseCtx context.Context, start OperationStart) *Operation {
-	ctx, event := BeginOperation(baseCtx, start)
+	ctx, event := NewContext(baseCtx)
 	return &Operation{
-		ctx:   ctx,
-		event: event,
-		start: normalizedOperationStart(start),
+		ctx:              ctx,
+		event:            event,
+		start:            normalizedOperationStart(start),
+		deferStartFields: true,
+	}
+}
+
+// StartOperationValue initializes a stateful operation handle without
+// allocating the handle itself when the returned value stays on the stack.
+func StartOperationValue(baseCtx context.Context, start OperationStart) Operation {
+	ctx, event := NewContext(baseCtx)
+	return Operation{
+		ctx:              ctx,
+		event:            event,
+		start:            normalizedOperationStart(start),
+		deferStartFields: true,
+	}
+}
+
+// StartOperationLocal initializes an operation handle without storing the event
+// in context. It uses monotonic-only timing for duration. Use the returned
+// Operation's direct methods (Add, AddString, Error, SetMessage, and related
+// helpers) to record fields.
+//
+// Context returns the base context, but hc.FromContext(op.Context()) will not
+// return the operation event.
+func StartOperationLocal(baseCtx context.Context, start OperationStart) Operation {
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	event := newLocalEvent()
+	return Operation{
+		ctx:              baseCtx,
+		event:            event,
+		start:            normalizedOperationStart(start),
+		startMono:        monotonicNow(),
+		deferStartFields: true,
+	}
+}
+
+// StartOperationInPlace initializes an operation using caller-provided event
+// storage. It does not store the event in context, and it uses monotonic-only
+// timing for duration. Use Operation direct methods to record fields.
+//
+// The provided event must not be used concurrently with another active
+// operation or goroutine. Passing nil falls back to StartOperationLocal.
+func StartOperationInPlace(baseCtx context.Context, start OperationStart, event *Event) Operation {
+	if event == nil {
+		return StartOperationLocal(baseCtx, start)
+	}
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	event.resetLocal()
+	return Operation{
+		ctx:              baseCtx,
+		event:            event,
+		start:            normalizedOperationStart(start),
+		startMono:        monotonicNow(),
+		deferStartFields: true,
+		unsafeEvent:      true,
 	}
 }
 
@@ -25,7 +83,7 @@ func BeginOperation(baseCtx context.Context, start OperationStart) (context.Cont
 		baseCtx = context.Background()
 	}
 	ctx, event := NewContext(baseCtx)
-	applyOperationStartFields(ctx, start)
+	applyOperationStartFieldsToEvent(event, start)
 	return ctx, event
 }
 
@@ -69,57 +127,277 @@ func (op *Operation) End(cfg Config, errp *error) bool {
 	wrote := finishOperation(cfg, op.ctx, op.event, op.start, operationResult{
 		Err:       err,
 		Recovered: recovered,
-	})
+	}, op.deferStartFields, op.startMono, op.unsafeEvent, op.noTiming)
 	if recovered != nil {
 		panic(recovered)
 	}
 	return wrote
 }
 
+// Finish finalizes an operation without panic capture.
+//
+// Use End when deferring operation completion and preserving panic metadata.
+// Use Finish in hot paths where the caller handles errors explicitly and does
+// not need happycontext to recover and re-panic.
+func (op *Operation) Finish(cfg Config, err error) bool {
+	if op == nil {
+		return false
+	}
+	return finishOperation(cfg, op.ctx, op.event, op.start, operationResult{
+		Err: err,
+	}, op.deferStartFields, op.startMono, op.unsafeEvent, op.noTiming)
+}
+
+// FinishPrepared finalizes an operation using a config returned by
+// PrepareConfig, avoiding per-operation config normalization.
+func (op *Operation) FinishPrepared(cfg PreparedConfig, err error) bool {
+	if op == nil {
+		return false
+	}
+	return finishOperationPrepared(cfg, op.ctx, op.event, op.start, operationResult{
+		Err: err,
+	}, op.deferStartFields, op.startMono, op.unsafeEvent, op.noTiming)
+}
+
 // FinishOperation finalizes and writes an operation event.
 //
 // FinishOperation is a low-level helper used by package integrations.
 func FinishOperation(cfg Config, in OperationFinish) bool {
-	return finishOperation(cfg, in.Ctx, in.Event, hydrateOperationStart(in.Start, in.Event), operationResult{
+	return FinishPreparedOperation(PrepareConfig(cfg), in)
+}
+
+// FinishPreparedOperation finalizes and writes an operation event using a
+// prepared config. If in.StartComplete is false, missing operation metadata is
+// merged from the event for compatibility with BeginOperation callers.
+func FinishPreparedOperation(prepared PreparedConfig, in OperationFinish) bool {
+	cfg := prepared.cfg
+	if cfg.Sink == nil || in.Event == nil || in.Ctx == nil {
+		return false
+	}
+	start := in.Start
+	if !in.StartComplete {
+		start = hydrateOperationStart(start, in.Event)
+	}
+	if in.StartComplete {
+		if handled, wrote := finishPreparedCompleteDefaultOperation(prepared, in.Event, start, operationResult{
+			Outcome:   in.Outcome,
+			Code:      in.Code,
+			Err:       in.Err,
+			Recovered: in.Recovered,
+		}, in.UnsafeEvent); handled {
+			return wrote
+		}
+	}
+	return finishOperationPrepared(prepared, in.Ctx, in.Event, start, operationResult{
 		Outcome:   in.Outcome,
 		Code:      in.Code,
 		Err:       in.Err,
 		Recovered: in.Recovered,
-	})
+	}, true, 0, in.UnsafeEvent, false)
 }
 
-func finishOperation(cfg Config, ctx context.Context, event *Event, start OperationStart, result operationResult) bool {
-	cfg = NormalizeConfig(cfg)
+func finishOperation(cfg Config, ctx context.Context, event *Event, start OperationStart, result operationResult, deferStartFields bool, startMono int64, unsafeEvent bool, noTiming bool) bool {
+	return finishOperationPrepared(PrepareConfig(cfg), ctx, event, start, result, deferStartFields, startMono, unsafeEvent, noTiming)
+}
+
+func finishOperationPrepared(prepared PreparedConfig, ctx context.Context, event *Event, start OperationStart, result operationResult, deferStartFields bool, startMono int64, unsafeEvent bool, noTiming bool) bool {
+	cfg := prepared.cfg
 	if cfg.Sink == nil || event == nil || ctx == nil {
 		return false
 	}
 
-	policy := policyForDomain(cfg, start.Domain)
-
-	applyOperationStartFieldsToEvent(event, start)
-	outcome := resolveOutcome(result)
-	annotateOperationFailures(event, result.Err, result.Recovered)
-
-	duration := time.Since(event.startedAt())
-	annotateOperationCompletion(event, duration, result.Code, outcome)
-
-	snap := event.snapshot()
-
-	autoLevel := levelFromPolicy(policy, outcome)
-	level := MergeLevelWithFloor(autoLevel, snap.level, snap.hasLevel)
-
-	sampleIn := buildSampleInput(event, snap, start, result, duration, outcome, level)
-	if !shouldWriteOperation(cfg, policy, sampleIn) {
-		return false
+	if handled, wrote := finishPreparedDefaultFastPath(prepared, event, start, result, deferStartFields, unsafeEvent, noTiming); handled {
+		return wrote
 	}
 
-	cfg.Sink.Write(level, resolveEventMessage(cfg.Message, start.Domain, snap.message), snap.fields)
+	policy, hasPolicy := prepared.policyForDomain(start.Domain)
+
+	outcome := resolveOutcome(result)
+	if result.Err != nil || result.Recovered != nil {
+		annotateOperationFailures(event, result.Err, result.Recovered)
+	}
+
+	needsPreSamplingFields := cfg.Sampler != nil || len(cfg.Enrichers) > 0
+	useUnsafeEvent := unsafeEvent && !needsPreSamplingFields
+	needsFieldState := needsPreSamplingFields || normalizeDomain(start.Domain) == DomainHTTP
+	var state eventState
+	if needsFieldState {
+		state = event.state()
+	} else if useUnsafeEvent {
+		state = event.baseStateUnsafe()
+	} else {
+		state = event.baseState()
+	}
+	if needsPreSamplingFields {
+		applyOperationStartFieldsToEvent(event, start)
+		state = event.state()
+	} else if !deferStartFields {
+		applyOperationStartFieldsToEvent(event, start)
+	}
+	duration := time.Duration(0)
+	durationReady := noTiming
+	if needsPreSamplingFields {
+		if !noTiming {
+			duration = durationSinceState(state, startMono)
+		}
+		durationReady = true
+		annotateOperationCompletion(event, duration, result.Code, outcome)
+		applyEnrichers(cfg.Enrichers, ctx, event)
+		state = event.state()
+	}
+
+	autoLevel := defaultLevelForOutcome(outcome)
+	if hasPolicy {
+		autoLevel = levelFromPolicy(policy, outcome)
+	}
+	level := MergeLevelWithFloor(autoLevel, state.level, state.hasLevel)
+
+	if cfg.Sampler != nil {
+		sampleIn := buildSampleInput(event, state, start, result, duration, outcome, level)
+		if !cfg.Sampler(sampleIn) {
+			return false
+		}
+	} else {
+		statusCode := result.Code
+		if state.hasStatus {
+			statusCode = state.statusCode
+		}
+		hasError := state.hasError || result.Code >= 500 || outcome != OutcomeSuccess
+		if !shouldWriteOperationDefaultPrepared(prepared, policy, hasError, result.Code, statusCode, outcome, level) {
+			return false
+		}
+	}
+	if !durationReady {
+		duration = durationSinceState(state, startMono)
+	}
+	message := resolveEventMessage(cfg.Message, start.Domain, state.message)
+	if needsPreSamplingFields {
+		writeEventToSink(cfg.Sink, event, level, message, cfg.FieldMapper)
+		return true
+	}
+
+	if deferStartFields {
+		if useUnsafeEvent {
+			writeEventToSinkWithStartAndCompletionUnsafe(cfg.Sink, event, level, message, start, duration.Milliseconds(), result.Code, outcome, cfg.FieldMapper)
+			return true
+		}
+		writeEventToSinkWithStartAndCompletion(cfg.Sink, event, level, message, start, duration.Milliseconds(), result.Code, outcome, cfg.FieldMapper)
+		return true
+	}
+
+	writeEventToSinkWithCompletion(cfg.Sink, event, level, message, duration.Milliseconds(), result.Code, outcome, cfg.FieldMapper)
 	return true
 }
 
-func applyOperationStartFields(ctx context.Context, start OperationStart) {
-	event := FromContext(ctx)
-	applyOperationStartFieldsToEvent(event, start)
+func finishPreparedDefaultFastPath(prepared PreparedConfig, event *Event, start OperationStart, result operationResult, deferStartFields bool, unsafeEvent bool, noTiming bool) (bool, bool) {
+	if !prepared.fastDefaultOperation || !unsafeEvent || !deferStartFields || !noTiming {
+		return false, false
+	}
+	if result.Outcome != "" || result.Err != nil || result.Recovered != nil || result.Code >= 500 {
+		return false, false
+	}
+	return writePreparedDefaultSuccessNoTiming(prepared, event, start, result.Code)
+}
+
+func writePreparedDefaultSuccessNoTiming(prepared PreparedConfig, event *Event, start OperationStart, code int) (bool, bool) {
+	if !prepared.fastDefaultOperation || start.Domain == DomainHTTP || code >= 500 {
+		return false, false
+	}
+	if event.hasLifecycleOverridesUnsafe() {
+		return false, false
+	}
+
+	rate := prepared.cfg.SamplingRate
+	if rate <= 0 {
+		return true, false
+	}
+	if rate < 1 && !shouldSample(rate) {
+		return true, false
+	}
+
+	message := prepared.cfg.Message
+	if message == "" {
+		message = DefaultOperationMessage
+	}
+	writeEventToSinkWithStartAndCompletionUnsafe(prepared.cfg.Sink, event, LevelInfo, message, start, 0, code, OutcomeSuccess, nil)
+	return true, true
+}
+
+func finishPreparedCompleteDefaultOperation(prepared PreparedConfig, event *Event, start OperationStart, result operationResult, unsafeEvent bool) (bool, bool) {
+	if !prepared.fastDefaultOperation {
+		return false, false
+	}
+	if unsafeEvent {
+		if handled, wrote := writePreparedCompleteDefaultSuccessFast(prepared, event, start, result); handled {
+			return true, wrote
+		}
+	}
+
+	outcome := resolveOutcome(result)
+	if result.Err != nil || result.Recovered != nil {
+		annotateOperationFailures(event, result.Err, result.Recovered)
+	}
+
+	var state eventState
+	if unsafeEvent {
+		state = event.baseStateUnsafe()
+	} else {
+		state = event.baseState()
+	}
+	autoLevel := defaultLevelForOutcome(outcome)
+	level := MergeLevelWithFloor(autoLevel, state.level, state.hasLevel)
+	hasError := state.hasError || result.Code >= 500 || outcome != OutcomeSuccess
+	if !shouldWriteOperationDefaultPrepared(prepared, OperationPolicy{}, hasError, result.Code, result.Code, outcome, level) {
+		return true, false
+	}
+
+	duration := durationSinceState(state, 0)
+	message := resolveEventMessage(prepared.cfg.Message, start.Domain, state.message)
+	if unsafeEvent {
+		writeEventToSinkWithStartAndCompletionUnsafe(prepared.cfg.Sink, event, level, message, start, duration.Milliseconds(), result.Code, outcome, nil)
+		return true, true
+	}
+	writeEventToSinkWithStartAndCompletion(prepared.cfg.Sink, event, level, message, start, duration.Milliseconds(), result.Code, outcome, nil)
+	return true, true
+}
+
+func writePreparedCompleteDefaultSuccessFast(prepared PreparedConfig, event *Event, start OperationStart, result operationResult) (bool, bool) {
+	if result.Outcome != "" || result.Err != nil || result.Recovered != nil || result.Code >= 500 {
+		return false, false
+	}
+	if event.hasLifecycleOverridesUnsafe() {
+		return false, false
+	}
+
+	rate := prepared.cfg.SamplingRate
+	if rate <= 0 {
+		return true, false
+	}
+	if rate < 1 && !shouldSample(rate) {
+		return true, false
+	}
+
+	message := prepared.cfg.Message
+	if message == "" {
+		message = resolveMessage("", start.Domain)
+	}
+	durationMS := int64(0)
+	if event.startMono != 0 {
+		durationMS = (monotonicNow() - event.startMono) / int64(time.Millisecond)
+	} else {
+		durationMS = time.Since(event.startTime).Milliseconds()
+	}
+	writeEventToSinkWithStartAndCompletionUnsafe(prepared.cfg.Sink, event, LevelInfo, message, start, durationMS, result.Code, OutcomeSuccess, nil)
+	return true, true
+}
+
+func applyEnrichers(enrichers []Enricher, ctx context.Context, event *Event) {
+	for _, enricher := range enrichers {
+		if enricher == nil {
+			continue
+		}
+		enricher(ctx, event)
+	}
 }
 
 func applyOperationStartFieldsToEvent(event *Event, start OperationStart) {
@@ -131,37 +409,20 @@ func applyOperationStartFieldsToEvent(event *Event, start OperationStart) {
 		return
 	}
 
-	capHint := 2
-	if start.ID != "" {
-		capHint++
-	}
-	if start.Source != "" {
-		capHint++
-	}
-	if start.Attempt > 0 {
-		capHint++
-	}
-	if start.MaxAttempts > 0 {
-		capHint++
-	}
-
 	event.mu.Lock()
-	if event.fields == nil {
-		event.fields = make(map[string]any, max(capHint, 8))
-	}
-	event.fields["op.domain"] = string(start.Domain)
-	event.fields["op.name"] = start.Name
+	event.setStringFieldLocked("op.domain", string(start.Domain))
+	event.setStringFieldLocked("op.name", start.Name)
 	if start.ID != "" {
-		event.fields["op.id"] = start.ID
+		event.setStringFieldLocked("op.id", start.ID)
 	}
 	if start.Source != "" {
-		event.fields["op.source"] = start.Source
+		event.setStringFieldLocked("op.source", start.Source)
 	}
 	if start.Attempt > 0 {
-		event.fields["op.attempt"] = start.Attempt
+		event.setIntFieldLocked("op.attempt", start.Attempt)
 	}
 	if start.MaxAttempts > 0 {
-		event.fields["op.max_attempts"] = start.MaxAttempts
+		event.setIntFieldLocked("op.max_attempts", start.MaxAttempts)
 	}
 	event.mu.Unlock()
 }
@@ -170,32 +431,32 @@ func operationStartFieldsNeedUpdate(event *Event, start OperationStart) bool {
 	event.mu.RLock()
 	defer event.mu.RUnlock()
 
-	if len(event.fields) == 0 {
+	if event.fieldCountLocked() == 0 {
 		return true
 	}
-	if field, _ := event.fields["op.domain"].(string); field != string(start.Domain) {
+	if field, _ := event.stringFieldValueLocked("op.domain"); field != string(start.Domain) {
 		return true
 	}
-	if field, _ := event.fields["op.name"].(string); field != start.Name {
+	if field, _ := event.stringFieldValueLocked("op.name"); field != start.Name {
 		return true
 	}
 	if start.ID != "" {
-		if field, _ := event.fields["op.id"].(string); field != start.ID {
+		if field, _ := event.stringFieldValueLocked("op.id"); field != start.ID {
 			return true
 		}
 	}
 	if start.Source != "" {
-		if field, _ := event.fields["op.source"].(string); field != start.Source {
+		if field, _ := event.stringFieldValueLocked("op.source"); field != start.Source {
 			return true
 		}
 	}
 	if start.Attempt > 0 {
-		if field, ok := asInt(event.fields["op.attempt"]); !ok || field != start.Attempt {
+		if field, ok := event.intFieldValueLocked("op.attempt"); !ok || field != start.Attempt {
 			return true
 		}
 	}
 	if start.MaxAttempts > 0 {
-		if field, ok := asInt(event.fields["op.max_attempts"]); !ok || field != start.MaxAttempts {
+		if field, ok := event.intFieldValueLocked("op.max_attempts"); !ok || field != start.MaxAttempts {
 			return true
 		}
 	}
@@ -225,15 +486,12 @@ func annotateOperationFailures(event *Event, err error, recovered any) {
 	}
 
 	event.mu.Lock()
-	if event.fields == nil {
-		event.fields = make(map[string]any, 8)
-	}
 	if panicField != nil {
-		event.fields["panic"] = panicField
+		event.setFieldLocked("panic", panicField)
 	}
 	if errorField != nil {
 		event.hasError = true
-		event.fields["error"] = errorField
+		event.setFieldLocked("error", errorField)
 	}
 	event.mu.Unlock()
 }
@@ -244,16 +502,19 @@ func annotateOperationCompletion(event *Event, duration time.Duration, code int,
 	}
 
 	event.mu.Lock()
-	if event.fields == nil {
-		event.fields = make(map[string]any, 8)
-	}
-	event.fields["duration_ms"] = duration.Milliseconds()
-	event.fields["op.code"] = code
-	event.fields["op.outcome"] = string(outcome)
+	event.setInt64FieldLocked("duration_ms", duration.Milliseconds())
+	event.setIntFieldLocked("op.code", code)
+	event.setStringFieldLocked("op.outcome", string(outcome))
 	event.mu.Unlock()
 }
 
 func resolveOutcome(result operationResult) Outcome {
+	if result.Outcome == "" && result.Err == nil && result.Recovered == nil {
+		if result.Code >= 500 {
+			return OutcomeFailure
+		}
+		return OutcomeSuccess
+	}
 	if IsValidOutcome(result.Outcome) {
 		return result.Outcome
 	}
@@ -276,19 +537,13 @@ func resolveOutcome(result operationResult) Outcome {
 	return OutcomeSuccess
 }
 
-func buildSampleInput(event *Event, snap snapshot, start OperationStart, result operationResult, duration time.Duration, outcome Outcome, level Level) SampleInput {
-	fields := snap.fields
-
-	method, _ := fields["http.method"].(string)
-	path, _ := fields["http.path"].(string)
+func buildSampleInput(event *Event, state eventState, start OperationStart, result operationResult, duration time.Duration, outcome Outcome, level Level) SampleInput {
 	statusCode := result.Code
-	if v, ok := fields["http.status"]; ok {
-		if parsed, ok := asInt(v); ok {
-			statusCode = parsed
-		}
+	if state.hasStatus {
+		statusCode = state.statusCode
 	}
 
-	hasError := snap.hasError || result.Code >= 500 || outcome != OutcomeSuccess
+	hasError := state.hasError || result.Code >= 500 || outcome != OutcomeSuccess
 
 	name := start.Name
 	if name == "" {
@@ -300,8 +555,8 @@ func buildSampleInput(event *Event, snap snapshot, start OperationStart, result 
 		Operation:  name,
 		Outcome:    outcome,
 		Code:       result.Code,
-		Method:     method,
-		Path:       path,
+		Method:     state.method,
+		Path:       state.path,
 		StatusCode: statusCode,
 		Duration:   duration,
 		Level:      level,
@@ -318,37 +573,37 @@ func hydrateOperationStart(start OperationStart, event *Event) OperationStart {
 	event.mu.RLock()
 	defer event.mu.RUnlock()
 
-	if len(event.fields) == 0 {
+	if event.fieldCountLocked() == 0 {
 		return start
 	}
 
 	if start.Domain == "" {
-		if v, ok := event.fields["op.domain"].(string); ok && v != "" {
+		if v, ok := event.stringFieldValueLocked("op.domain"); ok && v != "" {
 			start.Domain = Domain(v)
 		}
 	}
 	if start.Name == "" {
-		if v, ok := event.fields["op.name"].(string); ok && v != "" {
+		if v, ok := event.stringFieldValueLocked("op.name"); ok && v != "" {
 			start.Name = v
 		}
 	}
 	if start.ID == "" {
-		if v, ok := event.fields["op.id"].(string); ok {
+		if v, ok := event.stringFieldValueLocked("op.id"); ok {
 			start.ID = v
 		}
 	}
 	if start.Source == "" {
-		if v, ok := event.fields["op.source"].(string); ok {
+		if v, ok := event.stringFieldValueLocked("op.source"); ok {
 			start.Source = v
 		}
 	}
 	if start.Attempt == 0 {
-		if v, ok := asInt(event.fields["op.attempt"]); ok {
+		if v, ok := event.intFieldValueLocked("op.attempt"); ok {
 			start.Attempt = v
 		}
 	}
 	if start.MaxAttempts == 0 {
-		if v, ok := asInt(event.fields["op.max_attempts"]); ok {
+		if v, ok := event.intFieldValueLocked("op.max_attempts"); ok {
 			start.MaxAttempts = v
 		}
 	}

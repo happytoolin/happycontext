@@ -19,6 +19,8 @@ Most application logs are high-volume but low-context.
 - Consistent fields across handlers, middleware, and frameworks
 - Built-in sampling for healthy traffic
 - Error and panic events are always preserved
+- Typed field helpers, enrichment hooks, and redaction
+- Optional async sink wrapper for buffered background writes
 - Works with `slog`, `zap`, and `zerolog`
 - Integrates with `net/http`, `gin`, `echo`, `fiber`, `fiber v3`, and worker jobs
 
@@ -162,6 +164,8 @@ Example output:
 - `LevelSamplingRates`: optional level-specific sampling overrides
 - `Sampler`: optional custom sampling function (full control)
 - `OperationPolicies`: optional per-domain level/sampling policy for all lifecycle domains, including HTTP and background operations; domain sampling overrides generic level/default sampling
+- `Enrichers`: optional hooks that add/update fields after lifecycle fields are finalized and before sampling
+- `FieldMapper`: optional final field transformer/redactor/dropper that runs only for events that will be written
 - `Message`: final log message (defaults to `hc.DefaultMessage` for HTTP and `hc.DefaultOperationMessage` for non-HTTP)
 
 Notes:
@@ -247,6 +251,28 @@ mw := stdhc.Middleware(hc.Config{
 `hc.Add` accepts one or more key/value pairs:
 `hc.Add(ctx, "k1", v1, "k2", v2, "k3", v3)`.
 
+Typed field helpers are also available:
+
+```go
+hc.AddFields(ctx,
+	hc.String("user_id", "u_8472"),
+	hc.Int("attempt", 2),
+	hc.Bool("cached", true),
+	hc.Duration("db.latency", 14*time.Millisecond),
+)
+
+hc.AddStrings(ctx, "http.method", "GET", "http.path", "/orders/{id}")
+hc.AddInt(ctx, "http.status", 200)
+```
+
+When an integration or hook already has the `*hc.Event`, direct methods avoid the context lookup:
+
+```go
+event.Add2Strings("http.method", "GET", "http.path", "/orders/{id}")
+event.AddInt("http.status", 200)
+event.SetRoute("/orders/{id}")
+```
+
 `hc.SampleInput.Method`, `Path`, and `StatusCode` are HTTP compatibility fields.
 For non-HTTP operations use `Domain`, `Operation`, `Outcome`, and `Code`.
 
@@ -274,6 +300,54 @@ Sampler building blocks:
 - `hc.KeepPathPrefix("/checkout", "/admin")`: middleware that keeps matching path prefixes.
 - `hc.KeepSlowerThan(minDuration)`: middleware that keeps requests at/above a duration threshold.
 
+### Enrichment, Redaction, and Async Writes
+
+Use enrichers to attach environment, deployment, tenant, or tracing fields without repeating them in every handler.
+Enrichers run before sampling, so custom samplers can inspect enriched fields.
+
+```go
+mw := stdhc.Middleware(hc.Config{
+	Sink: sink,
+	Enrichers: []hc.Enricher{
+		func(ctx context.Context, event *hc.Event) {
+			hc.AddString(ctx, "service.name", "billing-api")
+			hc.AddString(ctx, "deployment.env", "prod")
+		},
+	},
+})
+```
+
+Use field mappers for logger-agnostic redaction, dropping, or serialization before an event reaches `slog`, `zap`, or `zerolog`.
+Mappers run after sampling, so dropped healthy traffic does not pay this cost.
+
+```go
+mw := stdhc.Middleware(hc.Config{
+	Sink: sink,
+	FieldMapper: hc.ChainFieldMappers(
+		hc.RedactKeys("password", "authorization"),
+		hc.RedactKeyPrefixes("token."),
+		hc.DropKeys("debug.raw_body"),
+	),
+})
+```
+
+For slow sinks or network-backed adapters, wrap the sink with `hc.NewAsyncSink`.
+
+```go
+asyncSink := hc.NewAsyncSink(sink, hc.AsyncSinkOptions{
+	Buffer:       4096,
+	DropWhenFull: true,
+})
+defer asyncSink.Close()
+
+mw := stdhc.Middleware(hc.Config{
+	Sink:         asyncSink,
+	SamplingRate: 1,
+})
+```
+
+Call `asyncSink.Flush()` in tests or shutdown paths when you need to wait for queued events.
+
 ### Generic Operation Lifecycle API
 
 For non-HTTP flows, use `hc.StartOperation` for the ergonomic stateful handle:
@@ -296,6 +370,48 @@ func runJob(cfg hc.Config) (err error) {
 
 `op.End(cfg, &err)` is the supported non-HTTP completion path in this API.
 
+For hot loops that do not need `hc.FromContext(op.Context())`, use `hc.StartOperationLocal` and direct operation methods:
+
+```go
+func runJobLocal(cfg hc.Config) (err error) {
+	op := hc.StartOperationLocal(context.Background(), hc.OperationStart{
+		Domain: hc.DomainJob,
+		Name:   "invoice.reconcile",
+	})
+	defer op.End(cfg, &err)
+
+	op.Add2("worker", "payments", "tenant", "enterprise")
+	return nil
+}
+```
+
+When a hot loop handles errors explicitly and does not need `End`'s panic capture, prepare the config once and call `FinishPrepared`:
+
+```go
+func runBatchFast(ctx context.Context, cfg hc.Config, jobs []Job) error {
+	prepared := hc.PrepareConfig(cfg)
+	var event hc.Event
+
+	for _, job := range jobs {
+		op := hc.StartOperationInPlace(ctx, hc.OperationStart{
+			Domain: hc.DomainJob,
+			Name:   "invoice.reconcile",
+			ID:     job.ID,
+		}, &event)
+		op.Add2("worker", "payments", "tenant", job.Tenant)
+
+		err := process(job)
+		op.FinishPrepared(prepared, err)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+```
+
+`hc.StartOperationValue`, `hc.StartOperationInPlace`, and `hc.PrepareOperationStart` are available for tighter loops, but `hc.StartOperation` remains the ergonomic default. Local, in-place, and pooled integration operations use monotonic-only timing, so `hc.EventStartTime(op.Event())` is zero while final events still include `duration_ms`.
+
 ## Integrations
 
 - `integration/std` (`net/http`)
@@ -312,6 +428,7 @@ func runJob(cfg hc.Config) (err error) {
 - `adapter/zerolog`
 
 All adapters expose `NewWithOptions` plus `SinkOptions{DeterministicOrder: true}` when you need stable field ordering.
+Adapters also implement internal fast paths so small finalized events can avoid building a map before writing.
 
 ## More Examples
 

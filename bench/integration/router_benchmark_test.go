@@ -24,7 +24,19 @@ import (
 
 type discardSink struct{}
 
-func (discardSink) Write(hc.Level, string, map[string]any) {}
+func (discardSink) Write(hc.Level, string, map[string]any)   {}
+func (discardSink) WriteFields(hc.Level, string, []hc.Field) {}
+func (discardSink) WriteBorrowedFields(hc.Level, string, []hc.BorrowedField) {
+}
+func (discardSink) WriteUnsafe(hc.Level, string, map[string]any) {}
+func (discardSink) WriteFieldsWithCompletion(hc.Level, string, []hc.Field, int64, int, hc.Outcome) {
+}
+func (discardSink) WriteBorrowedFieldsWithCompletion(hc.Level, string, []hc.BorrowedField, int64, int, hc.Outcome) {
+}
+func (discardSink) WriteFieldsWithOperationCompletion(hc.Level, string, []hc.Field, hc.OperationStart, int64, int, hc.Outcome) {
+}
+func (discardSink) WriteBorrowedFieldsWithOperationCompletion(hc.Level, string, []hc.BorrowedField, hc.OperationStart, int64, int, hc.Outcome) {
+}
 
 type noopSlogHandler struct{}
 
@@ -36,7 +48,7 @@ func (noopSlogHandler) WithGroup(string) slog.Handler             { return noopS
 func BenchmarkRouter_std(b *testing.B) {
 	req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
 	handlerHappycontextAPI := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hc.Add(r.Context(), "user_id", "u_1")
+		hc.AddString(r.Context(), "user_id", "u_1")
 		w.WriteHeader(http.StatusNoContent)
 	})
 
@@ -133,7 +145,7 @@ func BenchmarkRouter_gin(b *testing.B) {
 		r := gin.New()
 		r.Use(ginhc.Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1}))
 		r.GET("/orders/:id", func(c *gin.Context) {
-			hc.Add(c.Request.Context(), "user_id", "u_1")
+			hc.AddString(c.Request.Context(), "user_id", "u_1")
 			c.Status(http.StatusNoContent)
 		})
 		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
@@ -233,7 +245,7 @@ func BenchmarkRouter_echo(b *testing.B) {
 		e := echo.New()
 		e.Use(echohc.Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1}))
 		e.GET("/orders/:id", func(c echo.Context) error {
-			hc.Add(c.Request().Context(), "user_id", "u_1")
+			hc.AddString(c.Request().Context(), "user_id", "u_1")
 			return c.NoContent(http.StatusNoContent)
 		})
 		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)

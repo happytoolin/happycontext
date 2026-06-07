@@ -3,6 +3,7 @@ package stdhappycontext
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/happytoolin/happycontext"
 )
+
+type requestContextTestKey struct{}
 
 func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {
 	sink := &memorySink{}
@@ -43,6 +46,30 @@ func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {
 	}
 	if events[0].Fields["example"] != "std-integration" {
 		t.Fatalf("expected example field, got %v", events[0].Fields["example"])
+	}
+}
+
+func TestMiddlewareRestoresOriginalRequestContext(t *testing.T) {
+	sink := &memorySink{}
+	mw := Middleware(hc.Config{
+		Sink:         sink,
+		SamplingRate: 1,
+	})
+
+	base := context.WithValue(context.Background(), requestContextTestKey{}, "base")
+	req := httptest.NewRequest(http.MethodGet, "/x", nil).WithContext(base)
+	h := mw(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		if hc.FromContext(r.Context()) == nil {
+			t.Fatal("expected event in handler request context")
+		}
+		if r.Context() == base {
+			t.Fatal("expected handler context to be swapped")
+		}
+	}))
+
+	h.ServeHTTP(httptest.NewRecorder(), req)
+	if req.Context() != base {
+		t.Fatal("expected original request context after middleware returns")
 	}
 }
 
@@ -261,6 +288,34 @@ func TestMiddlewarePreservesOptionalInterfaces(t *testing.T) {
 	if !base.hijackCalled {
 		t.Fatalf("expected hijack to be forwarded")
 	}
+}
+
+func TestMiddlewareDoesNotAddMissingOptionalInterfaces(t *testing.T) {
+	sink := &memorySink{}
+	mw := Middleware(hc.Config{
+		Sink:         sink,
+		SamplingRate: 1,
+	})
+
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if _, ok := w.(http.Flusher); ok {
+			t.Fatalf("did not expect http.Flusher")
+		}
+		if _, ok := w.(http.Hijacker); ok {
+			t.Fatalf("did not expect http.Hijacker")
+		}
+		if _, ok := w.(http.Pusher); ok {
+			t.Fatalf("did not expect http.Pusher")
+		}
+		if _, ok := w.(io.ReaderFrom); ok {
+			t.Fatalf("did not expect io.ReaderFrom")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	base := &testOptionalWriter{header: make(http.Header)}
+	req := httptest.NewRequest(http.MethodGet, "/x", nil)
+	h.ServeHTTP(base, req)
 }
 
 func TestMiddlewareWriteSetsStatusCode(t *testing.T) {

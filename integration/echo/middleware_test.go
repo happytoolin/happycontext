@@ -1,6 +1,7 @@
 package echohappycontext
 
 import (
+	"context"
 	"errors"
 	"maps"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"github.com/happytoolin/happycontext"
 	"github.com/labstack/echo/v4"
 )
+
+type requestContextTestKey struct{}
 
 func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 	e := echo.New()
@@ -40,6 +43,31 @@ func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 	}
 	if events[0].Fields["user_id"] != "u_1" {
 		t.Fatalf("expected user_id field, got %v", events[0].Fields["user_id"])
+	}
+}
+
+func TestMiddlewareRestoresOriginalRequestContext(t *testing.T) {
+	e := echo.New()
+	sink := &memorySink{}
+	e.Use(Middleware(hc.Config{
+		Sink:         sink,
+		SamplingRate: 1,
+	}))
+	base := context.WithValue(context.Background(), requestContextTestKey{}, "base")
+	req := httptest.NewRequest(http.MethodGet, "/x", nil).WithContext(base)
+	e.GET("/x", func(c echo.Context) error {
+		if hc.FromContext(c.Request().Context()) == nil {
+			t.Fatal("expected event in handler request context")
+		}
+		if c.Request().Context() == base {
+			t.Fatal("expected handler context to be swapped")
+		}
+		return c.NoContent(http.StatusNoContent)
+	})
+
+	e.ServeHTTP(httptest.NewRecorder(), req)
+	if req.Context() != base {
+		t.Fatal("expected original request context after middleware returns")
 	}
 }
 

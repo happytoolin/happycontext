@@ -11,8 +11,8 @@ import (
 
 // Middleware returns an Echo middleware that captures one event per request.
 func Middleware(cfg hc.Config) echo.MiddlewareFunc {
-	cfg = common.NormalizeConfig(cfg)
-	if cfg.Sink == nil {
+	prepared := common.PrepareRequestConfig(cfg)
+	if prepared.Config.Sink == nil {
 		return func(next echo.HandlerFunc) echo.HandlerFunc {
 			return func(c echo.Context) error {
 				return next(c)
@@ -22,8 +22,12 @@ func Middleware(cfg hc.Config) echo.MiddlewareFunc {
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) (err error) {
-			ctx, event := common.StartRequest(c.Request().Context(), c.Request().Method, c.Request().URL.Path)
-			c.SetRequest(c.Request().WithContext(ctx))
+			req := c.Request()
+			ctx, event := common.StartRequest(req.Context(), req.Method, req.URL.Path)
+			oldCtx, swappedCtx := common.SwapRequestContextUnsafe(req, ctx)
+			if !swappedCtx {
+				c.SetRequest(req.WithContext(ctx))
+			}
 			var finalizeErr error
 
 			defer func() {
@@ -36,7 +40,10 @@ func Middleware(cfg hc.Config) echo.MiddlewareFunc {
 					c.Response().Committed,
 					statusFromEchoError(finalizeErr),
 				)
-				common.FinalizeRequest(cfg, common.FinalizeInput{
+				if swappedCtx {
+					_, _ = common.SwapRequestContextUnsafe(req, oldCtx)
+				}
+				common.FinalizePreparedRequest(prepared, common.FinalizeInput{
 					Ctx:        ctx,
 					Event:      event,
 					Route:      route,

@@ -1,6 +1,7 @@
 package ginhappycontext
 
 import (
+	"context"
 	"errors"
 	"maps"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/happytoolin/happycontext"
 )
+
+type requestContextTestKey struct{}
 
 func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -42,6 +45,33 @@ func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 	}
 	if events[0].Fields["user_id"] != "u_1" {
 		t.Fatalf("expected user_id field, got %v", events[0].Fields["user_id"])
+	}
+}
+
+func TestMiddlewareRestoresOriginalRequestContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	sink := &memorySink{}
+	r := gin.New()
+	r.Use(Middleware(hc.Config{
+		Sink:         sink,
+		SamplingRate: 1,
+	}))
+	base := context.WithValue(context.Background(), requestContextTestKey{}, "base")
+	req := httptest.NewRequest(http.MethodGet, "/x", nil).WithContext(base)
+	r.GET("/x", func(c *gin.Context) {
+		if hc.FromContext(c.Request.Context()) == nil {
+			t.Fatal("expected event in handler request context")
+		}
+		if c.Request.Context() == base {
+			t.Fatal("expected handler context to be swapped")
+		}
+		c.Status(http.StatusNoContent)
+	})
+
+	r.ServeHTTP(httptest.NewRecorder(), req)
+	if req.Context() != base {
+		t.Fatal("expected original request context after middleware returns")
 	}
 }
 

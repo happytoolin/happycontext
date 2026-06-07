@@ -5,28 +5,53 @@ func shouldWriteOperation(cfg Config, policy OperationPolicy, in SampleInput) bo
 		return cfg.Sampler(in)
 	}
 
-	if in.HasError || in.Code >= 500 || in.StatusCode >= 500 || in.Outcome != OutcomeSuccess {
+	return shouldWriteOperationDefault(cfg, policy, in.HasError, in.Code, in.StatusCode, in.Outcome, in.Level)
+}
+
+func shouldWriteOperationDefault(cfg Config, policy OperationPolicy, hasError bool, code, statusCode int, outcome Outcome, level Level) bool {
+	if hasError || code >= 500 || statusCode >= 500 || outcome != OutcomeSuccess {
 		return true
 	}
 
 	rate := clampRate(cfg.SamplingRate)
 	if policy.SamplingRate != nil {
 		rate = clampRate(*policy.SamplingRate)
-	} else if levelRate, ok := levelSamplingRate(cfg.LevelSamplingRates, in.Level); ok {
+	} else if levelRate, ok := levelSamplingRate(cfg.LevelSamplingRates, level); ok {
 		rate = levelRate
 	}
 	return shouldSample(rate)
 }
 
+func shouldWriteOperationDefaultPrepared(prepared PreparedConfig, policy OperationPolicy, hasError bool, code, statusCode int, outcome Outcome, level Level) bool {
+	if hasError || code >= 500 || statusCode >= 500 || outcome != OutcomeSuccess {
+		return true
+	}
+
+	rate := prepared.cfg.SamplingRate
+	if policy.SamplingRate != nil {
+		rate = *policy.SamplingRate
+	} else if prepared.hasLevelSamplingRate {
+		if levelRate, ok := prepared.cfg.LevelSamplingRates[level]; ok {
+			rate = levelRate
+		}
+	}
+	return shouldSample(rate)
+}
+
 func policyForDomain(cfg Config, domain Domain) OperationPolicy {
+	policy, _ := policyForDomainWithPresence(cfg, domain)
+	return policy
+}
+
+func policyForDomainWithPresence(cfg Config, domain Domain) (OperationPolicy, bool) {
 	if cfg.OperationPolicies == nil {
-		return OperationPolicy{}
+		return OperationPolicy{}, false
 	}
 	policy, ok := cfg.OperationPolicies[normalizeDomain(domain)]
 	if !ok {
-		return OperationPolicy{}
+		return OperationPolicy{}, false
 	}
-	return policy
+	return policy, true
 }
 
 func defaultPolicy() OperationPolicy {
@@ -64,6 +89,13 @@ func levelFromPolicy(policy OperationPolicy, outcome Outcome) Level {
 	default:
 		return failureLevel
 	}
+}
+
+func defaultLevelForOutcome(outcome Outcome) Level {
+	if outcome == OutcomeSuccess {
+		return LevelInfo
+	}
+	return LevelError
 }
 
 func clampRate(rate float64) float64 {

@@ -4,6 +4,4 @@ go 1.24
 
 require github.com/happytoolin/happycontext v0.3.0 // x-release-please-version
 
-require github.com/felixge/httpsnoop v1.0.4
-
 replace github.com/happytoolin/happycontext => ../..

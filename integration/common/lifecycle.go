@@ -19,36 +19,45 @@ type FinalizeInput struct {
 
 // StartRequest initializes request context and base HTTP fields.
 func StartRequest(baseCtx context.Context, method, path string) (context.Context, *hc.Event) {
-	ctx, event := hc.BeginOperation(baseCtx, hc.OperationStart{
-		Domain: hc.DomainHTTP,
-		Name:   "request",
-	})
-	hc.Add(ctx, "http.method", method, "http.path", path)
+	ctx, event := hc.NewPooledContext(baseCtx)
+	event.Add2Strings("http.method", method, "http.path", path)
 	return ctx, event
 }
 
 // FinalizeRequest computes status/level/sampling and writes the final snapshot.
 func FinalizeRequest(cfg hc.Config, in FinalizeInput) {
-	if in.Route != "" {
-		hc.SetRoute(in.Ctx, in.Route)
+	FinalizePreparedRequest(PrepareRequestConfig(cfg), in)
+}
+
+// FinalizePreparedRequest computes status/level/sampling and writes the final
+// snapshot using config prepared once at middleware construction.
+func FinalizePreparedRequest(prepared PreparedRequestConfig, in FinalizeInput) {
+	defer hc.ReleasePooledContext(in.Ctx)
+
+	if in.Ctx != nil && in.Event != nil {
+		if in.Route != "" {
+			in.Event.SetRoute(in.Route)
+		}
+		in.Event.AddInt("http.status", in.StatusCode)
 	}
-	hc.Add(in.Ctx, "http.status", in.StatusCode)
 
 	name := "request"
 	if in.Route != "" {
 		name = in.Route
 	}
 
-	hc.FinishOperation(cfg, hc.OperationFinish{
+	hc.FinishPreparedOperation(prepared.Prepared, hc.OperationFinish{
 		Ctx:   in.Ctx,
 		Event: in.Event,
 		Start: hc.OperationStart{
 			Domain: hc.DomainHTTP,
 			Name:   name,
 		},
-		Code:      in.StatusCode,
-		Err:       in.Err,
-		Recovered: in.Recovered,
+		StartComplete: true,
+		UnsafeEvent:   true,
+		Code:          in.StatusCode,
+		Err:           in.Err,
+		Recovered:     in.Recovered,
 	})
 }
 

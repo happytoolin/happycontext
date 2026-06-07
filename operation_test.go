@@ -54,6 +54,246 @@ func TestStartOperationProvidesHandle(t *testing.T) {
 	}
 }
 
+func TestStartOperationLocalDoesNotStoreEventInContext(t *testing.T) {
+	op := StartOperationLocal(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
+	if op.Context() == nil {
+		t.Fatal("expected operation context")
+	}
+	if op.Event() == nil {
+		t.Fatal("expected operation event")
+	}
+	if FromContext(op.Context()) != nil {
+		t.Fatal("local operation should not store event in context")
+	}
+
+	fields := EventFields(op.Event())
+	if _, ok := fields["op.domain"]; ok {
+		t.Fatal("local operation should defer op.domain until write")
+	}
+
+	sink := NewTestSink()
+	var err error
+	if !op.End(Config{Sink: sink, SamplingRate: 1}, &err) {
+		t.Fatal("expected local operation to write")
+	}
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("events len = %d, want 1", len(events))
+	}
+	if events[0].Fields["op.domain"] != string(DomainJob) {
+		t.Fatalf("op.domain = %v, want %s", events[0].Fields["op.domain"], DomainJob)
+	}
+	if events[0].Fields["op.name"] != "cleanup" {
+		t.Fatalf("op.name = %v, want cleanup", events[0].Fields["op.name"])
+	}
+}
+
+func TestStartOperationInPlaceUsesCallerEventStorage(t *testing.T) {
+	var event Event
+	op := StartOperationInPlace(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"}, &event)
+	if op.Event() != &event {
+		t.Fatal("expected operation to use caller event")
+	}
+	if FromContext(op.Context()) != nil {
+		t.Fatal("in-place operation should not store event in context")
+	}
+
+	op.AddString("worker", "payments")
+	fields := EventFields(&event)
+	if fields["worker"] != "payments" {
+		t.Fatalf("worker = %v, want payments", fields["worker"])
+	}
+
+	op = StartOperationInPlace(context.Background(), OperationStart{Domain: DomainJob, Name: "again"}, &event)
+	fields = EventFields(&event)
+	if _, ok := fields["worker"]; ok {
+		t.Fatal("expected reused event fields to be cleared")
+	}
+	if op.Event() != &event {
+		t.Fatal("expected reused operation to use caller event")
+	}
+}
+
+func TestLocalOperationsUseMonotonicOnlyStartTime(t *testing.T) {
+	local := StartOperationLocal(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
+	if !EventStartTime(local.Event()).IsZero() {
+		t.Fatal("expected local operation wall-clock start time to be zero")
+	}
+
+	var event Event
+	inPlace := StartOperationInPlace(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"}, &event)
+	if !EventStartTime(inPlace.Event()).IsZero() {
+		t.Fatal("expected in-place operation wall-clock start time to be zero")
+	}
+}
+
+func TestOperationFinishFinalizesWithoutDeferredEnd(t *testing.T) {
+	op := StartOperationLocal(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
+	op.AddString("worker", "payments")
+
+	sink := NewTestSink()
+	if !op.Finish(Config{Sink: sink, SamplingRate: 1}, nil) {
+		t.Fatal("expected Finish to write")
+	}
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Fields["worker"] != "payments" {
+		t.Fatalf("worker = %v, want payments", events[0].Fields["worker"])
+	}
+	if events[0].Fields["op.outcome"] != string(OutcomeSuccess) {
+		t.Fatalf("op.outcome = %v, want success", events[0].Fields["op.outcome"])
+	}
+}
+
+func TestOperationFinishPreparedUsesNormalizedConfig(t *testing.T) {
+	op := StartOperationLocal(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
+	cfg := PrepareConfig(Config{Sink: NewTestSink(), SamplingRate: 2})
+
+	if !op.FinishPrepared(cfg, nil) {
+		t.Fatal("expected FinishPrepared to use normalized sampling rate")
+	}
+}
+
+func TestFinishPreparedOperationUsesPreparedConfigAndCompleteStart(t *testing.T) {
+	ctx, event := NewContext(context.Background())
+	AddString(ctx, "worker", "payments")
+	sink := NewTestSink()
+	prepared := PrepareConfig(Config{Sink: sink, SamplingRate: 2})
+
+	ok := FinishPreparedOperation(prepared, OperationFinish{
+		Ctx:           ctx,
+		Event:         event,
+		Start:         OperationStart{Domain: DomainJob, Name: "cleanup"},
+		StartComplete: true,
+	})
+	if !ok {
+		t.Fatal("expected prepared operation finish to write")
+	}
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Fields["worker"] != "payments" {
+		t.Fatalf("worker = %v, want payments", events[0].Fields["worker"])
+	}
+	if events[0].Fields["op.domain"] != string(DomainJob) {
+		t.Fatalf("op.domain = %v, want %s", events[0].Fields["op.domain"], DomainJob)
+	}
+	if events[0].Fields["op.name"] != "cleanup" {
+		t.Fatalf("op.name = %v, want cleanup", events[0].Fields["op.name"])
+	}
+}
+
+func TestFinishPreparedOperationCompleteStartDefaultSampling(t *testing.T) {
+	t.Run("drops healthy sampled out event", func(t *testing.T) {
+		ctx, event := NewContext(context.Background())
+		sink := NewTestSink()
+		prepared := PrepareConfig(Config{Sink: sink, SamplingRate: 0})
+
+		ok := FinishPreparedOperation(prepared, OperationFinish{
+			Ctx:           ctx,
+			Event:         event,
+			Start:         OperationStart{Domain: DomainHTTP, Name: "request"},
+			StartComplete: true,
+			Code:          200,
+		})
+		if ok {
+			t.Fatal("expected healthy sampled-out event to drop")
+		}
+		if len(sink.Events()) != 0 {
+			t.Fatalf("expected no events, got %d", len(sink.Events()))
+		}
+	})
+
+	t.Run("keeps failed sampled out event", func(t *testing.T) {
+		ctx, event := NewContext(context.Background())
+		sink := NewTestSink()
+		prepared := PrepareConfig(Config{Sink: sink, SamplingRate: 0})
+
+		ok := FinishPreparedOperation(prepared, OperationFinish{
+			Ctx:           ctx,
+			Event:         event,
+			Start:         OperationStart{Domain: DomainHTTP, Name: "request"},
+			StartComplete: true,
+			Code:          500,
+		})
+		if !ok {
+			t.Fatal("expected failed event to write")
+		}
+		if len(sink.Events()) != 1 {
+			t.Fatalf("expected 1 event, got %d", len(sink.Events()))
+		}
+	})
+}
+
+func TestPreparedOperationStartStartsOperations(t *testing.T) {
+	prepared := PrepareOperationStart(OperationStart{Domain: DomainJob, Name: "cleanup"})
+
+	local := prepared.StartLocalContext(context.Background())
+	if local.Context() == nil {
+		t.Fatal("expected local prepared operation context")
+	}
+	if local.Event() == nil {
+		t.Fatal("expected local prepared operation event")
+	}
+	if local.start.Name != "cleanup" {
+		t.Fatalf("start name = %q, want cleanup", local.start.Name)
+	}
+
+	var event Event
+	inPlace := prepared.StartInPlaceContext(context.Background(), &event)
+	if inPlace.Event() != &event {
+		t.Fatal("expected prepared in-place operation to use caller event")
+	}
+	if inPlace.start.Domain != DomainJob {
+		t.Fatalf("start domain = %q, want %q", inPlace.start.Domain, DomainJob)
+	}
+}
+
+func TestPreparedOperationStartNoTimingEmitsZeroDuration(t *testing.T) {
+	prepared := PrepareOperationStart(OperationStart{Domain: DomainJob, Name: "cleanup"})
+	cfg := PrepareConfig(Config{Sink: NewTestSink(), SamplingRate: 1})
+
+	var event Event
+	op := prepared.StartInPlaceNoTimingContext(context.Background(), &event)
+	op.AddString("worker", "payments")
+
+	sink := cfg.Config().Sink.(*TestSink)
+	if !op.FinishPrepared(cfg, nil) {
+		t.Fatal("expected no-timing operation to write")
+	}
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Fields["duration_ms"] != int64(0) {
+		t.Fatalf("duration_ms = %v, want 0", events[0].Fields["duration_ms"])
+	}
+}
+
+func TestPreparedOperationStartNoTimingPreservesMessageOverride(t *testing.T) {
+	prepared := PrepareOperationStart(OperationStart{Domain: DomainJob, Name: "cleanup"})
+	sink := NewTestSink()
+	cfg := PrepareConfig(Config{Sink: sink, SamplingRate: 1})
+
+	var event Event
+	op := prepared.StartInPlaceNoTimingContext(context.Background(), &event)
+	op.SetMessage("custom_done")
+
+	if !op.FinishPrepared(cfg, nil) {
+		t.Fatal("expected no-timing operation to write")
+	}
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Message != "custom_done" {
+		t.Fatalf("message = %q, want custom_done", events[0].Message)
+	}
+}
+
 func TestOperationNilAccessors(t *testing.T) {
 	var op *Operation
 
@@ -372,6 +612,25 @@ func TestFinishOperationHTTPDefaultsAndSamplerCompatibility(t *testing.T) {
 	}
 	if events[0].Message != DefaultMessage {
 		t.Fatalf("message = %q, want %q", events[0].Message, DefaultMessage)
+	}
+}
+
+func TestFinishOperationHTTPStatusFieldAffectsBuiltInSampling(t *testing.T) {
+	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainHTTP, Name: "GET /x"})
+	Add(ctx, "http.status", 500)
+
+	sink := NewTestSink()
+	ok := FinishOperation(Config{Sink: sink, SamplingRate: 0}, OperationFinish{
+		Ctx:   ctx,
+		Event: event,
+		Start: OperationStart{Domain: DomainHTTP, Name: "GET /x"},
+		Code:  200,
+	})
+	if !ok {
+		t.Fatal("expected http.status field to keep failed HTTP event")
+	}
+	if len(sink.Events()) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(sink.Events()))
 	}
 }
 

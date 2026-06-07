@@ -40,6 +40,21 @@ func BenchmarkEventAddMany(b *testing.B) {
 	}
 }
 
+func BenchmarkEventAddFieldsMany(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		ctx, _ := hc.NewContext(context.Background())
+		hc.AddFields(
+			ctx,
+			hc.String("user_id", "u_8472"),
+			hc.Int("cart_items", 3),
+			hc.Int("cart_total", 300),
+			hc.String("country", "US"),
+			hc.Bool("feature_flag", true),
+		)
+	}
+}
+
 func BenchmarkEventAddParallelStableKeys(b *testing.B) {
 	ctx, _ := hc.NewContext(context.Background())
 	keys := make([]string, 32)
@@ -130,6 +145,22 @@ type discardSink struct{}
 
 func (discardSink) Write(_ hc.Level, _ string, _ map[string]any) {}
 
+type discardFieldSink struct{}
+
+func (discardFieldSink) Write(_ hc.Level, _ string, _ map[string]any)   {}
+func (discardFieldSink) WriteFields(_ hc.Level, _ string, _ []hc.Field) {}
+func (discardFieldSink) WriteBorrowedFields(_ hc.Level, _ string, _ []hc.BorrowedField) {
+}
+func (discardFieldSink) WriteUnsafe(_ hc.Level, _ string, _ map[string]any) {}
+func (discardFieldSink) WriteFieldsWithCompletion(_ hc.Level, _ string, _ []hc.Field, _ int64, _ int, _ hc.Outcome) {
+}
+func (discardFieldSink) WriteBorrowedFieldsWithCompletion(_ hc.Level, _ string, _ []hc.BorrowedField, _ int64, _ int, _ hc.Outcome) {
+}
+func (discardFieldSink) WriteFieldsWithOperationCompletion(_ hc.Level, _ string, _ []hc.Field, _ hc.OperationStart, _ int64, _ int, _ hc.Outcome) {
+}
+func (discardFieldSink) WriteBorrowedFieldsWithOperationCompletion(_ hc.Level, _ string, _ []hc.BorrowedField, _ hc.OperationStart, _ int64, _ int, _ hc.Outcome) {
+}
+
 func BenchmarkJSONEncodingReference(b *testing.B) {
 	payload := []byte(`{"status":"ok"}`)
 	b.ReportAllocs()
@@ -203,6 +234,580 @@ func BenchmarkOperationLifecycle(b *testing.B) {
 			defer op.End(cfg, &err)
 			hc.Add(op.Context(), "worker", "payments", "tenant", "enterprise")
 		}()
+	}
+}
+
+func BenchmarkOperationLifecycleFastSink(b *testing.B) {
+	sink := discardFieldSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 1}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			op := hc.StartOperation(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			})
+			defer op.End(cfg, &err)
+			hc.Add(op.Context(), "worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
+func BenchmarkOperationLifecycleValueFastSink(b *testing.B) {
+	sink := discardFieldSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 1}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			op := hc.StartOperationValue(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			})
+			defer op.End(cfg, &err)
+			hc.Add(op.Context(), "worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
+func BenchmarkOperationLifecycleValueDirectAddFastSink(b *testing.B) {
+	sink := discardFieldSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 1}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			op := hc.StartOperationValue(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			})
+			defer op.End(cfg, &err)
+			op.Add("worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
+func BenchmarkOperationLifecycleValueDirectAdd2FastSink(b *testing.B) {
+	sink := discardFieldSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 1}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			op := hc.StartOperationValue(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			})
+			defer op.End(cfg, &err)
+			op.Add2("worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
+func BenchmarkOperationLifecycleLocalDirectAdd2FastSink(b *testing.B) {
+	sink := discardFieldSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 1}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			op := hc.StartOperationLocal(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			})
+			defer op.End(cfg, &err)
+			op.Add2("worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
+func BenchmarkOperationLifecycleInPlaceDirectAdd2FastSink(b *testing.B) {
+	sink := discardFieldSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 1}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			var event hc.Event
+			op := hc.StartOperationInPlace(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			}, &event)
+			defer op.End(cfg, &err)
+			op.Add2("worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
+func BenchmarkOperationLifecycleInPlaceReuseDirectAdd2FastSink(b *testing.B) {
+	sink := discardFieldSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 1}
+	var event hc.Event
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			op := hc.StartOperationInPlace(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			}, &event)
+			defer op.End(cfg, &err)
+			op.Add2("worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
+func BenchmarkOperationLifecycleLocalDirectAdd2FinishFastSink(b *testing.B) {
+	sink := discardFieldSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 1}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		op := hc.StartOperationLocal(context.Background(), hc.OperationStart{
+			Domain:      hc.DomainJob,
+			Name:        "cleanup",
+			ID:          "job_8472",
+			Source:      "nightly",
+			Attempt:     1,
+			MaxAttempts: 3,
+		})
+		op.Add2("worker", "payments", "tenant", "enterprise")
+		op.Finish(cfg, nil)
+	}
+}
+
+func BenchmarkOperationLifecycleInPlaceReuseDirectAdd2FinishFastSink(b *testing.B) {
+	sink := discardFieldSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 1}
+	var event hc.Event
+
+	b.ReportAllocs()
+	for b.Loop() {
+		op := hc.StartOperationInPlace(context.Background(), hc.OperationStart{
+			Domain:      hc.DomainJob,
+			Name:        "cleanup",
+			ID:          "job_8472",
+			Source:      "nightly",
+			Attempt:     1,
+			MaxAttempts: 3,
+		}, &event)
+		op.Add2("worker", "payments", "tenant", "enterprise")
+		op.Finish(cfg, nil)
+	}
+}
+
+func BenchmarkOperationLifecycleLocalDirectAdd2FinishPreparedFastSink(b *testing.B) {
+	sink := discardFieldSink{}
+	cfg := hc.PrepareConfig(hc.Config{Sink: sink, SamplingRate: 1})
+
+	b.ReportAllocs()
+	for b.Loop() {
+		op := hc.StartOperationLocal(context.Background(), hc.OperationStart{
+			Domain:      hc.DomainJob,
+			Name:        "cleanup",
+			ID:          "job_8472",
+			Source:      "nightly",
+			Attempt:     1,
+			MaxAttempts: 3,
+		})
+		op.Add2("worker", "payments", "tenant", "enterprise")
+		op.FinishPrepared(cfg, nil)
+	}
+}
+
+func BenchmarkOperationLifecycleInPlaceReuseDirectAdd2FinishPreparedFastSink(b *testing.B) {
+	sink := discardFieldSink{}
+	cfg := hc.PrepareConfig(hc.Config{Sink: sink, SamplingRate: 1})
+	var event hc.Event
+
+	b.ReportAllocs()
+	for b.Loop() {
+		op := hc.StartOperationInPlace(context.Background(), hc.OperationStart{
+			Domain:      hc.DomainJob,
+			Name:        "cleanup",
+			ID:          "job_8472",
+			Source:      "nightly",
+			Attempt:     1,
+			MaxAttempts: 3,
+		}, &event)
+		op.Add2("worker", "payments", "tenant", "enterprise")
+		op.FinishPrepared(cfg, nil)
+	}
+}
+
+func BenchmarkOperationLifecyclePreparedStartInPlaceReuseDirectAdd2FinishPreparedFastSink(b *testing.B) {
+	sink := discardFieldSink{}
+	cfg := hc.PrepareConfig(hc.Config{Sink: sink, SamplingRate: 1})
+	start := hc.PrepareOperationStart(hc.OperationStart{
+		Domain:      hc.DomainJob,
+		Name:        "cleanup",
+		ID:          "job_8472",
+		Source:      "nightly",
+		Attempt:     1,
+		MaxAttempts: 3,
+	})
+	var event hc.Event
+
+	b.ReportAllocs()
+	for b.Loop() {
+		op := start.StartInPlaceContext(context.Background(), &event)
+		op.Add2("worker", "payments", "tenant", "enterprise")
+		op.FinishPrepared(cfg, nil)
+	}
+}
+
+func BenchmarkOperationLifecyclePreparedStartInPlaceNoTimingReuseDirectAdd2FinishPreparedFastSink(b *testing.B) {
+	sink := discardFieldSink{}
+	cfg := hc.PrepareConfig(hc.Config{Sink: sink, SamplingRate: 1})
+	start := hc.PrepareOperationStart(hc.OperationStart{
+		Domain:      hc.DomainJob,
+		Name:        "cleanup",
+		ID:          "job_8472",
+		Source:      "nightly",
+		Attempt:     1,
+		MaxAttempts: 3,
+	})
+	var event hc.Event
+
+	b.ReportAllocs()
+	for b.Loop() {
+		op := start.StartInPlaceNoTimingContext(context.Background(), &event)
+		op.Add2("worker", "payments", "tenant", "enterprise")
+		op.FinishPrepared(cfg, nil)
+	}
+}
+
+func BenchmarkOperationLifecycleValueDirectTypedFastSink(b *testing.B) {
+	sink := discardFieldSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 1}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			op := hc.StartOperationValue(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			})
+			defer op.End(cfg, &err)
+			op.Add2Strings("worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
+func BenchmarkOperationLifecycleSampledOut(b *testing.B) {
+	sink := discardSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 0}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			op := hc.StartOperation(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			})
+			defer op.End(cfg, &err)
+			hc.Add(op.Context(), "worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
+func BenchmarkOperationLifecycleValueSampledOut(b *testing.B) {
+	sink := discardSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 0}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			op := hc.StartOperationValue(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			})
+			defer op.End(cfg, &err)
+			hc.Add(op.Context(), "worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
+func BenchmarkOperationLifecycleValueDirectTypedSampledOut(b *testing.B) {
+	sink := discardSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 0}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			op := hc.StartOperationValue(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			})
+			defer op.End(cfg, &err)
+			op.Add2Strings("worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
+func BenchmarkOperationLifecycleValueDirectAdd2SampledOut(b *testing.B) {
+	sink := discardSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 0}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			op := hc.StartOperationValue(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			})
+			defer op.End(cfg, &err)
+			op.Add2("worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
+func BenchmarkOperationLifecycleLocalDirectAdd2SampledOut(b *testing.B) {
+	sink := discardSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 0}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			op := hc.StartOperationLocal(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			})
+			defer op.End(cfg, &err)
+			op.Add2("worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
+func BenchmarkOperationLifecycleInPlaceDirectAdd2SampledOut(b *testing.B) {
+	sink := discardSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 0}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			var event hc.Event
+			op := hc.StartOperationInPlace(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			}, &event)
+			defer op.End(cfg, &err)
+			op.Add2("worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
+func BenchmarkOperationLifecycleInPlaceReuseDirectAdd2SampledOut(b *testing.B) {
+	sink := discardSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 0}
+	var event hc.Event
+
+	b.ReportAllocs()
+	for b.Loop() {
+		func() {
+			var err error
+			op := hc.StartOperationInPlace(context.Background(), hc.OperationStart{
+				Domain:      hc.DomainJob,
+				Name:        "cleanup",
+				ID:          "job_8472",
+				Source:      "nightly",
+				Attempt:     1,
+				MaxAttempts: 3,
+			}, &event)
+			defer op.End(cfg, &err)
+			op.Add2("worker", "payments", "tenant", "enterprise")
+		}()
+	}
+}
+
+func BenchmarkOperationLifecycleLocalDirectAdd2FinishSampledOut(b *testing.B) {
+	sink := discardSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 0}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		op := hc.StartOperationLocal(context.Background(), hc.OperationStart{
+			Domain:      hc.DomainJob,
+			Name:        "cleanup",
+			ID:          "job_8472",
+			Source:      "nightly",
+			Attempt:     1,
+			MaxAttempts: 3,
+		})
+		op.Add2("worker", "payments", "tenant", "enterprise")
+		op.Finish(cfg, nil)
+	}
+}
+
+func BenchmarkOperationLifecycleInPlaceReuseDirectAdd2FinishSampledOut(b *testing.B) {
+	sink := discardSink{}
+	cfg := hc.Config{Sink: sink, SamplingRate: 0}
+	var event hc.Event
+
+	b.ReportAllocs()
+	for b.Loop() {
+		op := hc.StartOperationInPlace(context.Background(), hc.OperationStart{
+			Domain:      hc.DomainJob,
+			Name:        "cleanup",
+			ID:          "job_8472",
+			Source:      "nightly",
+			Attempt:     1,
+			MaxAttempts: 3,
+		}, &event)
+		op.Add2("worker", "payments", "tenant", "enterprise")
+		op.Finish(cfg, nil)
+	}
+}
+
+func BenchmarkOperationLifecycleLocalDirectAdd2FinishPreparedSampledOut(b *testing.B) {
+	sink := discardSink{}
+	cfg := hc.PrepareConfig(hc.Config{Sink: sink, SamplingRate: 0})
+
+	b.ReportAllocs()
+	for b.Loop() {
+		op := hc.StartOperationLocal(context.Background(), hc.OperationStart{
+			Domain:      hc.DomainJob,
+			Name:        "cleanup",
+			ID:          "job_8472",
+			Source:      "nightly",
+			Attempt:     1,
+			MaxAttempts: 3,
+		})
+		op.Add2("worker", "payments", "tenant", "enterprise")
+		op.FinishPrepared(cfg, nil)
+	}
+}
+
+func BenchmarkOperationLifecycleInPlaceReuseDirectAdd2FinishPreparedSampledOut(b *testing.B) {
+	sink := discardSink{}
+	cfg := hc.PrepareConfig(hc.Config{Sink: sink, SamplingRate: 0})
+	var event hc.Event
+
+	b.ReportAllocs()
+	for b.Loop() {
+		op := hc.StartOperationInPlace(context.Background(), hc.OperationStart{
+			Domain:      hc.DomainJob,
+			Name:        "cleanup",
+			ID:          "job_8472",
+			Source:      "nightly",
+			Attempt:     1,
+			MaxAttempts: 3,
+		}, &event)
+		op.Add2("worker", "payments", "tenant", "enterprise")
+		op.FinishPrepared(cfg, nil)
+	}
+}
+
+func BenchmarkOperationLifecyclePreparedStartInPlaceReuseDirectAdd2FinishPreparedSampledOut(b *testing.B) {
+	sink := discardSink{}
+	cfg := hc.PrepareConfig(hc.Config{Sink: sink, SamplingRate: 0})
+	start := hc.PrepareOperationStart(hc.OperationStart{
+		Domain:      hc.DomainJob,
+		Name:        "cleanup",
+		ID:          "job_8472",
+		Source:      "nightly",
+		Attempt:     1,
+		MaxAttempts: 3,
+	})
+	var event hc.Event
+
+	b.ReportAllocs()
+	for b.Loop() {
+		op := start.StartInPlaceContext(context.Background(), &event)
+		op.Add2("worker", "payments", "tenant", "enterprise")
+		op.FinishPrepared(cfg, nil)
+	}
+}
+
+func BenchmarkOperationLifecyclePreparedStartInPlaceNoTimingReuseDirectAdd2FinishPreparedSampledOut(b *testing.B) {
+	sink := discardSink{}
+	cfg := hc.PrepareConfig(hc.Config{Sink: sink, SamplingRate: 0})
+	start := hc.PrepareOperationStart(hc.OperationStart{
+		Domain:      hc.DomainJob,
+		Name:        "cleanup",
+		ID:          "job_8472",
+		Source:      "nightly",
+		Attempt:     1,
+		MaxAttempts: 3,
+	})
+	var event hc.Event
+
+	b.ReportAllocs()
+	for b.Loop() {
+		op := start.StartInPlaceNoTimingContext(context.Background(), &event)
+		op.Add2("worker", "payments", "tenant", "enterprise")
+		op.FinishPrepared(cfg, nil)
 	}
 }
 

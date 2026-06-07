@@ -82,6 +82,171 @@ func (z *Sink) Write(level hc.Level, message string, fields map[string]any) {
 	event.Msg(message)
 }
 
+// WriteUnsafe writes a borrowed field map without retaining it.
+func (z *Sink) WriteUnsafe(level hc.Level, message string, fields map[string]any) {
+	z.Write(level, message, fields)
+}
+
+// WriteFields writes borrowed ordered fields without first building a map.
+func (z *Sink) WriteFields(level hc.Level, message string, fields []hc.Field) {
+	if z == nil || z.logger == nil {
+		return
+	}
+	if message == "" {
+		message = hc.DefaultMessage
+	}
+	if z.deterministicOrder {
+		z.Write(level, message, mapFromFields(fields))
+		return
+	}
+
+	event := z.logger.Info()
+	switch level {
+	case hc.LevelDebug:
+		event = z.logger.Debug()
+	case hc.LevelWarn:
+		event = z.logger.Warn()
+	case hc.LevelError:
+		event = z.logger.Error()
+	}
+
+	for _, field := range fields {
+		event = appendField(event, field.Key, field.Value)
+	}
+	event.Msg(message)
+}
+
+// WriteBorrowedFields writes borrowed typed fields without first building a map.
+func (z *Sink) WriteBorrowedFields(level hc.Level, message string, fields []hc.BorrowedField) {
+	if z == nil || z.logger == nil {
+		return
+	}
+	if message == "" {
+		message = hc.DefaultMessage
+	}
+	if z.deterministicOrder {
+		z.Write(level, message, mapFromBorrowedFields(fields))
+		return
+	}
+
+	event := z.newEvent(level)
+	for _, field := range fields {
+		event = appendBorrowedField(event, field)
+	}
+	event.Msg(message)
+}
+
+// WriteFieldsWithCompletion writes borrowed base fields plus lifecycle completion fields.
+func (z *Sink) WriteFieldsWithCompletion(level hc.Level, message string, fields []hc.Field, durationMS int64, code int, outcome hc.Outcome) {
+	event := z.newEvent(level)
+	if event == nil {
+		return
+	}
+	if message == "" {
+		message = hc.DefaultMessage
+	}
+
+	for _, field := range fields {
+		event = appendField(event, field.Key, field.Value)
+	}
+	event.Int64("duration_ms", durationMS).
+		Int("op.code", code).
+		Str("op.outcome", string(outcome)).
+		Msg(message)
+}
+
+// WriteBorrowedFieldsWithCompletion writes borrowed typed fields plus lifecycle completion fields.
+func (z *Sink) WriteBorrowedFieldsWithCompletion(level hc.Level, message string, fields []hc.BorrowedField, durationMS int64, code int, outcome hc.Outcome) {
+	event := z.newEvent(level)
+	if event == nil {
+		return
+	}
+	if message == "" {
+		message = hc.DefaultMessage
+	}
+
+	for _, field := range fields {
+		event = appendBorrowedField(event, field)
+	}
+	event.Int64("duration_ms", durationMS).
+		Int("op.code", code).
+		Str("op.outcome", string(outcome)).
+		Msg(message)
+}
+
+// WriteFieldsWithOperationCompletion writes borrowed fields plus operation envelope and completion fields.
+func (z *Sink) WriteFieldsWithOperationCompletion(level hc.Level, message string, fields []hc.Field, start hc.OperationStart, durationMS int64, code int, outcome hc.Outcome) {
+	event := z.newEvent(level)
+	if event == nil {
+		return
+	}
+	if message == "" {
+		message = hc.DefaultMessage
+	}
+
+	for _, field := range fields {
+		event = appendField(event, field.Key, field.Value)
+	}
+	event = appendOperationFields(event, start)
+	event.Int64("duration_ms", durationMS).
+		Int("op.code", code).
+		Str("op.outcome", string(outcome)).
+		Msg(message)
+}
+
+// WriteBorrowedFieldsWithOperationCompletion writes borrowed typed fields plus operation envelope and completion fields.
+func (z *Sink) WriteBorrowedFieldsWithOperationCompletion(level hc.Level, message string, fields []hc.BorrowedField, start hc.OperationStart, durationMS int64, code int, outcome hc.Outcome) {
+	event := z.newEvent(level)
+	if event == nil {
+		return
+	}
+	if message == "" {
+		message = hc.DefaultMessage
+	}
+
+	for _, field := range fields {
+		event = appendBorrowedField(event, field)
+	}
+	event = appendOperationFields(event, start)
+	event.Int64("duration_ms", durationMS).
+		Int("op.code", code).
+		Str("op.outcome", string(outcome)).
+		Msg(message)
+}
+
+func appendOperationFields(event *zerolog.Event, start hc.OperationStart) *zerolog.Event {
+	event = event.Str("op.domain", string(start.Domain)).Str("op.name", start.Name)
+	if start.ID != "" {
+		event = event.Str("op.id", start.ID)
+	}
+	if start.Source != "" {
+		event = event.Str("op.source", start.Source)
+	}
+	if start.Attempt > 0 {
+		event = event.Int("op.attempt", start.Attempt)
+	}
+	if start.MaxAttempts > 0 {
+		event = event.Int("op.max_attempts", start.MaxAttempts)
+	}
+	return event
+}
+
+func (z *Sink) newEvent(level hc.Level) *zerolog.Event {
+	if z == nil || z.logger == nil {
+		return nil
+	}
+	switch level {
+	case hc.LevelDebug:
+		return z.logger.Debug()
+	case hc.LevelWarn:
+		return z.logger.Warn()
+	case hc.LevelError:
+		return z.logger.Error()
+	default:
+		return z.logger.Info()
+	}
+}
+
 func appendField(event *zerolog.Event, key string, value any) *zerolog.Event {
 	switch val := value.(type) {
 	case string:
@@ -121,6 +286,43 @@ func appendField(event *zerolog.Event, key string, value any) *zerolog.Event {
 	default:
 		return event.Interface(key, value)
 	}
+}
+
+func appendBorrowedField(event *zerolog.Event, field hc.BorrowedField) *zerolog.Event {
+	switch field.Kind {
+	case hc.FieldString:
+		return event.Str(field.Key, field.StringValue)
+	case hc.FieldInt:
+		return event.Int(field.Key, field.IntValue)
+	case hc.FieldInt64:
+		return event.Int64(field.Key, field.Int64Value)
+	case hc.FieldBool:
+		return event.Bool(field.Key, field.BoolValue)
+	default:
+		return appendField(event, field.Key, field.Value)
+	}
+}
+
+func mapFromFields(fields []hc.Field) map[string]any {
+	if len(fields) == 0 {
+		return nil
+	}
+	m := make(map[string]any, len(fields))
+	for _, field := range fields {
+		m[field.Key] = field.Value
+	}
+	return m
+}
+
+func mapFromBorrowedFields(fields []hc.BorrowedField) map[string]any {
+	if len(fields) == 0 {
+		return nil
+	}
+	m := make(map[string]any, len(fields))
+	for _, field := range fields {
+		m[field.Key] = field.Any()
+	}
+	return m
 }
 
 var _ hc.Sink = (*Sink)(nil)

@@ -24,12 +24,6 @@ func TestStartAddsWorkerFields(t *testing.T) {
 	}
 
 	fields := hc.EventFields(op.Event())
-	if fields["op.domain"] != string(hc.DomainJob) {
-		t.Fatalf("op.domain = %v", fields["op.domain"])
-	}
-	if fields["op.name"] != "cleanup" {
-		t.Fatalf("op.name = %v", fields["op.name"])
-	}
 	if fields["job.name"] != "cleanup" {
 		t.Fatalf("job.name = %v", fields["job.name"])
 	}
@@ -38,6 +32,22 @@ func TestStartAddsWorkerFields(t *testing.T) {
 	}
 	if got, ok := fields["job.scheduled_at"].(time.Time); !ok || !got.Equal(scheduledAt) {
 		t.Fatalf("job.scheduled_at = %v", fields["job.scheduled_at"])
+	}
+
+	sink := hc.NewTestSink()
+	var err error
+	if !op.End(hc.Config{Sink: sink, SamplingRate: 1}, &err) {
+		t.Fatal("expected finish to write")
+	}
+	events := sink.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].Fields["op.domain"] != string(hc.DomainJob) {
+		t.Fatalf("op.domain = %v", events[0].Fields["op.domain"])
+	}
+	if events[0].Fields["op.name"] != "cleanup" {
+		t.Fatalf("op.name = %v", events[0].Fields["op.name"])
 	}
 }
 

@@ -1,10 +1,8 @@
 package stdhappycontext
 
 import (
-	"io"
 	"net/http"
 
-	"github.com/felixge/httpsnoop"
 	"github.com/happytoolin/happycontext"
 	"github.com/happytoolin/happycontext/integration/common"
 )
@@ -14,8 +12,8 @@ type Config = hc.Config
 
 // Middleware wraps an http.Handler with happycontext request lifecycle logging.
 func Middleware(cfg Config) func(http.Handler) http.Handler {
-	cfg = common.NormalizeConfig(cfg)
-	sink := cfg.Sink
+	prepared := common.PrepareRequestConfig(cfg)
+	sink := prepared.Config.Sink
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -25,19 +23,22 @@ func Middleware(cfg Config) func(http.Handler) http.Handler {
 			}
 
 			ctx, event := common.StartRequest(r.Context(), r.Method, r.URL.Path)
-
-			req := r.WithContext(ctx)
-			tracker := &responseWriter{}
-			ww := httpsnoop.Wrap(w, httpsnoop.Hooks{
-				WriteHeader: tracker.writeHeaderHook,
-				Write:       tracker.writeHook,
-				ReadFrom:    tracker.readFromHook,
-			})
+			req := r
+			oldCtx, swappedCtx := common.SwapRequestContextUnsafe(r, ctx)
+			if !swappedCtx {
+				req = r.WithContext(ctx)
+			}
+			ww := wrapResponseWriter(w)
 
 			defer func() {
 				recovered := recover()
-				status := common.ResolveStatus(tracker.statusCode, nil, recovered, tracker.wroteHeader, 0)
-				common.FinalizeRequest(cfg, common.FinalizeInput{
+				statusCode, wroteHeader := ww.status()
+				releaseResponseWriter(ww)
+				status := common.ResolveStatus(statusCode, nil, recovered, wroteHeader, 0)
+				if swappedCtx {
+					_, _ = common.SwapRequestContextUnsafe(r, oldCtx)
+				}
+				common.FinalizePreparedRequest(prepared, common.FinalizeInput{
 					Ctx:        ctx,
 					Event:      event,
 					Route:      req.Pattern,
@@ -52,40 +53,5 @@ func Middleware(cfg Config) func(http.Handler) http.Handler {
 
 			next.ServeHTTP(ww, req)
 		})
-	}
-}
-
-type responseWriter struct {
-	statusCode  int
-	wroteHeader bool
-}
-
-func (rw *responseWriter) writeHeaderHook(next httpsnoop.WriteHeaderFunc) httpsnoop.WriteHeaderFunc {
-	return func(code int) {
-		if !rw.wroteHeader {
-			rw.statusCode = code
-			rw.wroteHeader = true
-		}
-		next(code)
-	}
-}
-
-func (rw *responseWriter) writeHook(next httpsnoop.WriteFunc) httpsnoop.WriteFunc {
-	return func(p []byte) (int, error) {
-		if !rw.wroteHeader {
-			rw.statusCode = http.StatusOK
-			rw.wroteHeader = true
-		}
-		return next(p)
-	}
-}
-
-func (rw *responseWriter) readFromHook(next httpsnoop.ReadFromFunc) httpsnoop.ReadFromFunc {
-	return func(src io.Reader) (int64, error) {
-		if !rw.wroteHeader {
-			rw.statusCode = http.StatusOK
-			rw.wroteHeader = true
-		}
-		return next(src)
 	}
 }

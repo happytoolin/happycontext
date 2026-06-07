@@ -2,7 +2,15 @@ package hc
 
 // NormalizeConfig clamps config values and normalizes policy maps.
 func NormalizeConfig(cfg Config) Config {
-	cfg.SamplingRate = clampRate(cfg.SamplingRate)
+	if cfg.SamplingRate < 0 {
+		cfg.SamplingRate = 0
+	} else if cfg.SamplingRate > 1 {
+		cfg.SamplingRate = 1
+	}
+
+	if len(cfg.LevelSamplingRates) == 0 && len(cfg.OperationPolicies) == 0 {
+		return cfg
+	}
 
 	if len(cfg.LevelSamplingRates) > 0 {
 		clamped := make(map[Level]float64, len(cfg.LevelSamplingRates))
