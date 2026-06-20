@@ -8,7 +8,7 @@ import (
 )
 
 func TestOperationFieldMethodsRecordFields(t *testing.T) {
-	op := StartOperationValue(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
+	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
 	when := time.Date(2026, 6, 6, 12, 0, 0, 0, time.UTC)
 
 	if !op.AddString("worker", "payments") {
@@ -51,7 +51,7 @@ func TestOperationFieldMethodsRecordFields(t *testing.T) {
 }
 
 func TestOperationMethodsRecordErrorMessageAndLevel(t *testing.T) {
-	op := StartOperationValue(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
+	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
 	err := errors.New("boom")
 
 	if !op.Error(err) {
@@ -105,7 +105,7 @@ func TestOperationFieldMethodsNilOperation(t *testing.T) {
 }
 
 func TestOperationAddStringsRejectsOddPairs(t *testing.T) {
-	op := StartOperationValue(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
+	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
 	if op.AddStrings("a", "1", "b") {
 		t.Fatal("AddStrings returned true for odd kv")
 	}

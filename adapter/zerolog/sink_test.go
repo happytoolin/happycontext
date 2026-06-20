@@ -145,18 +145,15 @@ func TestSinkDeterministicOrderSortsCompletionKeys(t *testing.T) {
 	logger := zerolog.New(&buf)
 	sink := NewWithOptions(&logger, SinkOptions{DeterministicOrder: true})
 
-	sink.WriteFieldsWithOperationCompletion(
-		hc.LevelInfo,
-		"done",
-		[]hc.Field{
-			hc.Int("z", 1),
-			hc.Int("a", 2),
-		},
-		hc.OperationStart{Domain: hc.DomainJob, Name: "cleanup"},
-		7,
-		0,
-		hc.OutcomeSuccess,
-	)
+	sink.Write(hc.LevelInfo, "done", map[string]any{
+		"z":           1,
+		"a":           2,
+		"duration_ms": int64(7),
+		"op.code":     0,
+		"op.domain":   string(hc.DomainJob),
+		"op.name":     "cleanup",
+		"op.outcome":  string(hc.OutcomeSuccess),
+	})
 
 	output := buf.String()
 	assertKeyOrder(t, output,

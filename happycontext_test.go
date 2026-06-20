@@ -62,7 +62,7 @@ func TestCommitUsesEventMessageWhenPresent(t *testing.T) {
 }
 
 func TestCommitUsesOperationDefaultMessageForNonHTTPContext(t *testing.T) {
-	ctx, _ := BeginOperation(context.Background(), OperationStart{
+	ctx, _ := beginOperation(context.Background(), OperationStart{
 		Domain: DomainJob,
 		Name:   "cleanup",
 	})

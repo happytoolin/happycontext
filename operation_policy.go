@@ -22,7 +22,7 @@ func shouldWriteOperationDefault(cfg Config, policy OperationPolicy, hasError bo
 	return shouldSample(rate)
 }
 
-func shouldWriteOperationDefaultPrepared(prepared PreparedConfig, policy OperationPolicy, hasError bool, code, statusCode int, outcome Outcome, level Level) bool {
+func shouldWriteOperationDefaultPrepared(prepared preparedConfig, policy OperationPolicy, hasError bool, code, statusCode int, outcome Outcome, level Level) bool {
 	if hasError || code >= 500 || statusCode >= 500 || outcome != OutcomeSuccess {
 		return true
 	}

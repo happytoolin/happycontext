@@ -25,8 +25,8 @@ func init() {
 }
 
 // SwapRequestContextUnsafe replaces r's context in place and returns the
-// previous context. Callers must restore the returned context before releasing
-// any pooled context assigned to r.
+// previous context. Callers must restore the returned context before the
+// request leaves the middleware.
 func SwapRequestContextUnsafe(r *http.Request, ctx context.Context) (context.Context, bool) {
 	if r == nil || !requestContextOK {
 		return nil, false

@@ -36,9 +36,6 @@ func EventHasMessage(e *Event) bool {
 }
 
 // EventStartTime returns e's wall-clock start time.
-//
-// Local, in-place, and pooled integration APIs use monotonic-only timing for
-// duration and return a zero wall-clock start time.
 func EventStartTime(e *Event) time.Time {
 	if e == nil {
 		return time.Time{}

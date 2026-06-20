@@ -368,49 +368,26 @@ func runJob(cfg hc.Config) (err error) {
 }
 ```
 
-`op.End(cfg, &err)` is the supported non-HTTP completion path in this API.
-
-For hot loops that do not need `hc.FromContext(op.Context())`, use `hc.StartOperationLocal` and direct operation methods:
+`op.End(cfg, &err)` is the default completion path. When a caller handles errors
+explicitly and does not need panic capture, call `Finish`:
 
 ```go
-func runJobLocal(cfg hc.Config) (err error) {
-	op := hc.StartOperationLocal(context.Background(), hc.OperationStart{
+func runBatch(ctx context.Context, cfg hc.Config, job Job) error {
+	op := hc.StartOperation(ctx, hc.OperationStart{
 		Domain: hc.DomainJob,
 		Name:   "invoice.reconcile",
+		ID:     job.ID,
 	})
-	defer op.End(cfg, &err)
+	op.Add("worker", "payments", "tenant", job.Tenant)
 
-	op.Add2("worker", "payments", "tenant", "enterprise")
-	return nil
-}
-```
-
-When a hot loop handles errors explicitly and does not need `End`'s panic capture, prepare the config once and call `FinishPrepared`:
-
-```go
-func runBatchFast(ctx context.Context, cfg hc.Config, jobs []Job) error {
-	prepared := hc.PrepareConfig(cfg)
-	var event hc.Event
-
-	for _, job := range jobs {
-		op := hc.StartOperationInPlace(ctx, hc.OperationStart{
-			Domain: hc.DomainJob,
-			Name:   "invoice.reconcile",
-			ID:     job.ID,
-		}, &event)
-		op.Add2("worker", "payments", "tenant", job.Tenant)
-
-		err := process(job)
-		op.FinishPrepared(prepared, err)
-		if err != nil {
-			return err
-		}
+	err := process(job)
+	op.Finish(cfg, err)
+	if err != nil {
+		return err
 	}
 	return nil
 }
 ```
-
-`hc.StartOperationValue`, `hc.StartOperationInPlace`, and `hc.PrepareOperationStart` are available for tighter loops, but `hc.StartOperation` remains the ergonomic default. Local, in-place, and pooled integration operations use monotonic-only timing, so `hc.EventStartTime(op.Event())` is zero while final events still include `duration_ms`.
 
 ## Integrations
 
@@ -428,7 +405,6 @@ func runBatchFast(ctx context.Context, cfg hc.Config, jobs []Job) error {
 - `adapter/zerolog`
 
 All adapters expose `NewWithOptions` plus `SinkOptions{DeterministicOrder: true}` when you need stable field ordering.
-Adapters also implement internal fast paths so small finalized events can avoid building a map before writing.
 
 ## More Examples
 

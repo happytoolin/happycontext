@@ -33,9 +33,6 @@ func BenchmarkAdapter_slog(b *testing.B) {
 	sink := New(logger)
 	sinkDeterministic := NewWithOptions(logger, SinkOptions{DeterministicOrder: true})
 	medium := benchFieldsMedium()
-	smallFields := fieldListFromMap(benchFieldsSmall)
-	mediumFields := fieldListFromMap(medium)
-	start := hc.OperationStart{Domain: hc.DomainJob, Name: "cleanup", ID: "job_8472", Source: "nightly", Attempt: 1, MaxAttempts: 3}
 
 	b.Run("write_small", func(b *testing.B) {
 		b.ReportAllocs()
@@ -51,60 +48,10 @@ func BenchmarkAdapter_slog(b *testing.B) {
 		}
 	})
 
-	b.Run("write_fields_small", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			sink.WriteFields(hc.LevelInfo, "request_completed", smallFields)
-		}
-	})
-
-	b.Run("write_fields_medium", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			sink.WriteFields(hc.LevelInfo, "request_completed", mediumFields)
-		}
-	})
-
-	b.Run("write_fields_completion_small", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			sink.WriteFieldsWithCompletion(hc.LevelInfo, "request_completed", smallFields, 7, 204, hc.OutcomeSuccess)
-		}
-	})
-
-	b.Run("write_fields_completion_medium", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			sink.WriteFieldsWithCompletion(hc.LevelInfo, "request_completed", mediumFields, 7, 200, hc.OutcomeSuccess)
-		}
-	})
-
-	b.Run("write_fields_operation_completion_small", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			sink.WriteFieldsWithOperationCompletion(hc.LevelInfo, "operation_completed", smallFields, start, 7, 0, hc.OutcomeSuccess)
-		}
-	})
-
-	b.Run("write_fields_operation_completion_medium", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			sink.WriteFieldsWithOperationCompletion(hc.LevelInfo, "operation_completed", mediumFields, start, 7, 0, hc.OutcomeSuccess)
-		}
-	})
-
 	b.Run("write_medium_deterministic", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			sinkDeterministic.Write(hc.LevelInfo, "request_completed", medium)
 		}
 	})
-}
-
-func fieldListFromMap(fields map[string]any) []hc.Field {
-	list := make([]hc.Field, 0, len(fields))
-	for key, value := range fields {
-		list = append(list, hc.Field{Key: key, Value: value})
-	}
-	return list
 }

@@ -106,7 +106,4 @@ func TestPrepareRequestConfigNormalizesAndPrepares(t *testing.T) {
 	if prepared.Config.SamplingRate != 1 {
 		t.Fatalf("sampling rate = %v, want 1", prepared.Config.SamplingRate)
 	}
-	if prepared.Prepared.Config().SamplingRate != 1 {
-		t.Fatalf("prepared sampling rate = %v, want 1", prepared.Prepared.Config().SamplingRate)
-	}
 }

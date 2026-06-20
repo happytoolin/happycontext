@@ -7,9 +7,9 @@ Machine: Apple M4 (darwin/arm64)
 
 This pass keeps three useful changes:
 
-- Lower-allocation event storage and typed field/sink paths for small events.
-- Faster HTTP integrations through pooled request state, prepared request config, monotonic timing, and guarded unsafe request-context swaps.
-- Hot-path operation APIs for callers that can trade ergonomics for fewer allocations.
+- Lower-allocation event storage for small events.
+- Faster HTTP integrations through prepared request config and guarded unsafe request-context swaps.
+- Typed field helpers, enrichment, redaction, and async sink support while keeping the public sink contract map-based.
 
 Focused verification commands:
 
@@ -31,31 +31,18 @@ HTTP middleware noop-sink path:
 | `BenchmarkRouter_gin/middleware_on_sink_noop-10` | 207.5-211.4 | 208 | 4 |
 | `BenchmarkRouter_echo/middleware_on_sink_noop-10` | 219.0-222.2 | 232 | 5 |
 
-Selected operation paths:
+Selected operation path:
 
 | Benchmark | ns/op | B/op | allocs/op |
 |---|---:|---:|---:|
 | `BenchmarkOperationLifecycle-10` | 519.2-541.8 | 1288 | 12 |
-| `BenchmarkOperationLifecycleLocalDirectAdd2FastSink-10` | 158.7-178.0 | 384 | 1 |
-| `BenchmarkOperationLifecycleInPlaceReuseDirectAdd2FinishPreparedFastSink-10` | 72.20-75.29 | 0 | 0 |
-| `BenchmarkOperationLifecyclePreparedStartInPlaceNoTimingReuseDirectAdd2FinishPreparedFastSink-10` | 34.27-36.91 | 0 | 0 |
-
-Selected adapter fast paths:
-
-| Benchmark | ns/op | B/op | allocs/op |
-|---|---:|---:|---:|
-| `BenchmarkAdapter_zerolog/write_fields_small-10` | 122.3-125.0 | 0 | 0 |
-| `BenchmarkAdapter_zap/write_fields_small-10` | 413.7-422.6 | 0 | 0 |
-| `BenchmarkAdapter_slog/write_fields_small-10` | 537.9-566.7 | 48 | 1 |
 
 Interpretation:
 
-- Small events stay in an inline typed field store, avoiding map construction and scalar boxing on sampled-out events and on adapters that implement borrowed-field fast paths.
-- The std/gin/echo integrations avoid `Request.WithContext` allocation by swapping the unexported request context field in place through a guarded unsafe helper, then restoring the original context before releasing pooled storage.
-- HTTP request events use pooled storage, prepared config, monotonic-only duration timing, and a guarded success fast path.
-- The std integration uses pooled in-package response-writer trackers instead of `httpsnoop`, preserving optional interfaces while removing the hook/closure allocation stack from the hot path.
-- In-place and prepared operation APIs are materially faster, but they are sharp hot-path tools, not the default ergonomic API.
-- Borrowed-field adapter writes avoid map snapshot cost; `zerolog` and `zap` remain zero-alloc, and `slog` drops to one allocation per write by using `LogAttrs`.
+- Small events stay in an inline typed field store internally.
+- The std/gin/echo integrations avoid `Request.WithContext` allocation by swapping the unexported request context field in place through a guarded unsafe helper, then restoring the original context.
+- Public adapters keep the simple `Sink.Write(level, message, fields)` contract.
+- In-place, prepared, and borrowed-field fast paths were intentionally kept out of the public API to preserve DX.
 
 The older full-report tables below are retained as historical baseline data from the February 10, 2026 run.
 

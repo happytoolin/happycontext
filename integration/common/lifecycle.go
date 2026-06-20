@@ -44,7 +44,7 @@ func FinalizePreparedRequest(prepared PreparedRequestConfig, in FinalizeInput) {
 		name = in.Route
 	}
 
-	hc.FinishPreparedOperation(prepared.Prepared, hc.OperationFinish{
+	hc.FinishOperation(prepared.Config, hc.OperationFinish{
 		Ctx:   in.Ctx,
 		Event: in.Event,
 		Start: hc.OperationStart{

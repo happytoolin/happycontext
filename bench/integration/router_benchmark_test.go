@@ -24,19 +24,7 @@ import (
 
 type discardSink struct{}
 
-func (discardSink) Write(hc.Level, string, map[string]any)   {}
-func (discardSink) WriteFields(hc.Level, string, []hc.Field) {}
-func (discardSink) WriteBorrowedFields(hc.Level, string, []hc.BorrowedField) {
-}
-func (discardSink) WriteUnsafe(hc.Level, string, map[string]any) {}
-func (discardSink) WriteFieldsWithCompletion(hc.Level, string, []hc.Field, int64, int, hc.Outcome) {
-}
-func (discardSink) WriteBorrowedFieldsWithCompletion(hc.Level, string, []hc.BorrowedField, int64, int, hc.Outcome) {
-}
-func (discardSink) WriteFieldsWithOperationCompletion(hc.Level, string, []hc.Field, hc.OperationStart, int64, int, hc.Outcome) {
-}
-func (discardSink) WriteBorrowedFieldsWithOperationCompletion(hc.Level, string, []hc.BorrowedField, hc.OperationStart, int64, int, hc.Outcome) {
-}
+func (discardSink) Write(hc.Level, string, map[string]any) {}
 
 type noopSlogHandler struct{}
 

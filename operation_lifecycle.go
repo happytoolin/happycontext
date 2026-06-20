@@ -18,67 +18,10 @@ func StartOperation(baseCtx context.Context, start OperationStart) *Operation {
 	}
 }
 
-// StartOperationValue initializes a stateful operation handle without
-// allocating the handle itself when the returned value stays on the stack.
-func StartOperationValue(baseCtx context.Context, start OperationStart) Operation {
-	ctx, event := NewContext(baseCtx)
-	return Operation{
-		ctx:              ctx,
-		event:            event,
-		start:            normalizedOperationStart(start),
-		deferStartFields: true,
-	}
-}
-
-// StartOperationLocal initializes an operation handle without storing the event
-// in context. It uses monotonic-only timing for duration. Use the returned
-// Operation's direct methods (Add, AddString, Error, SetMessage, and related
-// helpers) to record fields.
+// beginOperation initializes context/event and operation envelope metadata.
 //
-// Context returns the base context, but hc.FromContext(op.Context()) will not
-// return the operation event.
-func StartOperationLocal(baseCtx context.Context, start OperationStart) Operation {
-	if baseCtx == nil {
-		baseCtx = context.Background()
-	}
-	event := newLocalEvent()
-	return Operation{
-		ctx:              baseCtx,
-		event:            event,
-		start:            normalizedOperationStart(start),
-		startMono:        monotonicNow(),
-		deferStartFields: true,
-	}
-}
-
-// StartOperationInPlace initializes an operation using caller-provided event
-// storage. It does not store the event in context, and it uses monotonic-only
-// timing for duration. Use Operation direct methods to record fields.
-//
-// The provided event must not be used concurrently with another active
-// operation or goroutine. Passing nil falls back to StartOperationLocal.
-func StartOperationInPlace(baseCtx context.Context, start OperationStart, event *Event) Operation {
-	if event == nil {
-		return StartOperationLocal(baseCtx, start)
-	}
-	if baseCtx == nil {
-		baseCtx = context.Background()
-	}
-	event.resetLocal()
-	return Operation{
-		ctx:              baseCtx,
-		event:            event,
-		start:            normalizedOperationStart(start),
-		startMono:        monotonicNow(),
-		deferStartFields: true,
-		unsafeEvent:      true,
-	}
-}
-
-// BeginOperation initializes context/event and operation envelope metadata.
-//
-// BeginOperation is a low-level helper used by package integrations.
-func BeginOperation(baseCtx context.Context, start OperationStart) (context.Context, *Event) {
+// beginOperation is a low-level helper used by package integrations.
+func beginOperation(baseCtx context.Context, start OperationStart) (context.Context, *Event) {
 	if baseCtx == nil {
 		baseCtx = context.Background()
 	}
@@ -148,28 +91,17 @@ func (op *Operation) Finish(cfg Config, err error) bool {
 	}, op.deferStartFields, op.startMono, op.unsafeEvent, op.noTiming)
 }
 
-// FinishPrepared finalizes an operation using a config returned by
-// PrepareConfig, avoiding per-operation config normalization.
-func (op *Operation) FinishPrepared(cfg PreparedConfig, err error) bool {
-	if op == nil {
-		return false
-	}
-	return finishOperationPrepared(cfg, op.ctx, op.event, op.start, operationResult{
-		Err: err,
-	}, op.deferStartFields, op.startMono, op.unsafeEvent, op.noTiming)
-}
-
 // FinishOperation finalizes and writes an operation event.
 //
 // FinishOperation is a low-level helper used by package integrations.
 func FinishOperation(cfg Config, in OperationFinish) bool {
-	return FinishPreparedOperation(PrepareConfig(cfg), in)
+	return finishPreparedOperation(prepareConfig(cfg), in)
 }
 
-// FinishPreparedOperation finalizes and writes an operation event using a
+// finishPreparedOperation finalizes and writes an operation event using a
 // prepared config. If in.StartComplete is false, missing operation metadata is
-// merged from the event for compatibility with BeginOperation callers.
-func FinishPreparedOperation(prepared PreparedConfig, in OperationFinish) bool {
+// merged from the event for compatibility with beginOperation callers.
+func finishPreparedOperation(prepared preparedConfig, in OperationFinish) bool {
 	cfg := prepared.cfg
 	if cfg.Sink == nil || in.Event == nil || in.Ctx == nil {
 		return false
@@ -197,10 +129,10 @@ func FinishPreparedOperation(prepared PreparedConfig, in OperationFinish) bool {
 }
 
 func finishOperation(cfg Config, ctx context.Context, event *Event, start OperationStart, result operationResult, deferStartFields bool, startMono int64, unsafeEvent bool, noTiming bool) bool {
-	return finishOperationPrepared(PrepareConfig(cfg), ctx, event, start, result, deferStartFields, startMono, unsafeEvent, noTiming)
+	return finishOperationPrepared(prepareConfig(cfg), ctx, event, start, result, deferStartFields, startMono, unsafeEvent, noTiming)
 }
 
-func finishOperationPrepared(prepared PreparedConfig, ctx context.Context, event *Event, start OperationStart, result operationResult, deferStartFields bool, startMono int64, unsafeEvent bool, noTiming bool) bool {
+func finishOperationPrepared(prepared preparedConfig, ctx context.Context, event *Event, start OperationStart, result operationResult, deferStartFields bool, startMono int64, unsafeEvent bool, noTiming bool) bool {
 	cfg := prepared.cfg
 	if cfg.Sink == nil || event == nil || ctx == nil {
 		return false
@@ -289,7 +221,7 @@ func finishOperationPrepared(prepared PreparedConfig, ctx context.Context, event
 	return true
 }
 
-func finishPreparedDefaultFastPath(prepared PreparedConfig, event *Event, start OperationStart, result operationResult, deferStartFields bool, unsafeEvent bool, noTiming bool) (bool, bool) {
+func finishPreparedDefaultFastPath(prepared preparedConfig, event *Event, start OperationStart, result operationResult, deferStartFields bool, unsafeEvent bool, noTiming bool) (bool, bool) {
 	if !prepared.fastDefaultOperation || !unsafeEvent || !deferStartFields || !noTiming {
 		return false, false
 	}
@@ -299,7 +231,7 @@ func finishPreparedDefaultFastPath(prepared PreparedConfig, event *Event, start 
 	return writePreparedDefaultSuccessNoTiming(prepared, event, start, result.Code)
 }
 
-func writePreparedDefaultSuccessNoTiming(prepared PreparedConfig, event *Event, start OperationStart, code int) (bool, bool) {
+func writePreparedDefaultSuccessNoTiming(prepared preparedConfig, event *Event, start OperationStart, code int) (bool, bool) {
 	if !prepared.fastDefaultOperation || start.Domain == DomainHTTP || code >= 500 {
 		return false, false
 	}
@@ -323,7 +255,7 @@ func writePreparedDefaultSuccessNoTiming(prepared PreparedConfig, event *Event, 
 	return true, true
 }
 
-func finishPreparedCompleteDefaultOperation(prepared PreparedConfig, event *Event, start OperationStart, result operationResult, unsafeEvent bool) (bool, bool) {
+func finishPreparedCompleteDefaultOperation(prepared preparedConfig, event *Event, start OperationStart, result operationResult, unsafeEvent bool) (bool, bool) {
 	if !prepared.fastDefaultOperation {
 		return false, false
 	}
@@ -361,7 +293,7 @@ func finishPreparedCompleteDefaultOperation(prepared PreparedConfig, event *Even
 	return true, true
 }
 
-func writePreparedCompleteDefaultSuccessFast(prepared PreparedConfig, event *Event, start OperationStart, result operationResult) (bool, bool) {
+func writePreparedCompleteDefaultSuccessFast(prepared preparedConfig, event *Event, start OperationStart, result operationResult) (bool, bool) {
 	if result.Outcome != "" || result.Err != nil || result.Recovered != nil || result.Code >= 500 {
 		return false, false
 	}

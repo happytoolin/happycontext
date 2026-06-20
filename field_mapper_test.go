@@ -6,7 +6,7 @@ import (
 )
 
 func TestFieldMapperRedactsAndDropsFields(t *testing.T) {
-	ctx, event := BeginOperation(context.Background(), OperationStart{
+	ctx, event := beginOperation(context.Background(), OperationStart{
 		Domain: DomainHTTP,
 		Name:   "request",
 	})
@@ -48,7 +48,7 @@ func TestFieldMapperRedactsAndDropsFields(t *testing.T) {
 }
 
 func TestFieldMapperRunsOnlyForKeptEvents(t *testing.T) {
-	ctx, event := BeginOperation(context.Background(), OperationStart{
+	ctx, event := beginOperation(context.Background(), OperationStart{
 		Domain: DomainHTTP,
 		Name:   "request",
 	})
@@ -78,7 +78,7 @@ func TestFieldMapperRunsOnlyForKeptEvents(t *testing.T) {
 }
 
 func TestEnricherRunsBeforeSampling(t *testing.T) {
-	ctx, event := BeginOperation(context.Background(), OperationStart{
+	ctx, event := beginOperation(context.Background(), OperationStart{
 		Domain: DomainHTTP,
 		Name:   "request",
 	})

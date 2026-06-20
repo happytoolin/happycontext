@@ -27,7 +27,7 @@ func TestEventAccessors(t *testing.T) {
 
 	t.Run("event accessors with valid event", func(t *testing.T) {
 		ctx := context.Background()
-		ctx, event := BeginOperation(ctx, OperationStart{
+		ctx, event := beginOperation(ctx, OperationStart{
 			Domain: DomainHTTP,
 			Name:   "test",
 		})
@@ -73,7 +73,7 @@ func TestEventAccessors(t *testing.T) {
 
 func TestEventFieldsMutation(t *testing.T) {
 	ctx := context.Background()
-	ctx, event := BeginOperation(ctx, OperationStart{
+	ctx, event := beginOperation(ctx, OperationStart{
 		Domain: DomainHTTP,
 		Name:   "test",
 	})
@@ -110,25 +110,4 @@ func TestEventFieldsReturnsShallowCopy(t *testing.T) {
 	if nestedAgain["inner"] != "changed" {
 		t.Fatalf("nested mutation should be shared by reference, got %v", nestedAgain["inner"])
 	}
-}
-
-func TestNewPooledContextStoresEventAndDelegatesParentValues(t *testing.T) {
-	type parentKey struct{}
-
-	parent := context.WithValue(context.Background(), parentKey{}, "parent-value")
-	ctx, event := NewPooledContext(parent)
-	if event == nil {
-		t.Fatal("expected pooled event")
-	}
-	if FromContext(ctx) != event {
-		t.Fatal("FromContext did not return pooled event")
-	}
-	if !EventStartTime(event).IsZero() {
-		t.Fatal("expected pooled event to use monotonic-only timing")
-	}
-	if got := ctx.Value(parentKey{}); got != "parent-value" {
-		t.Fatalf("parent value = %v, want parent-value", got)
-	}
-
-	ReleasePooledContext(ctx)
 }

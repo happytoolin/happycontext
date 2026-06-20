@@ -11,14 +11,13 @@ type Event struct {
 	mu                sync.RWMutex
 	message           string
 	fieldMap          map[string]any
-	fieldList         []BorrowedField
-	fieldBuf          [5]BorrowedField
+	fieldList         []borrowedField
+	fieldBuf          [5]borrowedField
 	startTime         time.Time
 	startMono         int64
 	hasError          bool
 	requestedLevel    Level
 	hasRequestedLevel bool
-	pooled            bool
 }
 
 type snapshot struct {
@@ -50,39 +49,11 @@ func newEvent() *Event {
 	return e
 }
 
-func newLocalEvent() *Event {
-	e := &Event{}
-	e.resetLocal()
-	return e
-}
-
 func (e *Event) reset() {
 	e.message = ""
 	e.fieldMap = nil
 	e.fieldList = nil
 	e.startTime = time.Now()
-	e.startMono = 0
-	e.hasError = false
-	e.requestedLevel = Level("")
-	e.hasRequestedLevel = false
-}
-
-func (e *Event) resetPooled() {
-	e.message = ""
-	e.fieldMap = nil
-	e.fieldList = nil
-	e.startTime = time.Time{}
-	e.startMono = monotonicNow()
-	e.hasError = false
-	e.requestedLevel = Level("")
-	e.hasRequestedLevel = false
-}
-
-func (e *Event) resetLocal() {
-	e.message = ""
-	e.fieldMap = nil
-	e.fieldList = nil
-	e.startTime = time.Time{}
 	e.startMono = 0
 	e.hasError = false
 	e.requestedLevel = Level("")
@@ -332,7 +303,7 @@ func (e *Event) set2FieldsLocked(key1 string, value1 any, key2 string, value2 an
 	e.setFieldLocked(key2, value2)
 }
 
-func borrowedFieldFromAny(key string, value any) BorrowedField {
+func borrowedFieldFromAny(key string, value any) borrowedField {
 	switch typed := value.(type) {
 	case string:
 		return borrowedString(key, typed)
@@ -479,7 +450,7 @@ func (e *Event) stringFieldValueLocked(key string) (string, bool) {
 		if field.Key != key {
 			continue
 		}
-		if field.Kind == FieldString {
+		if field.Kind == fieldString {
 			return field.StringValue, true
 		}
 		value, ok := field.Value.(string)
@@ -498,9 +469,9 @@ func (e *Event) intFieldValueLocked(key string) (int, bool) {
 			continue
 		}
 		switch field.Kind {
-		case FieldInt:
+		case fieldInt:
 			return field.IntValue, true
-		case FieldInt64:
+		case fieldInt64:
 			return int(field.Int64Value), true
 		default:
 			return asInt(field.Value)
@@ -535,49 +506,4 @@ func (e *Event) fieldsSnapshotWithExtraLocked(extra int) map[string]any {
 		fields[field.Key] = field.Any()
 	}
 	return fields
-}
-
-func (e *Event) withBorrowedFieldList(fn func([]BorrowedField)) bool {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	return e.withBorrowedFieldListUnsafe(fn)
-}
-
-func (e *Event) withBorrowedFieldListUnsafe(fn func([]BorrowedField)) bool {
-	if e.fieldMap != nil {
-		return false
-	}
-	fn(e.fieldList)
-	return true
-}
-
-func (e *Event) withFieldList(fn func([]Field)) bool {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	return e.withFieldListUnsafe(fn)
-}
-
-func (e *Event) withFieldListUnsafe(fn func([]Field)) bool {
-	if e.fieldMap != nil {
-		return false
-	}
-	fields := make([]Field, len(e.fieldList))
-	for i, field := range e.fieldList {
-		fields[i] = Field{Key: field.Key, Value: field.Any()}
-	}
-	fn(fields)
-	return true
-}
-
-func (e *Event) withFieldMap(fn func(map[string]any)) bool {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	if e.fieldMap == nil {
-		return false
-	}
-	fn(e.fieldMap)
-	return true
 }

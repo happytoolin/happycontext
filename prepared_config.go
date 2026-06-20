@@ -1,20 +1,20 @@
 package hc
 
-// PreparedConfig stores normalized config for repeated hot-path finalization.
+// preparedConfig stores normalized config for repeated hot-path finalization.
 //
-// Build one with PrepareConfig and reuse it when the same Config is used for
+// Build one with prepareConfig and reuse it when the same Config is used for
 // many operations.
-type PreparedConfig struct {
+type preparedConfig struct {
 	cfg                  Config
 	hasLevelSamplingRate bool
 	hasOperationPolicy   bool
 	fastDefaultOperation bool
 }
 
-// PrepareConfig normalizes cfg once for repeated use.
-func PrepareConfig(cfg Config) PreparedConfig {
+// prepareConfig normalizes cfg once for repeated use.
+func prepareConfig(cfg Config) preparedConfig {
 	cfg = NormalizeConfig(cfg)
-	return PreparedConfig{
+	return preparedConfig{
 		cfg:                  cfg,
 		hasLevelSamplingRate: len(cfg.LevelSamplingRates) > 0,
 		hasOperationPolicy:   len(cfg.OperationPolicies) > 0,
@@ -23,11 +23,11 @@ func PrepareConfig(cfg Config) PreparedConfig {
 }
 
 // Config returns the normalized Config stored in prepared.
-func (prepared PreparedConfig) Config() Config {
+func (prepared preparedConfig) Config() Config {
 	return prepared.cfg
 }
 
-func (prepared PreparedConfig) policyForDomain(domain Domain) (OperationPolicy, bool) {
+func (prepared preparedConfig) policyForDomain(domain Domain) (OperationPolicy, bool) {
 	if !prepared.hasOperationPolicy {
 		return OperationPolicy{}, false
 	}

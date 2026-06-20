@@ -5,11 +5,9 @@ import "github.com/happytoolin/happycontext"
 // DefaultMessage is used when Config.Message is empty.
 const DefaultMessage = hc.DefaultMessage
 
-// PreparedRequestConfig stores normalized request lifecycle config and the
-// corresponding prepared operation config for hot-path finalization.
+// PreparedRequestConfig stores normalized request lifecycle config.
 type PreparedRequestConfig struct {
-	Config   hc.Config
-	Prepared hc.PreparedConfig
+	Config hc.Config
 }
 
 // NormalizeConfig clamps config values and applies defaults.
@@ -24,8 +22,5 @@ func NormalizeConfig(cfg hc.Config) hc.Config {
 // PrepareRequestConfig normalizes request config once for middleware hot paths.
 func PrepareRequestConfig(cfg hc.Config) PreparedRequestConfig {
 	cfg = NormalizeConfig(cfg)
-	return PreparedRequestConfig{
-		Config:   cfg,
-		Prepared: hc.PrepareConfig(cfg),
-	}
+	return PreparedRequestConfig{Config: cfg}
 }
