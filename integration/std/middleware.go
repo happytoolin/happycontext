@@ -33,7 +33,6 @@ func Middleware(cfg Config) func(http.Handler) http.Handler {
 			defer func() {
 				recovered := recover()
 				statusCode, wroteHeader := ww.status()
-				releaseResponseWriter(ww)
 				status := common.ResolveStatus(statusCode, nil, recovered, wroteHeader, 0)
 				if swappedCtx {
 					_, _ = common.SwapRequestContextUnsafe(r, oldCtx)
