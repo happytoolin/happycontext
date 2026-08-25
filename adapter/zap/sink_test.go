@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/happytoolin/happycontext"
 	"go.uber.org/zap"
@@ -106,6 +107,45 @@ func TestSinkWriteNilSafety(t *testing.T) {
 
 	sink := New(nil)
 	sink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
+}
+
+func TestSinkCheckPreservesFilteringHooksAndSampling(t *testing.T) {
+	core, logs := observer.New(zapcore.InfoLevel)
+	hookCalls := 0
+	logger := zap.New(core, zap.Hooks(func(zapcore.Entry) error {
+		hookCalls++
+		return nil
+	}))
+	sink := New(logger)
+
+	sink.Write(hc.LevelDebug, "disabled", map[string]any{"k": "v"})
+	if logs.Len() != 0 || hookCalls != 0 {
+		t.Fatalf("disabled write: logs=%d hooks=%d", logs.Len(), hookCalls)
+	}
+	sink.Write(hc.LevelWarn, "enabled", map[string]any{"k": "v"})
+	if logs.Len() != 1 || hookCalls != 1 {
+		t.Fatalf("enabled write: logs=%d hooks=%d", logs.Len(), hookCalls)
+	}
+
+	sampledCore, sampledLogs := observer.New(zapcore.DebugLevel)
+	sampled := zapcore.NewSamplerWithOptions(sampledCore, time.Hour, 1, 0)
+	sampledSink := New(zap.New(sampled))
+	sampledSink.Write(hc.LevelInfo, "same", nil)
+	sampledSink.Write(hc.LevelInfo, "same", nil)
+	if sampledLogs.Len() != 1 {
+		t.Fatalf("sampled logs = %d, want 1", sampledLogs.Len())
+	}
+}
+
+func TestSinkCheckPreservesCallerOptions(t *testing.T) {
+	for _, skip := range []int{0, 1} {
+		core, logs := observer.New(zapcore.DebugLevel)
+		sink := New(zap.New(core, zap.AddCaller(), zap.AddCallerSkip(skip)))
+		sink.Write(hc.LevelInfo, "caller", nil)
+		if logs.Len() != 1 || !logs.All()[0].Caller.Defined {
+			t.Fatalf("skip %d: caller = %+v", skip, logs.All())
+		}
+	}
 }
 
 func TestRecycleSliceClearsAndCaps(t *testing.T) {

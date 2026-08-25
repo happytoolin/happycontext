@@ -57,11 +57,8 @@ func (z *Sink) Write(level hc.Level, message string, fields map[string]any) {
 	if z == nil || z.logger == nil {
 		return
 	}
-	if message == "" {
-		message = hc.DefaultMessage
-	}
 
-	event := z.logger.Info()
+	var event *zerolog.Event
 	switch level {
 	case hc.LevelDebug:
 		event = z.logger.Debug()
@@ -69,6 +66,18 @@ func (z *Sink) Write(level hc.Level, message string, fields map[string]any) {
 		event = z.logger.Warn()
 	case hc.LevelError:
 		event = z.logger.Error()
+	default:
+		event = z.logger.Info()
+	}
+	if !event.Enabled() {
+		return
+	}
+	if message == "" {
+		message = hc.DefaultMessage
+	}
+	if len(fields) == 0 {
+		event.Msg(message)
+		return
 	}
 
 	if !z.deterministicOrder {

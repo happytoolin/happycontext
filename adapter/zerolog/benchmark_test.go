@@ -31,7 +31,16 @@ func benchFieldsMedium() map[string]any {
 func BenchmarkAdapter_zerolog(b *testing.B) {
 	logger := zerolog.New(io.Discard)
 	sink := New(&logger)
+	disabledLogger := logger.Level(zerolog.InfoLevel)
+	disabledSink := New(&disabledLogger)
 	medium := benchFieldsMedium()
+
+	b.Run("write_empty", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			sink.Write(hc.LevelInfo, "request_completed", nil)
+		}
+	})
 
 	b.Run("write_small", func(b *testing.B) {
 		b.ReportAllocs()
@@ -40,10 +49,24 @@ func BenchmarkAdapter_zerolog(b *testing.B) {
 		}
 	})
 
+	b.Run("write_warn_small", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			sink.Write(hc.LevelWarn, "request_completed", benchFieldsSmall)
+		}
+	})
+
 	b.Run("write_medium", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			sink.Write(hc.LevelInfo, "request_completed", medium)
+		}
+	})
+
+	b.Run("write_disabled_medium", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			disabledSink.Write(hc.LevelDebug, "request_completed", medium)
 		}
 	})
 }

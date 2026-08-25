@@ -41,6 +41,13 @@ func BenchmarkAdapter_slog(b *testing.B) {
 		}
 	})
 
+	b.Run("write_empty", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			sink.Write(hc.LevelInfo, "request_completed", nil)
+		}
+	})
+
 	b.Run("write_medium", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
@@ -52,6 +59,13 @@ func BenchmarkAdapter_slog(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			sinkDeterministic.Write(hc.LevelInfo, "request_completed", medium)
+		}
+	})
+
+	b.Run("write_disabled_medium", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			sink.Write(hc.LevelDebug, "request_completed", medium)
 		}
 	})
 }
