@@ -180,6 +180,39 @@ func TestSinkRecoverableAfterHandlerPanic(t *testing.T) {
 	}
 }
 
+func TestRecycleSliceClearsAndCaps(t *testing.T) {
+	var pool sync.Pool
+
+	small := make([]any, 1, slogPoolCapacity)
+	small[0] = new(int)
+	recycleSlice(&pool, &small, small)
+	if len(small) != 0 || small[:cap(small)][0] != nil {
+		t.Fatalf("small buffer was not cleared and recycled: len=%d first=%v", len(small), small[:cap(small)][0])
+	}
+
+	attrs := make([]slog.Attr, 0, slogPoolCapacity)
+	for range 100 {
+		attrs = append(attrs, slog.Attr{})
+	}
+	if cap(attrs) > slogPoolMaxCapacity {
+		t.Fatalf("100-field buffer exceeds pool limit: cap=%d limit=%d", cap(attrs), slogPoolMaxCapacity)
+	}
+	attrs[0] = slog.Any("retained", new(int))
+	var attrPool sync.Pool
+	recycleSlice(&attrPool, &attrs, attrs)
+	first := attrs[:cap(attrs)][0]
+	if len(attrs) != 0 || first.Key != "" || first.Value.Any() != nil {
+		t.Fatalf("grown attr buffer was not cleared and recycled: len=%d first=%v", len(attrs), first)
+	}
+
+	oversized := make([]any, slogPoolMaxCapacity+1)
+	oversized[0] = new(int)
+	recycleSlice(&pool, &oversized, oversized)
+	if len(oversized) != slogPoolMaxCapacity+1 {
+		t.Fatalf("oversized buffer was retained: len=%d", len(oversized))
+	}
+}
+
 type panicHandler struct{ calls *int }
 
 func (p panicHandler) Enabled(context.Context, slog.Level) bool { return true }

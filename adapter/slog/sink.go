@@ -9,18 +9,34 @@ import (
 	"github.com/happytoolin/happycontext"
 )
 
+// ponytail: retain buffers through the tested 100-field case; raise the limit
+// only if larger events are common enough to justify the retained memory.
+const (
+	slogPoolCapacity    = 32
+	slogPoolMaxCapacity = 160
+)
+
 var slogAttrPool = sync.Pool{
 	New: func() any {
-		buf := make([]slog.Attr, 0, 32)
+		buf := make([]slog.Attr, 0, slogPoolCapacity)
 		return &buf
 	},
 }
 
 var slogKeyPool = sync.Pool{
 	New: func() any {
-		buf := make([]string, 0, 32)
+		buf := make([]string, 0, slogPoolCapacity)
 		return &buf
 	},
+}
+
+func recycleSlice[T any](pool *sync.Pool, bufPtr *[]T, buf []T) {
+	if cap(buf) > slogPoolMaxCapacity {
+		return
+	}
+	clear(buf)
+	*bufPtr = buf[:0]
+	pool.Put(bufPtr)
 }
 
 // SinkOptions controls slog adapter behavior.
@@ -68,8 +84,7 @@ func (s *Sink) Write(level hc.Level, message string, fields map[string]any) {
 	bufPtr := slogAttrPool.Get().(*[]slog.Attr)
 	attrs := (*bufPtr)[:0]
 	defer func() {
-		*bufPtr = attrs[:0]
-		slogAttrPool.Put(bufPtr)
+		recycleSlice(&slogAttrPool, bufPtr, attrs)
 	}()
 
 	if !s.deterministicOrder {
@@ -82,8 +97,7 @@ func (s *Sink) Write(level hc.Level, message string, fields map[string]any) {
 	keysPtr := slogKeyPool.Get().(*[]string)
 	keys := (*keysPtr)[:0]
 	defer func() {
-		*keysPtr = keys[:0]
-		slogKeyPool.Put(keysPtr)
+		recycleSlice(&slogKeyPool, keysPtr, keys)
 	}()
 	for k := range fields {
 		keys = append(keys, k)

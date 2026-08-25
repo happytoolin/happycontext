@@ -147,3 +147,23 @@ func TestSinkWriteNilSafety(t *testing.T) {
 	sink := New(nil)
 	sink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
 }
+
+func TestRecycleKeysClearsAndCaps(t *testing.T) {
+	keys := make([]string, 0, zerologPoolCapacity)
+	for range 100 {
+		keys = append(keys, "retained")
+	}
+	if cap(keys) > zerologPoolMaxCapacity {
+		t.Fatalf("100-field buffer exceeds pool limit: cap=%d limit=%d", cap(keys), zerologPoolMaxCapacity)
+	}
+	recycleKeys(&keys, keys)
+	if len(keys) != 0 || keys[:cap(keys)][0] != "" {
+		t.Fatalf("key buffer was not cleared and recycled: len=%d first=%q", len(keys), keys[:cap(keys)][0])
+	}
+
+	oversized := make([]string, zerologPoolMaxCapacity+1)
+	recycleKeys(&oversized, oversized)
+	if len(oversized) != zerologPoolMaxCapacity+1 {
+		t.Fatalf("oversized buffer was retained: len=%d", len(oversized))
+	}
+}

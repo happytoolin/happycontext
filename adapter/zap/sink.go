@@ -8,18 +8,34 @@ import (
 	"go.uber.org/zap"
 )
 
+// ponytail: retain buffers through the tested 100-field case; raise the limit
+// only if larger events are common enough to justify the retained memory.
+const (
+	zapPoolCapacity    = 32
+	zapPoolMaxCapacity = 160
+)
+
 var zapFieldPool = sync.Pool{
 	New: func() any {
-		buf := make([]zap.Field, 0, 32)
+		buf := make([]zap.Field, 0, zapPoolCapacity)
 		return &buf
 	},
 }
 
 var zapKeyPool = sync.Pool{
 	New: func() any {
-		buf := make([]string, 0, 32)
+		buf := make([]string, 0, zapPoolCapacity)
 		return &buf
 	},
+}
+
+func recycleSlice[T any](pool *sync.Pool, bufPtr *[]T, buf []T) {
+	if cap(buf) > zapPoolMaxCapacity {
+		return
+	}
+	clear(buf)
+	*bufPtr = buf[:0]
+	pool.Put(bufPtr)
 }
 
 // SinkOptions controls zap adapter behavior.
@@ -56,8 +72,7 @@ func (z *Sink) Write(level hc.Level, message string, fields map[string]any) {
 	bufPtr := zapFieldPool.Get().(*[]zap.Field)
 	zapFields := (*bufPtr)[:0]
 	defer func() {
-		*bufPtr = zapFields[:0]
-		zapFieldPool.Put(bufPtr)
+		recycleSlice(&zapFieldPool, bufPtr, zapFields)
 	}()
 
 	if !z.deterministicOrder {
@@ -71,8 +86,7 @@ func (z *Sink) Write(level hc.Level, message string, fields map[string]any) {
 	keysPtr := zapKeyPool.Get().(*[]string)
 	keys := (*keysPtr)[:0]
 	defer func() {
-		*keysPtr = keys[:0]
-		zapKeyPool.Put(keysPtr)
+		recycleSlice(&zapKeyPool, keysPtr, keys)
 	}()
 
 	for k := range fields {
