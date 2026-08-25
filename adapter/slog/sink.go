@@ -9,9 +9,9 @@ import (
 	"github.com/happytoolin/happycontext"
 )
 
-var slogAnyPool = sync.Pool{
+var slogAttrPool = sync.Pool{
 	New: func() any {
-		buf := make([]any, 0, 32)
+		buf := make([]slog.Attr, 0, 32)
 		return &buf
 	},
 }
@@ -65,18 +65,18 @@ func (s *Sink) Write(level hc.Level, message string, fields map[string]any) {
 		slogLevel = slog.LevelError
 	}
 
-	bufPtr := slogAnyPool.Get().(*[]any)
+	bufPtr := slogAttrPool.Get().(*[]slog.Attr)
 	attrs := (*bufPtr)[:0]
 	defer func() {
 		*bufPtr = attrs[:0]
-		slogAnyPool.Put(bufPtr)
+		slogAttrPool.Put(bufPtr)
 	}()
 
 	if !s.deterministicOrder {
 		for k, v := range fields {
 			attrs = append(attrs, slog.Any(k, v))
 		}
-		s.logger.Log(context.Background(), slogLevel, message, attrs...)
+		s.logger.LogAttrs(context.Background(), slogLevel, message, attrs...)
 		return
 	}
 	keysPtr := slogKeyPool.Get().(*[]string)
@@ -93,7 +93,7 @@ func (s *Sink) Write(level hc.Level, message string, fields map[string]any) {
 	for _, k := range keys {
 		attrs = append(attrs, slog.Any(k, fields[k]))
 	}
-	s.logger.Log(context.Background(), slogLevel, message, attrs...)
+	s.logger.LogAttrs(context.Background(), slogLevel, message, attrs...)
 }
 
 var _ hc.Sink = (*Sink)(nil)
