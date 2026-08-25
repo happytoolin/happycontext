@@ -44,26 +44,20 @@ func structuredErrorMessage(err error) string {
 
 func deepestUnwrappedError(err error) error {
 	current := err
-	var seen map[error]struct{}
+	seen := make(map[error]struct{})
 	for depth := 0; current != nil; depth++ {
 		if depth >= 100 {
 			return current
 		}
+		if isComparableError(current) {
+			if _, ok := seen[current]; ok {
+				return current
+			}
+			seen[current] = struct{}{}
+		}
 		next := errors.Unwrap(current)
 		if next == nil {
 			return current
-		}
-		if seen == nil {
-			seen = make(map[error]struct{})
-			if isComparableError(current) {
-				seen[current] = struct{}{}
-			}
-		}
-		if isComparableError(next) {
-			if _, ok := seen[next]; ok {
-				return next
-			}
-			seen[next] = struct{}{}
 		}
 		current = next
 	}

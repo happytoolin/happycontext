@@ -77,9 +77,6 @@ func (op *Operation) End(cfg Config, errp *error) bool {
 //
 // FinishOperation is a low-level helper used by package integrations.
 func FinishOperation(cfg Config, in OperationFinish) bool {
-	if cfg.Sink == nil || in.Event == nil || in.Ctx == nil {
-		return false
-	}
 	return finishOperation(cfg, in.Ctx, in.Event, hydrateOperationStart(in.Start, in.Event), operationResult{
 		Outcome:   in.Outcome,
 		Code:      in.Code,
