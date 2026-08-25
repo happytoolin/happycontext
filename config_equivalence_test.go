@@ -76,6 +76,7 @@ func nastyConfigs() []Config {
 	rateNaN := math.NaN()
 	rateNegInf := math.Inf(-1)
 	ratePosInf := math.Inf(1)
+	rateNegZero := math.Copysign(0, -1)
 	rateFine := 0.5
 
 	return []Config{
@@ -83,11 +84,11 @@ func nastyConfigs() []Config {
 		{SamplingRate: math.NaN()},
 		{SamplingRate: math.Inf(1)},
 		{SamplingRate: math.Inf(-1)},
-		{SamplingRate: -0.0},
+		{SamplingRate: rateNegZero},
 		{LevelSamplingRates: map[Level]float64{}}, // non-nil, empty
 		{LevelSamplingRates: map[Level]float64{
-			LevelDebug: 1.25,
-			LevelWarn:  -0.5,
+			LevelDebug:       1.25,
+			LevelWarn:        -0.5,
 			Level("invalid"): 0.7,
 			LevelError:       math.NaN(),
 			LevelInfo:        math.Inf(1),
@@ -115,7 +116,7 @@ func nastyConfigs() []Config {
 			"api": {SuccessLevel: LevelWarn, SamplingRate: &rateNaN},
 		}},
 		{OperationPolicies: map[Domain]OperationPolicy{
-			"":                {SuccessLevel: LevelDebug},
+			"":                 {SuccessLevel: LevelDebug},
 			defaultDomainValue: {SuccessLevel: LevelWarn}, // canonical must beat alias
 		}},
 		{OperationPolicies: map[Domain]OperationPolicy{
@@ -137,7 +138,7 @@ func nastyConfigs() []Config {
 				FailureLevel:  LevelError,
 				PanicLevel:    LevelError,
 				OutcomeLevels: map[Outcome]Level{OutcomeRetry: LevelWarn},
-				SamplingRate:  &rateFine, // fully valid policy
+				SamplingRate:  &rateNegZero, // fully valid policy
 			},
 		}},
 	}
@@ -153,7 +154,7 @@ func configsEqual(a, b Config) bool {
 	if (a.Sink == nil) != (b.Sink == nil) || (a.Sampler == nil) != (b.Sampler == nil) {
 		return false
 	}
-	if len(a.LevelSamplingRates) != len(b.LevelSamplingRates) {
+	if (a.LevelSamplingRates == nil) != (b.LevelSamplingRates == nil) || len(a.LevelSamplingRates) != len(b.LevelSamplingRates) {
 		return false
 	}
 	for level, ra := range a.LevelSamplingRates {
@@ -162,7 +163,7 @@ func configsEqual(a, b Config) bool {
 			return false
 		}
 	}
-	if len(a.OperationPolicies) != len(b.OperationPolicies) {
+	if (a.OperationPolicies == nil) != (b.OperationPolicies == nil) || len(a.OperationPolicies) != len(b.OperationPolicies) {
 		return false
 	}
 	for domain, pa := range a.OperationPolicies {
@@ -184,7 +185,7 @@ func policiesEqual(a, b OperationPolicy) bool {
 	if a.SamplingRate != nil && !floatEqual(*a.SamplingRate, *b.SamplingRate) {
 		return false
 	}
-	if len(a.OutcomeLevels) != len(b.OutcomeLevels) {
+	if (a.OutcomeLevels == nil) != (b.OutcomeLevels == nil) || len(a.OutcomeLevels) != len(b.OutcomeLevels) {
 		return false
 	}
 	for outcome, la := range a.OutcomeLevels {
@@ -197,7 +198,7 @@ func policiesEqual(a, b OperationPolicy) bool {
 }
 
 func floatEqual(a, b float64) bool {
-	return a == b || (math.IsNaN(a) && math.IsNaN(b))
+	return math.Float64bits(a) == math.Float64bits(b) || (math.IsNaN(a) && math.IsNaN(b))
 }
 
 func TestNormalizeConfigMatchesReference(t *testing.T) {
@@ -217,18 +218,18 @@ func TestNormalizeConfigRandomizedMatchesReference(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	levels := []Level{"", LevelDebug, LevelInfo, LevelWarn, LevelError, Level("bogus")}
 	outcomes := []Outcome{"", OutcomeSuccess, OutcomeFailure, OutcomePanic, OutcomeCanceled, OutcomeTimeout, OutcomeRetry, Outcome("weird")}
-	rates := []float64{0, 1, -1, 2, 0.5, math.NaN(), math.Inf(1), math.Inf(-1), -0.0, 1e-300}
+	rates := []float64{0, 1, -1, 2, 0.5, math.NaN(), math.Inf(1), math.Inf(-1), math.Copysign(0, -1), 1e-300}
 	domains := []Domain{"", "http", "job", defaultDomainValue, Domain("")}
 
 	randomLevel := func() Level { return levels[rng.Intn(len(levels))] }
-	hasPtr := rng.Intn(2) == 0
 
 	for i := 0; i < 2000; i++ {
 		cfg := Config{SamplingRate: rates[rng.Intn(len(rates))]}
 
 		if rng.Intn(2) == 0 {
-			m := make(map[Level]float64, rng.Intn(4))
-			for j := 0; j < rng.Intn(4); j++ {
+			n := rng.Intn(4)
+			m := make(map[Level]float64, n)
+			for j := 0; j < n; j++ {
 				m[randomLevel()] = rates[rng.Intn(len(rates))]
 			}
 			if rng.Intn(4) == 0 {
@@ -238,21 +239,23 @@ func TestNormalizeConfigRandomizedMatchesReference(t *testing.T) {
 		}
 
 		if rng.Intn(2) == 0 {
-			m := make(map[Domain]OperationPolicy, rng.Intn(3))
-			for j := 0; j < rng.Intn(3); j++ {
+			n := rng.Intn(3)
+			m := make(map[Domain]OperationPolicy, n)
+			for j := 0; j < n; j++ {
 				policy := OperationPolicy{
 					SuccessLevel: randomLevel(),
 					FailureLevel: randomLevel(),
 					PanicLevel:   randomLevel(),
 				}
 				if rng.Intn(2) == 0 {
-					ol := make(map[Outcome]Level, rng.Intn(3))
-					for k := 0; k < rng.Intn(3); k++ {
+					n := rng.Intn(3)
+					ol := make(map[Outcome]Level, n)
+					for k := 0; k < n; k++ {
 						ol[outcomes[rng.Intn(len(outcomes))]] = randomLevel()
 					}
 					policy.OutcomeLevels = ol
 				}
-				if hasPtr && rng.Intn(2) == 0 {
+				if rng.Intn(2) == 0 {
 					r := rates[rng.Intn(len(rates))]
 					policy.SamplingRate = &r
 				}
