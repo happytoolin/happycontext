@@ -2,9 +2,27 @@ package hc
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 )
+
+type countingStringer struct {
+	calls *int
+}
+
+func (s countingStringer) String() string {
+	(*s.calls)++
+	return "message"
+}
+
+func TestMessageValueCallsStringerOnce(t *testing.T) {
+	calls := 0
+	value, ok := messageValue(reflect.ValueOf(countingStringer{calls: &calls}))
+	if !ok || value != "message" || calls != 1 {
+		t.Fatalf("value=%v ok=%v calls=%d", value, ok, calls)
+	}
+}
 
 func TestStructuredErrorFieldPreservesWrappedErrorContext(t *testing.T) {
 	field := structuredErrorField(wrappedError{err: errors.New("boom")})

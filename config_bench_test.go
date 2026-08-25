@@ -2,6 +2,7 @@ package hc
 
 import (
 	"context"
+	"fmt"
 	"testing"
 )
 
@@ -41,5 +42,33 @@ func BenchmarkFinishOperationWithPolicies(b *testing.B) {
 		})
 		var err error
 		op.End(cfg, &err)
+	}
+}
+
+func BenchmarkFinishOperationPolicyScale(b *testing.B) {
+	for _, count := range []int{1, 16, 128} {
+		b.Run(fmt.Sprintf("policies=%d", count), func(b *testing.B) {
+			policies := make(map[Domain]OperationPolicy, count)
+			for i := range count {
+				policies[Domain(fmt.Sprintf("domain-%d", i))] = OperationPolicy{
+					SuccessLevel: LevelInfo,
+					FailureLevel: LevelError,
+					PanicLevel:   LevelError,
+				}
+			}
+			cfg := NormalizeConfig(Config{
+				Sink:              benchDiscardSink{},
+				SamplingRate:      1,
+				OperationPolicies: policies,
+			})
+			start := OperationStart{Domain: Domain(fmt.Sprintf("domain-%d", count-1)), Name: "benchmark"}
+
+			b.ReportAllocs()
+			for b.Loop() {
+				op := StartOperation(context.Background(), start)
+				var err error
+				op.End(cfg, &err)
+			}
+		})
 	}
 }

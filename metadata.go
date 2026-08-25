@@ -44,20 +44,26 @@ func structuredErrorMessage(err error) string {
 
 func deepestUnwrappedError(err error) error {
 	current := err
-	seen := make(map[error]struct{})
+	var seen map[error]struct{}
 	for depth := 0; current != nil; depth++ {
 		if depth >= 100 {
 			return current
 		}
-		if isComparableError(current) {
-			if _, ok := seen[current]; ok {
-				return current
-			}
-			seen[current] = struct{}{}
-		}
 		next := errors.Unwrap(current)
 		if next == nil {
 			return current
+		}
+		if seen == nil {
+			seen = make(map[error]struct{})
+			if isComparableError(current) {
+				seen[current] = struct{}{}
+			}
+		}
+		if isComparableError(next) {
+			if _, ok := seen[next]; ok {
+				return next
+			}
+			seen[next] = struct{}{}
 		}
 		current = next
 	}
@@ -141,10 +147,11 @@ func messageValue(field reflect.Value) (any, bool) {
 		}
 		return v, true
 	case fmt.Stringer:
-		if v.String() == "" {
+		text := v.String()
+		if text == "" {
 			return nil, false
 		}
-		return v.String(), true
+		return text, true
 	default:
 		if field.Kind() == reflect.Interface && !field.IsNil() {
 			inner := field.Elem()

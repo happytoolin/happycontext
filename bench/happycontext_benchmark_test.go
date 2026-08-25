@@ -206,6 +206,24 @@ func BenchmarkOperationLifecycle(b *testing.B) {
 	}
 }
 
+func BenchmarkOperationLifecycleDropped(b *testing.B) {
+	cfg := hc.Config{Sink: discardSink{}, SamplingRate: 0}
+	for _, count := range []int{8, 32} {
+		b.Run(strconv.Itoa(count)+"_fields", func(b *testing.B) {
+			flat := flattenFields(buildBenchmarkFields(count))
+			b.ReportAllocs()
+			for b.Loop() {
+				op := hc.StartOperation(context.Background(), hc.OperationStart{Domain: hc.DomainJob, Name: "cleanup"})
+				if flat.ok {
+					hc.Add(op.Context(), flat.key, flat.value, flat.kv...)
+				}
+				var err error
+				op.End(cfg, &err)
+			}
+		})
+	}
+}
+
 func buildBenchmarkFields(n int) map[string]any {
 	fields := make(map[string]any, n)
 	for i := range n {

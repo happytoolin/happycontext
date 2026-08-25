@@ -18,12 +18,11 @@ type Event struct {
 }
 
 type snapshot struct {
-	fields    map[string]any
-	startTime time.Time
-	hasError  bool
-	message   string
-	level     Level
-	hasLevel  bool
+	fields   map[string]any
+	hasError bool
+	message  string
+	level    Level
+	hasLevel bool
 }
 
 func newEvent() *Event {
@@ -127,12 +126,11 @@ func (e *Event) snapshot() snapshot {
 	defer e.mu.RUnlock()
 
 	return snapshot{
-		fields:    maps.Clone(e.fields),
-		startTime: e.startTime,
-		hasError:  e.hasError,
-		message:   e.message,
-		level:     e.requestedLevel,
-		hasLevel:  e.hasRequestedLevel,
+		fields:   maps.Clone(e.fields),
+		hasError: e.hasError,
+		message:  e.message,
+		level:    e.requestedLevel,
+		hasLevel: e.hasRequestedLevel,
 	}
 }
 
