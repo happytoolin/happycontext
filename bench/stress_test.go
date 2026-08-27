@@ -171,32 +171,44 @@ func TestStressConcurrentMixedAccess(t *testing.T) {
 }
 
 func TestStressSamplerUnderContention(t *testing.T) {
-	sampler := hc.RateSampler(0.5)
+	tests := []struct {
+		name string
+		rate float64
+	}{
+		{name: "low", rate: 0.01},
+		{name: "middle", rate: 0.5},
+		{name: "high", rate: 0.99},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			sampler := hc.RateSampler(tc.rate)
 
-	const goroutines = 16
-	const iterations = 100_000
+			const goroutines = 16
+			const iterations = 100_000
 
-	var kept atomic.Int64
-	var wg sync.WaitGroup
-	for g := 0; g < goroutines; g++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			local := int64(0)
-			for i := 0; i < iterations; i++ {
-				if sampler(hc.SampleInput{Outcome: hc.OutcomeSuccess}) {
-					local++
-				}
+			var kept atomic.Int64
+			var wg sync.WaitGroup
+			for range goroutines {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					local := int64(0)
+					for range iterations {
+						if sampler(hc.SampleInput{Outcome: hc.OutcomeSuccess}) {
+							local++
+						}
+					}
+					kept.Add(local)
+				}()
 			}
-			kept.Add(local)
-		}()
-	}
-	wg.Wait()
+			wg.Wait()
 
-	total := int64(goroutines * iterations)
-	ratio := float64(kept.Load()) / float64(total)
-	if ratio < 0.45 || ratio > 0.55 {
-		t.Fatalf("sampled ratio = %.4f, want within [0.45, 0.55]", ratio)
+			total := int64(goroutines * iterations)
+			ratio := float64(kept.Load()) / float64(total)
+			if ratio < tc.rate-0.005 || ratio > tc.rate+0.005 {
+				t.Fatalf("sampled ratio = %.4f, want %.2f ± 0.005", ratio, tc.rate)
+			}
+			t.Logf("kept %d/%d = %.4f", kept.Load(), total, ratio)
+		})
 	}
-	t.Logf("kept %d/%d = %.4f", kept.Load(), total, ratio)
 }
