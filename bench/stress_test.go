@@ -42,8 +42,6 @@ func stressPolicyConfig(sink hc.Sink) hc.Config {
 	})
 }
 
-// BenchmarkStressParallelLifecycle runs full operation lifecycles across all
-// cores with a policy-bearing config, the hottest per-request path.
 func BenchmarkStressParallelLifecycle(b *testing.B) {
 	cfg := stressPolicyConfig(discardSink{})
 	b.ReportAllocs()
@@ -62,8 +60,6 @@ func BenchmarkStressParallelLifecycle(b *testing.B) {
 	})
 }
 
-// BenchmarkStressSustainedLifecycle measures single-goroutine sustained
-// throughput; run with a long -benchtime for soak-style measurement.
 func BenchmarkStressSustainedLifecycle(b *testing.B) {
 	cfg := stressPolicyConfig(discardSink{})
 	b.ReportAllocs()
@@ -80,8 +76,6 @@ func BenchmarkStressSustainedLifecycle(b *testing.B) {
 	}
 }
 
-// BenchmarkStressParallelStdMiddleware drives the std HTTP middleware (no
-// network) from all cores.
 func BenchmarkStressParallelStdMiddleware(b *testing.B) {
 	cfg := stressPolicyConfig(discardSink{})
 	handler := stdhc.Middleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -98,8 +92,6 @@ func BenchmarkStressParallelStdMiddleware(b *testing.B) {
 	})
 }
 
-// nopResponseWriter is a minimal http.ResponseWriter; the middleware only
-// records the status code and never touches the header map in this path.
 type nopResponseWriter struct{}
 
 func (nopResponseWriter) Header() http.Header       { return nopHeader }
@@ -108,9 +100,6 @@ func (nopResponseWriter) WriteHeader(int)             {}
 
 var nopHeader = http.Header{}
 
-// TestStressHeapStable runs millions of operation lifecycles and verifies the
-// heap returns to its baseline size afterwards: nothing per-event may be
-// retained.
 func TestStressHeapStable(t *testing.T) {
 	cfg := stressPolicyConfig(discardSink{})
 
@@ -150,10 +139,6 @@ func TestStressHeapStable(t *testing.T) {
 	t.Logf("heap growth after %d ops: %d bytes (%.2f bytes/op)", ops, grew, float64(grew)/ops)
 }
 
-// TestStressConcurrentMixedAccess hammers the event API from many goroutines:
-// a shared event for the Add/Set* storm, and per-goroutine operation finishes
-// sharing one config (the sharing fast path must be race-free read-only).
-// Run with -race.
 func TestStressConcurrentMixedAccess(t *testing.T) {
 	cfg := stressPolicyConfig(discardSink{})
 	sharedCtx, _ := hc.NewContext(context.Background())
@@ -167,14 +152,12 @@ func TestStressConcurrentMixedAccess(t *testing.T) {
 		go func(g int) {
 			defer wg.Done()
 			for i := 0; i < iterations; i++ {
-				// Storm the shared event.
 				hc.Add(sharedCtx, "g", g, "i", i, "note", "x")
 				hc.SetLevel(sharedCtx, hc.LevelWarn)
 				hc.SetMessage(sharedCtx, "mixed")
 				hc.Error(sharedCtx, errors.New("boom"))
 				hc.EventFields(hc.FromContext(sharedCtx))
 
-				// Independent lifecycle against the shared config.
 				var err error
 				op := hc.StartOperation(context.Background(), hc.OperationStart{
 					Domain: hc.DomainJob, Name: "stress", ID: "id", Attempt: 1,
@@ -187,8 +170,6 @@ func TestStressConcurrentMixedAccess(t *testing.T) {
 	wg.Wait()
 }
 
-// TestStressSamplerUnderContention verifies RateSampler stays statistically
-// sound while all cores hammer the shared PRNG state.
 func TestStressSamplerUnderContention(t *testing.T) {
 	sampler := hc.RateSampler(0.5)
 

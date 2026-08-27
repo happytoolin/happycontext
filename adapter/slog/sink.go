@@ -9,8 +9,6 @@ import (
 	"github.com/happytoolin/happycontext"
 )
 
-// ponytail: retain buffers through the tested 100-field case; raise the limit
-// only if larger events are common enough to justify the retained memory.
 const (
 	slogPoolCapacity    = 32
 	slogPoolMaxCapacity = 160

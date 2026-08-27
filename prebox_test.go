@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-// The pre-boxed field values must be indistinguishable from freshly
-// converted strings at the interface level: same dynamic type, same ==,
-// same JSON output. These tests pin that contract.
-
 func TestDomainAnyProducesPlainStrings(t *testing.T) {
 	cases := map[Domain]string{
 		DomainHTTP:         "http",
@@ -53,9 +49,6 @@ func TestOutcomeAnyProducesPlainStrings(t *testing.T) {
 	}
 }
 
-// TestOperationFieldsRemainPlainValues runs the full lifecycle and verifies
-// the library-written fields from the outside: type assertions, equality,
-// fmt rendering, and JSON marshaling.
 func TestOperationFieldsRemainPlainValues(t *testing.T) {
 	sink := NewTestSink()
 	cfg := Config{Sink: sink, SamplingRate: 1}
@@ -97,7 +90,6 @@ func TestOperationFieldsRemainPlainValues(t *testing.T) {
 		if got != a.want {
 			t.Fatalf("field %q = %#v, want %#v", a.key, got, a.want)
 		}
-		// The dynamic type must stay string/int, not Domain/Outcome.
 		switch a.want.(type) {
 		case string:
 			if _, ok := got.(string); !ok {
@@ -106,7 +98,6 @@ func TestOperationFieldsRemainPlainValues(t *testing.T) {
 		}
 	}
 
-	// Rendering and JSON encoding must be unaffected by boxing.
 	if s := fmt.Sprint(fields["op.outcome"]); s != "success" {
 		t.Fatalf("fmt.Sprint(op.outcome) = %q", s)
 	}

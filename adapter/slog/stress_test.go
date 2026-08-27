@@ -10,8 +10,6 @@ import (
 	hc "github.com/happytoolin/happycontext"
 )
 
-// BenchmarkStressParallelWrite drives the pooled attrs path from all cores
-// through a real JSON handler, the closest analogue to production load.
 func BenchmarkStressParallelWrite(b *testing.B) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	sink := New(logger)
@@ -52,8 +50,6 @@ func BenchmarkStressParallelDeterministic(b *testing.B) {
 	})
 }
 
-// TestStressSlogSustainedCorrectness soaks the sink under sustained parallel
-// load and verifies every record survived intact (retained, not cloned).
 func TestStressSlogSustainedCorrectness(t *testing.T) {
 	h := &retainingHandler{}
 	sink := New(slog.New(h))

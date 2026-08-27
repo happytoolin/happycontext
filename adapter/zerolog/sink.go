@@ -9,8 +9,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// ponytail: retain buffers through the tested 100-field case; raise the limit
-// only if larger events are common enough to justify the retained memory.
 const (
 	zerologPoolCapacity    = 32
 	zerologPoolMaxCapacity = 160

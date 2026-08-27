@@ -9,9 +9,6 @@ type benchDiscardSink struct{}
 
 func (benchDiscardSink) Write(Level, string, map[string]any) {}
 
-// BenchmarkFinishOperationWithPolicies exercises the per-request finish path
-// with a config carrying policies and level sampling rates, normalized once
-// up front the way middleware constructors do.
 func BenchmarkFinishOperationWithPolicies(b *testing.B) {
 	cfg := NormalizeConfig(Config{
 		Sink:         benchDiscardSink{},

@@ -11,10 +11,6 @@ import (
 	"github.com/happytoolin/happycontext"
 )
 
-// retainingHandler keeps every record it receives (deliberately without
-// cloning) and the test validates them only after Write has returned, so any
-// aliasing of the sink's pooled buffers shows up as corrupted or
-// cross-contaminated attributes.
 type retainingHandler struct {
 	mu      sync.Mutex
 	records []slog.Record
@@ -80,8 +76,6 @@ func TestSinkConcurrentWritesLargeMaps(t *testing.T) {
 	sink := New(slog.New(h))
 	sinkDeterministic := NewWithOptions(slog.New(h), SinkOptions{DeterministicOrder: true})
 
-	// 100 fields exceeds the pooled buffer capacity (32) and forces growth;
-	// grown buffers must be returned to the pool without corrupting reuse.
 	bigFields := func(tag string) map[string]any {
 		m := make(map[string]any, 100)
 		for i := 0; i < 100; i++ {
@@ -154,8 +148,6 @@ func TestSinkNilFieldsAndOddValues(t *testing.T) {
 	}
 }
 
-// TestSinkRecoverableAfterHandlerPanic verifies the pool is returned to a
-// consistent state when a handler panics mid-write.
 func TestSinkRecoverableAfterHandlerPanic(t *testing.T) {
 	var calls int
 	boom := slog.New(panicHandler{calls: &calls})
@@ -171,7 +163,6 @@ func TestSinkRecoverableAfterHandlerPanic(t *testing.T) {
 		t.Fatalf("handler called %d times, want 3", calls)
 	}
 
-	// The sink must still work after the panics.
 	h := &retainingHandler{}
 	ok := New(slog.New(h))
 	ok.Write(hc.LevelInfo, "after", map[string]any{"k": "v"})

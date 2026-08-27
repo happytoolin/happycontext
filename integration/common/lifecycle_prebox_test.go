@@ -32,9 +32,6 @@ func TestStatusAnyProducesPlainInts(t *testing.T) {
 	}
 }
 
-// TestFinalizeRequestFieldsRemainPlainValues checks the middleware path end
-// to end: fields written via the pre-boxed helpers must be indistinguishable
-// from plain literals to consumers.
 func TestFinalizeRequestFieldsRemainPlainValues(t *testing.T) {
 	// 404 is a client error: the operation outcome stays "success"
 	// (resolveOutcome only classifies >= 500 as failure).

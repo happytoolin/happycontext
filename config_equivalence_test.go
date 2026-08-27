@@ -275,9 +275,6 @@ func TestNormalizeConfigRandomizedMatchesReference(t *testing.T) {
 	}
 }
 
-// TestNormalizeConfigIsolatesCallerMaps pins the historical contract that the
-// returned config shares no mutable state with the caller's input: mutating
-// the input after normalization must not affect the normalized result.
 func TestNormalizeConfigIsolatesCallerMaps(t *testing.T) {
 	rate := 0.5
 	rates := map[Level]float64{LevelInfo: 0.5}
