@@ -1,4 +1,4 @@
-package integrationbench
+package benches_test
 
 import (
 	"context"
@@ -22,10 +22,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type discardSink struct{}
-
-func (discardSink) Write(hc.Level, string, map[string]any) {}
-
 type noopSlogHandler struct{}
 
 func (noopSlogHandler) Enabled(context.Context, slog.Level) bool  { return true }
@@ -33,7 +29,7 @@ func (noopSlogHandler) Handle(context.Context, slog.Record) error { return nil }
 func (noopSlogHandler) WithAttrs([]slog.Attr) slog.Handler        { return noopSlogHandler{} }
 func (noopSlogHandler) WithGroup(string) slog.Handler             { return noopSlogHandler{} }
 
-func BenchmarkRouter_std(b *testing.B) {
+func BenchmarkRouterStd(b *testing.B) {
 	req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
 	handlerHappycontextAPI := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hc.Add(r.Context(), "user_id", "u_1")
@@ -126,7 +122,7 @@ func BenchmarkRouter_std(b *testing.B) {
 	})
 }
 
-func BenchmarkRouter_gin(b *testing.B) {
+func BenchmarkRouterGin(b *testing.B) {
 	gin.SetMode(gin.TestMode)
 
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
@@ -228,7 +224,7 @@ func BenchmarkRouter_gin(b *testing.B) {
 	})
 }
 
-func BenchmarkRouter_echo(b *testing.B) {
+func BenchmarkRouterEcho(b *testing.B) {
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
 		e := echo.New()
 		e.Use(echohc.Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1}))
@@ -328,7 +324,7 @@ func BenchmarkRouter_echo(b *testing.B) {
 	})
 }
 
-func BenchmarkRouter_fiber(b *testing.B) {
+func BenchmarkRouterFiber(b *testing.B) {
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
 		app := fiber.New()
 		app.Use(fiberhc.Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1}))
@@ -423,7 +419,7 @@ func BenchmarkRouter_fiber(b *testing.B) {
 	})
 }
 
-func BenchmarkRouter_fiberv3(b *testing.B) {
+func BenchmarkRouterFiberV3(b *testing.B) {
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
 		app := fiberv3.New()
 		app.Use(fiberv3hc.Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1}))

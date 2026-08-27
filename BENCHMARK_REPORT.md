@@ -4,12 +4,13 @@ Date: February 10, 2026
 Machine: Apple M4 (darwin/arm64)
 
 ## Scope
-- Adapters: `adapter/slog`, `adapter/zap`, `adapter/zerolog`
-- Routers: `integration/std`, `integration/gin`, `integration/echo`, `integration/fiber`, `integration/fiberv3`
+- Benchmarks are centralized in `benches`.
+- Adapters: slog, zap, and zerolog.
+- Routers: std, gin, echo, fiber, and fiberv3.
 
 ## Methodology
-- Adapter benchmarks: `go test -run '^$' -bench . -benchmem -count=5`
-- Router benchmarks: `cd bench && go test ./integration -run '^$' -bench BenchmarkRouter -benchmem -count=3`
+- Adapter benchmarks: `cd benches && go test -run '^$' -bench '^BenchmarkAdapter' -benchmem -count=5`
+- Router benchmarks: `cd benches && go test -run '^$' -bench '^BenchmarkRouter' -benchmem -count=3`
 - Router baselines now include:
   - `normal_logging_slog_noop_handler_no_middleware`
   - `normal_logging_slog_json_no_middleware`
@@ -22,25 +23,23 @@ Machine: Apple M4 (darwin/arm64)
 ### Adapters (5 runs)
 ```bash
 mkdir -p .bench/full
-for p in adapter/slog adapter/zap adapter/zerolog; do
-  (cd "$p" && go test -run '^$' -bench . -benchmem -count=5 ./...) \
-    > "$PWD/.bench/full/${p//\//_}_bench.txt"
-done
+(cd benches && go test -run '^$' -bench '^BenchmarkAdapter' -benchmem -count=5) \
+  > .bench/full/adapters_bench.txt
 ```
 
-### Routers (3 runs, all logger baselines; centralized in `bench/integration`)
+### Routers (3 runs, all logger baselines)
 ```bash
 mkdir -p .bench/fair
-(cd bench && go test ./integration -run '^$' -bench BenchmarkRouter -benchmem -count=3) \
+(cd benches && go test -run '^$' -bench '^BenchmarkRouter' -benchmem -count=3) \
   > "$PWD/.bench/fair/bench_integration_fair_all_loggers.txt"
 ```
 
 ### Profiles
 ```bash
 mkdir -p .bench/full/profiles .bench/full/pprof
-(cd adapter/slog && go test -run '^$' -bench 'BenchmarkAdapter_slog/write_medium_deterministic' -benchtime=5s -benchmem \
-  -cpuprofile "$PWD/.bench/full/profiles/adapter_slog_cpu.prof" \
-  -memprofile "$PWD/.bench/full/profiles/adapter_slog_mem.prof" ./...)
+(cd benches && go test -run '^$' -bench 'BenchmarkAdapterSlog/write_medium_deterministic' -benchtime=5s -benchmem \
+  -cpuprofile ../.bench/full/profiles/adapter_slog_cpu.prof \
+  -memprofile ../.bench/full/profiles/adapter_slog_mem.prof)
 
 go tool pprof -top .bench/full/profiles/adapter_slog_cpu.prof
 go tool pprof -top -alloc_space .bench/full/profiles/adapter_slog_mem.prof
@@ -50,13 +49,13 @@ go tool pprof -top -alloc_space .bench/full/profiles/adapter_slog_mem.prof
 
 | Benchmark | ns/op | B/op | allocs/op |
 |---|---:|---:|---:|
-| `BenchmarkAdapter_zerolog/write_small-10` | 155.1 | 0 | 0.0 |
-| `BenchmarkAdapter_zerolog/write_medium-10` | 353.9 | 0 | 0.0 |
-| `BenchmarkAdapter_zap/write_small-10` | 552.7 | 0 | 0.0 |
-| `BenchmarkAdapter_zap/write_medium-10` | 858.0 | 0 | 0.0 |
-| `BenchmarkAdapter_slog/write_small-10` | 742.4 | 336 | 7.0 |
-| `BenchmarkAdapter_slog/write_medium-10` | 1698.8 | 1297 | 18.0 |
-| `BenchmarkAdapter_slog/write_medium_deterministic-10` | 2078.8 | 1297 | 18.0 |
+| `BenchmarkAdapterZerolog/write_small-10` | 155.1 | 0 | 0.0 |
+| `BenchmarkAdapterZerolog/write_medium-10` | 353.9 | 0 | 0.0 |
+| `BenchmarkAdapterZap/write_small-10` | 552.7 | 0 | 0.0 |
+| `BenchmarkAdapterZap/write_medium-10` | 858.0 | 0 | 0.0 |
+| `BenchmarkAdapterSlog/write_small-10` | 742.4 | 336 | 7.0 |
+| `BenchmarkAdapterSlog/write_medium-10` | 1698.8 | 1297 | 18.0 |
+| `BenchmarkAdapterSlog/write_medium_deterministic-10` | 2078.8 | 1297 | 18.0 |
 
 ## Router Results (3-run mean, fair logger baselines)
 
@@ -126,7 +125,7 @@ go tool pprof -top -alloc_space .bench/full/profiles/adapter_slog_mem.prof
 - Adapter-only ranking remains: `zerolog` > `zap` > `slog`.
 
 ## Artifacts
-- Adapter raw outputs: `.bench/full/*_bench.txt`
+- Adapter raw output: `.bench/full/adapters_bench.txt`
 - Router fair raw outputs: `.bench/fair/bench_integration_fair_all_loggers.txt`
 - Profiles: `.bench/full/profiles/*.prof`
 - Pprof tops: `.bench/full/pprof/*_top.txt`

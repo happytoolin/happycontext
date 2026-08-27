@@ -59,7 +59,7 @@ jobs:
             integration/gin/go.mod \
             integration/std/go.mod \
             integration/worker/go.mod \
-            bench/go.mod \
+            benches/go.mod \
             cmd/examples/go.mod
 
           git commit -m "chore: sync lockstep modules for ${RELEASE_TAG}"

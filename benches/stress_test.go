@@ -1,4 +1,4 @@
-package bench_test
+package benches_test
 
 import (
 	"context"
@@ -94,7 +94,7 @@ func BenchmarkStressParallelStdMiddleware(b *testing.B) {
 
 type nopResponseWriter struct{}
 
-func (nopResponseWriter) Header() http.Header       { return nopHeader }
+func (nopResponseWriter) Header() http.Header         { return nopHeader }
 func (nopResponseWriter) Write(p []byte) (int, error) { return len(p), nil }
 func (nopResponseWriter) WriteHeader(int)             {}
 

@@ -1,54 +1,12 @@
 package slogadapter
 
 import (
-	"io"
 	"log/slog"
-	"strconv"
 	"sync"
 	"testing"
 
 	hc "github.com/happytoolin/happycontext"
 )
-
-func BenchmarkStressParallelWrite(b *testing.B) {
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	sink := New(logger)
-	fields := func() map[string]any {
-		m := make(map[string]any, 15)
-		for i := 0; i < 15; i++ {
-			m["k"+strconv.Itoa(i)] = i
-		}
-		m["http.status"] = 200
-		m["feature"] = "checkout"
-		return m
-	}()
-
-	b.ReportAllocs()
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			sink.Write(hc.LevelInfo, "request_completed", fields)
-		}
-	})
-}
-
-func BenchmarkStressParallelDeterministic(b *testing.B) {
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	sink := NewWithOptions(logger, SinkOptions{DeterministicOrder: true})
-	fields := func() map[string]any {
-		m := make(map[string]any, 15)
-		for i := 0; i < 15; i++ {
-			m["k"+strconv.Itoa(i)] = i
-		}
-		return m
-	}()
-
-	b.ReportAllocs()
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			sink.Write(hc.LevelInfo, "request_completed", fields)
-		}
-	})
-}
 
 func TestStressSlogSustainedCorrectness(t *testing.T) {
 	h := &retainingHandler{}
