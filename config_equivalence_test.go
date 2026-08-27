@@ -214,6 +214,42 @@ func TestNormalizeConfigMatchesReference(t *testing.T) {
 	}
 }
 
+func TestRawConfigSelectionMatchesNormalizedConfig(t *testing.T) {
+	domains := []Domain{"", defaultDomainValue, DomainHTTP, DomainJob, "api", "unknown"}
+	outcomes := []Outcome{OutcomeSuccess, OutcomeFailure, OutcomePanic, OutcomeCanceled, OutcomeTimeout, OutcomeRetry}
+
+	for configIndex, raw := range nastyConfigs() {
+		normalized := NormalizeConfig(raw)
+		for _, domain := range domains {
+			rawPolicy := policyForDomain(raw, domain)
+			normalizedPolicy := policyForDomain(normalized, domain)
+			for _, outcome := range outcomes {
+				rawLevel := levelFromPolicy(rawPolicy, outcome)
+				normalizedLevel := levelFromPolicy(normalizedPolicy, outcome)
+				if rawLevel != normalizedLevel {
+					t.Fatalf("config %d, domain %q, outcome %q: level %q != %q", configIndex, domain, outcome, rawLevel, normalizedLevel)
+				}
+
+				rawRate := effectiveOperationRate(raw, rawPolicy, rawLevel)
+				normalizedRate := effectiveOperationRate(normalized, normalizedPolicy, normalizedLevel)
+				if !floatEqual(rawRate, normalizedRate) {
+					t.Fatalf("config %d, domain %q, outcome %q: rate %v != %v", configIndex, domain, outcome, rawRate, normalizedRate)
+				}
+			}
+		}
+	}
+}
+
+func effectiveOperationRate(cfg Config, policy OperationPolicy, level Level) float64 {
+	if policy.SamplingRate != nil {
+		return clampRate(*policy.SamplingRate)
+	}
+	if rate, ok := levelSamplingRate(cfg.LevelSamplingRates, level); ok {
+		return rate
+	}
+	return clampRate(cfg.SamplingRate)
+}
+
 func TestNormalizeConfigRandomizedMatchesReference(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	levels := []Level{"", LevelDebug, LevelInfo, LevelWarn, LevelError, Level("bogus")}

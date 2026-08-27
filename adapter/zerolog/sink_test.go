@@ -148,6 +148,43 @@ func TestSinkWriteNilSafety(t *testing.T) {
 	sink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
 }
 
+type countingSampler struct {
+	levels []zerolog.Level
+}
+
+func (s *countingSampler) Sample(level zerolog.Level) bool {
+	s.levels = append(s.levels, level)
+	return true
+}
+
+func TestSinkCreatesOneSampledEvent(t *testing.T) {
+	var buf bytes.Buffer
+	sampler := &countingSampler{}
+	logger := zerolog.New(&buf).Sample(sampler)
+	sink := New(&logger)
+
+	sink.Write(hc.LevelWarn, "warn", map[string]any{"k": "v"})
+
+	if len(sampler.levels) != 1 || sampler.levels[0] != zerolog.WarnLevel {
+		t.Fatalf("sampled levels = %v, want [warn]", sampler.levels)
+	}
+	if buf.Len() == 0 {
+		t.Fatal("expected warn event")
+	}
+}
+
+func TestSinkSkipsDisabledEvent(t *testing.T) {
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf).Level(zerolog.InfoLevel)
+	sink := New(&logger)
+
+	sink.Write(hc.LevelDebug, "debug", map[string]any{"k": "v"})
+
+	if buf.Len() != 0 {
+		t.Fatalf("disabled debug produced output: %q", buf.String())
+	}
+}
+
 func TestRecycleKeysClearsAndCaps(t *testing.T) {
 	keys := make([]string, 0, zerologPoolCapacity)
 	for range 100 {

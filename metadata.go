@@ -141,10 +141,11 @@ func messageValue(field reflect.Value) (any, bool) {
 		}
 		return v, true
 	case fmt.Stringer:
-		if v.String() == "" {
+		text := v.String()
+		if text == "" {
 			return nil, false
 		}
-		return v.String(), true
+		return text, true
 	default:
 		if field.Kind() == reflect.Interface && !field.IsNil() {
 			inner := field.Elem()

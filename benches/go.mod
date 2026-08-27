@@ -1,4 +1,4 @@
-module github.com/happytoolin/happycontext/bench
+module github.com/happytoolin/happycontext/benches
 
 go 1.25.0
 
@@ -7,6 +7,9 @@ require (
 	github.com/gofiber/fiber/v2 v2.52.11
 	github.com/gofiber/fiber/v3 v3.0.0-rc.3
 	github.com/happytoolin/happycontext v0.3.0
+	github.com/happytoolin/happycontext/adapter/slog v0.0.0
+	github.com/happytoolin/happycontext/adapter/zap v0.0.0
+	github.com/happytoolin/happycontext/adapter/zerolog v0.0.0
 	github.com/happytoolin/happycontext/integration/echo v0.0.0
 	github.com/happytoolin/happycontext/integration/fiber v0.0.0
 	github.com/happytoolin/happycontext/integration/fiberv3 v0.0.0
@@ -64,6 +67,12 @@ require (
 )
 
 replace github.com/happytoolin/happycontext => ..
+
+replace github.com/happytoolin/happycontext/adapter/slog => ../adapter/slog
+
+replace github.com/happytoolin/happycontext/adapter/zap => ../adapter/zap
+
+replace github.com/happytoolin/happycontext/adapter/zerolog => ../adapter/zerolog
 
 replace github.com/happytoolin/happycontext/integration/std => ../integration/std
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/happytoolin/happycontext"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -66,6 +67,14 @@ func (z *Sink) Write(level hc.Level, message string, fields map[string]any) {
 	if message == "" {
 		message = hc.DefaultMessage
 	}
+	checked := z.check(level, message)
+	if checked == nil {
+		return
+	}
+	if len(fields) == 0 {
+		checked.Write()
+		return
+	}
 
 	bufPtr := zapFieldPool.Get().(*[]zap.Field)
 	zapFields := (*bufPtr)[:0]
@@ -77,7 +86,7 @@ func (z *Sink) Write(level hc.Level, message string, fields map[string]any) {
 		for k, v := range fields {
 			zapFields = append(zapFields, zap.Any(k, v))
 		}
-		z.write(level, message, zapFields)
+		checked.Write(zapFields...)
 		return
 	}
 
@@ -95,19 +104,19 @@ func (z *Sink) Write(level hc.Level, message string, fields map[string]any) {
 		zapFields = append(zapFields, zap.Any(k, fields[k]))
 	}
 
-	z.write(level, message, zapFields)
+	checked.Write(zapFields...)
 }
 
-func (z *Sink) write(level hc.Level, message string, fields []zap.Field) {
+func (z *Sink) check(level hc.Level, message string) *zapcore.CheckedEntry {
 	switch level {
 	case hc.LevelDebug:
-		z.logger.Debug(message, fields...)
+		return z.logger.Check(zapcore.DebugLevel, message)
 	case hc.LevelWarn:
-		z.logger.Warn(message, fields...)
+		return z.logger.Check(zapcore.WarnLevel, message)
 	case hc.LevelError:
-		z.logger.Error(message, fields...)
+		return z.logger.Check(zapcore.ErrorLevel, message)
 	default:
-		z.logger.Info(message, fields...)
+		return z.logger.Check(zapcore.InfoLevel, message)
 	}
 }
 

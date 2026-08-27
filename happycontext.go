@@ -15,10 +15,9 @@ func Commit(ctx context.Context, sink Sink, level Level) bool {
 		return false
 	}
 	snap := e.snapshot()
-	start := hydrateOperationStart(OperationStart{}, e)
 	domain := DomainHTTP
-	if start.Domain != "" {
-		domain = start.Domain
+	if field, _ := snap.fields["op.domain"].(string); field != "" {
+		domain = Domain(field)
 	}
 	message := resolveEventMessage("", domain, snap.message)
 	sink.Write(level, message, snap.fields)

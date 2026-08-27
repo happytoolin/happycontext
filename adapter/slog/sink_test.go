@@ -91,6 +91,27 @@ func TestSinkWriteNilSafety(t *testing.T) {
 	sink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
 }
 
+type disabledSlogHandler struct {
+	handled bool
+}
+
+func (*disabledSlogHandler) Enabled(context.Context, slog.Level) bool { return false }
+func (h *disabledSlogHandler) Handle(context.Context, slog.Record) error {
+	h.handled = true
+	return nil
+}
+func (h *disabledSlogHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *disabledSlogHandler) WithGroup(string) slog.Handler      { return h }
+
+func TestSinkSkipsDisabledEvent(t *testing.T) {
+	handler := &disabledSlogHandler{}
+	sink := New(slog.New(handler))
+	sink.Write(hc.LevelDebug, "debug", map[string]any{"k": "v"})
+	if handler.handled {
+		t.Fatal("disabled debug reached handler")
+	}
+}
+
 type captureSlogRecord struct {
 	Level   slog.Level
 	Message string

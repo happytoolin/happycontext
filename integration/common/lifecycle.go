@@ -144,9 +144,10 @@ func StartRequest(baseCtx context.Context, method, path string) (context.Context
 // FinalizeRequest computes status/level/sampling and writes the final snapshot.
 func FinalizeRequest(cfg hc.Config, in FinalizeInput) {
 	if in.Route != "" {
-		hc.SetRoute(in.Ctx, in.Route)
+		hc.Add(in.Ctx, "http.route", in.Route, "http.status", statusAny(in.StatusCode))
+	} else {
+		hc.Add(in.Ctx, "http.status", statusAny(in.StatusCode))
 	}
-	hc.Add(in.Ctx, "http.status", statusAny(in.StatusCode))
 
 	name := "request"
 	if in.Route != "" {

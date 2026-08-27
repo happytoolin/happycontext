@@ -47,6 +47,6 @@ done < <(
     integration/gin/go.mod \
     integration/std/go.mod \
     integration/worker/go.mod \
-    bench/go.mod \
+    benches/go.mod \
     cmd/examples/go.mod
 )

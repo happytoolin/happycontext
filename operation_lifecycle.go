@@ -21,11 +21,8 @@ func StartOperation(baseCtx context.Context, start OperationStart) *Operation {
 //
 // BeginOperation is a low-level helper used by package integrations.
 func BeginOperation(baseCtx context.Context, start OperationStart) (context.Context, *Event) {
-	if baseCtx == nil {
-		baseCtx = context.Background()
-	}
 	ctx, event := NewContext(baseCtx)
-	applyOperationStartFields(ctx, start)
+	applyOperationStartFieldsToEvent(event, start)
 	return ctx, event
 }
 
@@ -89,7 +86,6 @@ func FinishOperation(cfg Config, in OperationFinish) bool {
 }
 
 func finishOperation(cfg Config, ctx context.Context, event *Event, start OperationStart, result operationResult) bool {
-	cfg = normalizeConfigShared(cfg)
 	if cfg.Sink == nil || event == nil || ctx == nil {
 		return false
 	}
@@ -103,14 +99,24 @@ func finishOperation(cfg Config, ctx context.Context, event *Event, start Operat
 	duration := time.Since(event.startedAt())
 	annotateOperationCompletion(event, duration, result.Code, outcome)
 
-	snap := event.snapshot()
-
 	autoLevel := levelFromPolicy(policy, outcome)
-	level := MergeLevelWithFloor(autoLevel, snap.level, snap.hasLevel)
 
-	sampleIn := buildSampleInput(event, snap, start, result, duration, outcome, level)
+	var snap snapshot
+	var sampleState operationSampleState
+	if cfg.Sampler != nil {
+		snap = event.snapshot()
+		sampleState = operationSampleStateFromSnapshot(snap, result.Code)
+	} else {
+		sampleState = operationSampleStateFromEvent(event, result.Code)
+	}
+	level := MergeLevelWithFloor(autoLevel, sampleState.level, sampleState.hasLevel)
+
+	sampleIn := buildSampleInput(event, sampleState, start, result, duration, outcome, level)
 	if !shouldWriteOperation(cfg, policy, sampleIn) {
 		return false
+	}
+	if cfg.Sampler == nil {
+		snap = event.snapshot()
 	}
 
 	cfg.Sink.Write(level, resolveEventMessage(cfg.Message, start.Domain, snap.message), snap.fields)
@@ -170,11 +176,6 @@ func outcomeAny(outcome Outcome) any {
 	}
 }
 
-func applyOperationStartFields(ctx context.Context, start OperationStart) {
-	event := FromContext(ctx)
-	applyOperationStartFieldsToEvent(event, start)
-}
-
 func applyOperationStartFieldsToEvent(event *Event, start OperationStart) {
 	if event == nil {
 		return
@@ -184,7 +185,7 @@ func applyOperationStartFieldsToEvent(event *Event, start OperationStart) {
 		return
 	}
 
-	capHint := 2
+	capHint := 5
 	if start.ID != "" {
 		capHint++
 	}
@@ -329,19 +330,46 @@ func resolveOutcome(result operationResult) Outcome {
 	return OutcomeSuccess
 }
 
-func buildSampleInput(event *Event, snap snapshot, start OperationStart, result operationResult, duration time.Duration, outcome Outcome, level Level) SampleInput {
-	fields := snap.fields
+type operationSampleState struct {
+	method     string
+	path       string
+	statusCode int
+	hasError   bool
+	level      Level
+	hasLevel   bool
+}
 
-	method, _ := fields["http.method"].(string)
-	path, _ := fields["http.path"].(string)
-	statusCode := result.Code
-	if v, ok := fields["http.status"]; ok {
-		if parsed, ok := asInt(v); ok {
-			statusCode = parsed
-		}
+func operationSampleStateFromFields(fields map[string]any, defaultStatus int) operationSampleState {
+	state := operationSampleState{statusCode: defaultStatus}
+	state.method, _ = fields["http.method"].(string)
+	state.path, _ = fields["http.path"].(string)
+	if status, ok := asInt(fields["http.status"]); ok {
+		state.statusCode = status
 	}
+	return state
+}
 
-	hasError := snap.hasError || result.Code >= 500 || outcome != OutcomeSuccess
+func operationSampleStateFromSnapshot(snap snapshot, defaultStatus int) operationSampleState {
+	state := operationSampleStateFromFields(snap.fields, defaultStatus)
+	state.hasError = snap.hasError
+	state.level = snap.level
+	state.hasLevel = snap.hasLevel
+	return state
+}
+
+func operationSampleStateFromEvent(event *Event, defaultStatus int) operationSampleState {
+	event.mu.RLock()
+	defer event.mu.RUnlock()
+
+	state := operationSampleStateFromFields(event.fields, defaultStatus)
+	state.hasError = event.hasError
+	state.level = event.requestedLevel
+	state.hasLevel = event.hasRequestedLevel
+	return state
+}
+
+func buildSampleInput(event *Event, state operationSampleState, start OperationStart, result operationResult, duration time.Duration, outcome Outcome, level Level) SampleInput {
+	hasError := state.hasError || result.Code >= 500 || outcome != OutcomeSuccess
 
 	name := start.Name
 	if name == "" {
@@ -353,9 +381,9 @@ func buildSampleInput(event *Event, snap snapshot, start OperationStart, result 
 		Operation:  name,
 		Outcome:    outcome,
 		Code:       result.Code,
-		Method:     method,
-		Path:       path,
-		StatusCode: statusCode,
+		Method:     state.method,
+		Path:       state.path,
+		StatusCode: state.statusCode,
 		Duration:   duration,
 		Level:      level,
 		HasError:   hasError,

@@ -5,7 +5,7 @@ func shouldWriteOperation(cfg Config, policy OperationPolicy, in SampleInput) bo
 		return cfg.Sampler(in)
 	}
 
-	if in.HasError || in.Code >= 500 || in.StatusCode >= 500 || in.Outcome != OutcomeSuccess {
+	if in.HasError || in.StatusCode >= 500 {
 		return true
 	}
 
@@ -22,11 +22,14 @@ func policyForDomain(cfg Config, domain Domain) OperationPolicy {
 	if cfg.OperationPolicies == nil {
 		return OperationPolicy{}
 	}
-	policy, ok := cfg.OperationPolicies[normalizeDomain(domain)]
-	if !ok {
-		return OperationPolicy{}
+	domain = normalizeDomain(domain)
+	if policy, ok := cfg.OperationPolicies[domain]; ok {
+		return policy
 	}
-	return policy
+	if domain == defaultDomainValue {
+		return cfg.OperationPolicies[""]
+	}
+	return OperationPolicy{}
 }
 
 func defaultPolicy() OperationPolicy {

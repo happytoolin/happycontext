@@ -78,6 +78,14 @@ func (s *Sink) Write(level hc.Level, message string, fields map[string]any) {
 	case hc.LevelError:
 		slogLevel = slog.LevelError
 	}
+	ctx := context.Background()
+	if !s.logger.Enabled(ctx, slogLevel) {
+		return
+	}
+	if len(fields) == 0 {
+		s.logger.LogAttrs(ctx, slogLevel, message)
+		return
+	}
 
 	bufPtr := slogAttrPool.Get().(*[]slog.Attr)
 	attrs := (*bufPtr)[:0]
@@ -89,7 +97,7 @@ func (s *Sink) Write(level hc.Level, message string, fields map[string]any) {
 		for k, v := range fields {
 			attrs = append(attrs, slog.Any(k, v))
 		}
-		s.logger.LogAttrs(context.Background(), slogLevel, message, attrs...)
+		s.logger.LogAttrs(ctx, slogLevel, message, attrs...)
 		return
 	}
 	keysPtr := slogKeyPool.Get().(*[]string)
@@ -105,7 +113,7 @@ func (s *Sink) Write(level hc.Level, message string, fields map[string]any) {
 	for _, k := range keys {
 		attrs = append(attrs, slog.Any(k, fields[k]))
 	}
-	s.logger.LogAttrs(context.Background(), slogLevel, message, attrs...)
+	s.logger.LogAttrs(ctx, slogLevel, message, attrs...)
 }
 
 var _ hc.Sink = (*Sink)(nil)

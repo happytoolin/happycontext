@@ -1,8 +1,8 @@
 package hc
 
 import (
+	"math/rand/v2"
 	"strings"
-	"sync/atomic"
 	"time"
 )
 
@@ -28,12 +28,6 @@ type Sampler func(SampleInput) bool
 
 // SamplerMiddleware wraps a sampler with additional decision logic.
 type SamplerMiddleware func(next Sampler) Sampler
-
-var samplerState atomic.Uint64
-
-func init() {
-	samplerState.Store(uint64(time.Now().UnixNano()) + 0x9e3779b97f4a7c15)
-}
 
 // ChainSampler composes base with middlewares.
 //
@@ -111,35 +105,26 @@ func KeepPathPrefix(prefixes ...string) SamplerMiddleware {
 
 // RateSampler returns a probabilistic sampler using rate in [0,1].
 //
-// Values <= 0 always drop. Values >= 1 always keep.
+// NaN and values <= 0 always drop. Values >= 1 always keep.
 func RateSampler(rate float64) Sampler {
 	switch {
-	case rate <= 0:
+	case !(rate > 0):
 		return NeverSampler()
 	case rate >= 1:
 		return AlwaysSampler()
 	default:
 		return func(in SampleInput) bool {
-			return nextSampleFloat64() < rate
+			return rand.Float64() < rate
 		}
 	}
 }
 
 func shouldSample(rate float64) bool {
-	if rate <= 0 {
+	if !(rate > 0) {
 		return false
 	}
 	if rate >= 1 {
 		return true
 	}
-	return nextSampleFloat64() < rate
-}
-
-func nextSampleFloat64() float64 {
-	x := samplerState.Add(0x9e3779b97f4a7c15)
-	x ^= x >> 12
-	x ^= x << 25
-	x ^= x >> 27
-	x *= 2685821657736338717
-	return float64(x>>11) * (1.0 / (1 << 53))
+	return rand.Float64() < rate
 }

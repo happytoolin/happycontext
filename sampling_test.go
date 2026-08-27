@@ -2,6 +2,7 @@ package hc
 
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 )
@@ -47,6 +48,12 @@ func TestRateSamplerBounds(t *testing.T) {
 	}
 	if !RateSampler(2)(SampleInput{}) {
 		t.Fatal("rate >1 should always keep")
+	}
+	if RateSampler(math.NaN())(SampleInput{}) {
+		t.Fatal("NaN rate should always drop")
+	}
+	if shouldSample(math.NaN()) {
+		t.Fatal("NaN built-in rate should always drop")
 	}
 }
 

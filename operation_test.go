@@ -375,6 +375,44 @@ func TestFinishOperationHTTPDefaultsAndSamplerCompatibility(t *testing.T) {
 	}
 }
 
+func TestCustomSamplerKeepsPreCallbackSnapshot(t *testing.T) {
+	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainHTTP, Name: "GET /x"})
+	Add(ctx, "before", true)
+	sink := NewTestSink()
+
+	ok := FinishOperation(Config{
+		Sink: sink,
+		Sampler: func(in SampleInput) bool {
+			Add(ctx, "sampler.mutation", true)
+			return in.Event == event
+		},
+	}, OperationFinish{Ctx: ctx, Event: event, Code: 200})
+	if !ok {
+		t.Fatal("expected custom sampler to keep event")
+	}
+	if _, ok := sink.Events()[0].Fields["sampler.mutation"]; ok {
+		t.Fatal("sink snapshot included a sampler callback mutation")
+	}
+	if EventFields(event)["sampler.mutation"] != true {
+		t.Fatal("sampler callback mutation was not retained on Event")
+	}
+}
+
+func TestBuiltInSamplingDropRetainsCompletionFields(t *testing.T) {
+	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
+	if FinishOperation(Config{Sink: NewTestSink(), SamplingRate: 0}, OperationFinish{Ctx: ctx, Event: event, Code: 204}) {
+		t.Fatal("expected healthy operation to be dropped")
+	}
+
+	fields := EventFields(event)
+	if fields["op.code"] != 204 || fields["op.outcome"] != string(OutcomeSuccess) {
+		t.Fatalf("completion fields = %#v", fields)
+	}
+	if _, ok := fields["duration_ms"]; !ok {
+		t.Fatal("missing duration_ms after sampling drop")
+	}
+}
+
 func TestFinishOperationAppliesEventMessage(t *testing.T) {
 	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
 	SetMessage(ctx, "hello world")

@@ -1,7 +1,8 @@
-package bench_test
+package benches_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strconv"
 	"testing"
@@ -206,6 +207,24 @@ func BenchmarkOperationLifecycle(b *testing.B) {
 	}
 }
 
+func BenchmarkOperationLifecycleDropped(b *testing.B) {
+	cfg := hc.Config{Sink: discardSink{}, SamplingRate: 0}
+	for _, count := range []int{8, 32} {
+		b.Run(strconv.Itoa(count)+"_fields", func(b *testing.B) {
+			flat := flattenFields(buildBenchmarkFields(count))
+			b.ReportAllocs()
+			for b.Loop() {
+				op := hc.StartOperation(context.Background(), hc.OperationStart{Domain: hc.DomainJob, Name: "cleanup"})
+				if flat.ok {
+					hc.Add(op.Context(), flat.key, flat.value, flat.kv...)
+				}
+				var err error
+				op.End(cfg, &err)
+			}
+		})
+	}
+}
+
 func buildBenchmarkFields(n int) map[string]any {
 	fields := make(map[string]any, n)
 	for i := range n {
@@ -235,4 +254,85 @@ func flattenFields(fields map[string]any) flatFields {
 		value: flat[1],
 		kv:    flat[2:],
 	}
+}
+
+func BenchmarkOperationLifecycleWithPolicies(b *testing.B) {
+	cfg := hc.NormalizeConfig(hc.Config{
+		Sink:         discardSink{},
+		SamplingRate: 1,
+		LevelSamplingRates: map[hc.Level]float64{
+			hc.LevelDebug: 0.1,
+			hc.LevelInfo:  1,
+			hc.LevelWarn:  1,
+			hc.LevelError: 1,
+		},
+		OperationPolicies: map[hc.Domain]hc.OperationPolicy{
+			hc.DomainJob: {
+				SuccessLevel: hc.LevelInfo,
+				FailureLevel: hc.LevelError,
+				PanicLevel:   hc.LevelError,
+				OutcomeLevels: map[hc.Outcome]hc.Level{
+					hc.OutcomeTimeout: hc.LevelWarn,
+				},
+			},
+		},
+	})
+
+	b.ReportAllocs()
+	for b.Loop() {
+		op := hc.StartOperation(context.Background(), hc.OperationStart{
+			Domain:  hc.DomainJob,
+			Name:    "cleanup",
+			ID:      "job_1",
+			Attempt: 1,
+		})
+		var err error
+		op.End(cfg, &err)
+	}
+}
+
+func BenchmarkOperationPolicyScale(b *testing.B) {
+	for _, count := range []int{1, 16, 128} {
+		b.Run(fmt.Sprintf("policies=%d", count), func(b *testing.B) {
+			policies := make(map[hc.Domain]hc.OperationPolicy, count)
+			for i := range count {
+				policies[hc.Domain(fmt.Sprintf("domain-%d", i))] = hc.OperationPolicy{
+					SuccessLevel: hc.LevelInfo,
+					FailureLevel: hc.LevelError,
+					PanicLevel:   hc.LevelError,
+				}
+			}
+			cfg := hc.NormalizeConfig(hc.Config{
+				Sink:              discardSink{},
+				SamplingRate:      1,
+				OperationPolicies: policies,
+			})
+			start := hc.OperationStart{Domain: hc.Domain(fmt.Sprintf("domain-%d", count-1)), Name: "benchmark"}
+
+			b.ReportAllocs()
+			for b.Loop() {
+				op := hc.StartOperation(context.Background(), start)
+				var err error
+				op.End(cfg, &err)
+			}
+		})
+	}
+}
+
+func BenchmarkRateSampler(b *testing.B) {
+	sampler := hc.RateSampler(0.5)
+	in := hc.SampleInput{Outcome: hc.OutcomeSuccess}
+
+	b.Run("serial", func(b *testing.B) {
+		for b.Loop() {
+			sampler(in)
+		}
+	})
+	b.Run("parallel", func(b *testing.B) {
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				sampler(in)
+			}
+		})
+	})
 }
