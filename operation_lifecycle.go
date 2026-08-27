@@ -89,7 +89,7 @@ func FinishOperation(cfg Config, in OperationFinish) bool {
 }
 
 func finishOperation(cfg Config, ctx context.Context, event *Event, start OperationStart, result operationResult) bool {
-	cfg = NormalizeConfig(cfg)
+	cfg = normalizeConfigShared(cfg)
 	if cfg.Sink == nil || event == nil || ctx == nil {
 		return false
 	}
@@ -115,6 +115,59 @@ func finishOperation(cfg Config, ctx context.Context, event *Event, start Operat
 
 	cfg.Sink.Write(level, resolveEventMessage(cfg.Message, start.Domain, snap.message), snap.fields)
 	return true
+}
+
+// Pre-boxed field values for the library's fixed strings. Storing these in
+// map[string]any avoids a heap allocation per write; dynamic values fall back
+// to a fresh conversion.
+var (
+	domainHTTPAny      = any(string(DomainHTTP))
+	domainJobAny       = any(string(DomainJob))
+	domainMessageAny   = any(string(DomainMessage))
+	domainCLIAny       = any(string(DomainCLI))
+	domainDefaultAny   = any(string(defaultDomainValue))
+	outcomeSuccessAny  = any(string(OutcomeSuccess))
+	outcomeFailureAny  = any(string(OutcomeFailure))
+	outcomePanicAny    = any(string(OutcomePanic))
+	outcomeCanceledAny = any(string(OutcomeCanceled))
+	outcomeTimeoutAny  = any(string(OutcomeTimeout))
+	outcomeRetryAny    = any(string(OutcomeRetry))
+)
+
+func domainAny(domain Domain) any {
+	switch domain {
+	case DomainHTTP:
+		return domainHTTPAny
+	case DomainJob:
+		return domainJobAny
+	case DomainMessage:
+		return domainMessageAny
+	case DomainCLI:
+		return domainCLIAny
+	case defaultDomainValue:
+		return domainDefaultAny
+	default:
+		return string(domain)
+	}
+}
+
+func outcomeAny(outcome Outcome) any {
+	switch outcome {
+	case OutcomeSuccess:
+		return outcomeSuccessAny
+	case OutcomeFailure:
+		return outcomeFailureAny
+	case OutcomePanic:
+		return outcomePanicAny
+	case OutcomeCanceled:
+		return outcomeCanceledAny
+	case OutcomeTimeout:
+		return outcomeTimeoutAny
+	case OutcomeRetry:
+		return outcomeRetryAny
+	default:
+		return string(outcome)
+	}
 }
 
 func applyOperationStartFields(ctx context.Context, start OperationStart) {
@@ -149,7 +202,7 @@ func applyOperationStartFieldsToEvent(event *Event, start OperationStart) {
 	if event.fields == nil {
 		event.fields = make(map[string]any, max(capHint, 8))
 	}
-	event.fields["op.domain"] = string(start.Domain)
+	event.fields["op.domain"] = domainAny(start.Domain)
 	event.fields["op.name"] = start.Name
 	if start.ID != "" {
 		event.fields["op.id"] = start.ID
@@ -249,7 +302,7 @@ func annotateOperationCompletion(event *Event, duration time.Duration, code int,
 	}
 	event.fields["duration_ms"] = duration.Milliseconds()
 	event.fields["op.code"] = code
-	event.fields["op.outcome"] = string(outcome)
+	event.fields["op.outcome"] = outcomeAny(outcome)
 	event.mu.Unlock()
 }
 

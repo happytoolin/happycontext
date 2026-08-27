@@ -9,11 +9,25 @@ import (
 	"github.com/rs/zerolog"
 )
 
+const (
+	zerologPoolCapacity    = 32
+	zerologPoolMaxCapacity = 160
+)
+
 var zerologKeyPool = sync.Pool{
 	New: func() any {
-		buf := make([]string, 0, 32)
+		buf := make([]string, 0, zerologPoolCapacity)
 		return &buf
 	},
+}
+
+func recycleKeys(bufPtr *[]string, keys []string) {
+	if cap(keys) > zerologPoolMaxCapacity {
+		return
+	}
+	clear(keys)
+	*bufPtr = keys[:0]
+	zerologKeyPool.Put(bufPtr)
 }
 
 // SinkOptions controls zerolog adapter behavior.
@@ -68,8 +82,7 @@ func (z *Sink) Write(level hc.Level, message string, fields map[string]any) {
 	keysPtr := zerologKeyPool.Get().(*[]string)
 	keys := (*keysPtr)[:0]
 	defer func() {
-		*keysPtr = keys[:0]
-		zerologKeyPool.Put(keysPtr)
+		recycleKeys(keysPtr, keys)
 	}()
 
 	for k := range fields {

@@ -3,6 +3,7 @@ package zapadapter
 import (
 	"bytes"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/happytoolin/happycontext"
@@ -105,4 +106,34 @@ func TestSinkWriteNilSafety(t *testing.T) {
 
 	sink := New(nil)
 	sink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
+}
+
+func TestRecycleSliceClearsAndCaps(t *testing.T) {
+	fields := make([]zap.Field, 0, zapPoolCapacity)
+	for range 100 {
+		fields = append(fields, zap.Field{})
+	}
+	if cap(fields) > zapPoolMaxCapacity {
+		t.Fatalf("100-field buffer exceeds pool limit: cap=%d limit=%d", cap(fields), zapPoolMaxCapacity)
+	}
+	fields[0] = zap.Any("retained", new(int))
+	var fieldPool sync.Pool
+	recycleSlice(&fieldPool, &fields, fields)
+	first := fields[:cap(fields)][0]
+	if len(fields) != 0 || first.Key != "" || first.Interface != nil {
+		t.Fatalf("field buffer was not cleared and recycled: len=%d first=%v", len(fields), first)
+	}
+
+	keys := []string{"retained"}
+	var keyPool sync.Pool
+	recycleSlice(&keyPool, &keys, keys)
+	if len(keys) != 0 || keys[:cap(keys)][0] != "" {
+		t.Fatalf("key buffer was not cleared and recycled: len=%d first=%q", len(keys), keys[:cap(keys)][0])
+	}
+
+	oversized := make([]zap.Field, zapPoolMaxCapacity+1)
+	recycleSlice(&fieldPool, &oversized, oversized)
+	if len(oversized) != zapPoolMaxCapacity+1 {
+		t.Fatalf("oversized buffer was retained: len=%d", len(oversized))
+	}
 }
