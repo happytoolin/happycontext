@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## [0.3.1](https://github.com/happytoolin/happycontext/compare/v0.3.0...v0.3.1) (2026-08-27)
+
+
+### Performance Improvements
+
+* reduce hot-path allocations in core, slog adapter, and middleware ([040c221](https://github.com/happytoolin/happycontext/commit/040c221cbffbc4b0aee1d5ba9b97ca9c9a09176d))
+* skip unnecessary lifecycle and adapter work ([#19](https://github.com/happytoolin/happycontext/issues/19)) ([e213a7e](https://github.com/happytoolin/happycontext/commit/e213a7ee79d4a88d40d17c6be20597297c149991))
+
 ## [0.3.0](https://github.com/happytoolin/happycontext/compare/v0.2.4...v0.3.0) (2026-06-06)
 
 ### Breaking Changes
