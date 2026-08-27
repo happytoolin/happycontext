@@ -7,13 +7,10 @@ the v1 release. The focus is to avoid work that has no effect on the emitted
 event. It does not propose a cache, a new configuration layer, or a new runtime
 dependency.
 
-The compatible work is stacked on PR #18, `perf/reduce-hot-path-allocations`.
-The stack branch is `feat/nonbreaking-performance-fast-paths`.
-
-Benchmark results in this document came from an Apple M4. The final stacked
-branch comparison used Go 1.27.0 and five 300 ms samples against commit
-`6fda79e`. Earlier exploratory runs used Go 1.25.14. Several changes affect the
-same work, so their percentages must not be added together.
+PR #18 is now part of `main`. Benchmark results in this document came from an
+Apple M4 with Go 1.27.0. They were rechecked with seven-sample runs against
+commit `040c221`. Several changes affect the same work, so their percentages
+must not be added together.
 
 ## API-compatible work
 
@@ -32,8 +29,8 @@ Implementation:
 
 Measured result:
 
-- Warn writes improve from about 267 ns to 165 ns, or about 38%.
-- Disabled Debug writes improve from about 265 ns to 3.35 ns, or about 79
+- Warn writes improve from about 271 ns to 157 ns, or about 42%.
+- Disabled Debug writes improve from about 237 ns to 3.07 ns, or about 77
   times.
 - Non-Info writes remove about 624 B and two allocations.
 - Sampling observes one decision for one real event.
@@ -71,12 +68,12 @@ Measured result:
 
 | Policy count | Before | After | Improvement |
 | ---: | ---: | ---: | ---: |
-| 1 | about 450 ns | about 370 ns | about 18% |
-| 16 | about 675 ns | about 382 ns | about 44% |
-| 128 | about 2,009 ns | about 379 ns | about 81% |
+| 1 | about 407 ns | about 376 ns | about 7% |
+| 16 | about 591 ns | about 387 ns | about 34% |
+| 128 | about 1,842 ns | about 395 ns | about 79% |
 
-The existing representative policy benchmark improves from about 576 ns to
-406 ns, or about 30%. It also contains level rates and outcome overrides.
+The existing representative policy benchmark improves from about 516 ns to
+413 ns, or about 20%. It also contains level rates and outcome overrides.
 
 Compatibility proof:
 
@@ -103,7 +100,7 @@ Implementation:
 
 Measured result:
 
-- Full lifecycle improves from about 754 ns to 533 ns, or about 29%, when all
+- Full lifecycle improves from about 651 ns to 538 ns, or about 17%, when all
   compatible core changes are measured together.
 - Allocation size falls from about 1,936 B to 1,648 B.
 - Allocations fall from 15 to 14.
@@ -127,8 +124,8 @@ Measured avoidable work on a dropped event:
 
 | Field count | Before | After | Bytes before/after | Allocations before/after |
 | ---: | ---: | ---: | ---: | ---: |
-| 8 | about 731 ns | about 548 ns | 1,904 / 1,240 B | 13 / 9 |
-| 32 | about 1,954 ns | about 1,639 ns | 7,152 / 4,760 B | 17 / 13 |
+| 8 | about 636 ns | about 551 ns | 1,904 / 1,240 B | 13 / 9 |
+| 32 | about 1,790 ns | about 1,682 ns (not significant) | 7,152 / 4,760 B | 17 / 13 |
 
 Compatibility proof:
 
@@ -153,11 +150,11 @@ Implementation:
 
 Measured result:
 
-- The current parallel sampler costs about 41.6 ns per decision on the final
+- The current parallel sampler costs about 42 ns per decision on the final
   comparison.
-- `math/rand/v2` costs about 1.07 ns per parallel decision.
-- The sampler is about 39 times faster under measured contention.
-- Serial sampling changes from about 3.32 ns to 6.34 ns.
+- `math/rand/v2` costs about 1.3 ns per parallel decision.
+- The sampler is more than 30 times faster under measured contention.
+- Serial sampling changes from about 3.12 ns to 6.66 ns.
 - Full lifecycle improvement is small when allocations dominate.
 
 Decision:
@@ -183,9 +180,9 @@ Measured result:
 
 | Adapter | Disabled medium before | After | Improvement |
 | --- | ---: | ---: | ---: |
-| slog | about 168 ns | about 3.39 ns | about 50 times |
-| zap | about 326 ns | about 4.78 ns | about 68 times |
-| zerolog | about 265 ns | about 3.35 ns | about 79 times |
+| slog | about 163 ns | about 3.39 ns | about 48 times |
+| zap | about 354 ns | about 24.3 ns | about 15 times |
+| zerolog | about 237 ns | about 3.07 ns | about 77 times |
 
 Enabled writes remained within benchmark noise or improved slightly.
 
