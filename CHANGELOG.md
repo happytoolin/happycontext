@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## [1.0.0](https://github.com/happytoolin/happycontext/compare/v0.4.0...v1.0.0) (2026-08-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove DeterministicOrder sorting from adapters ([#21](https://github.com/happytoolin/happycontext/issues/21))
+
+### Code Refactoring
+
+* remove DeterministicOrder sorting from adapters ([#21](https://github.com/happytoolin/happycontext/issues/21)) ([b4f62dc](https://github.com/happytoolin/happycontext/commit/b4f62dc2ffdead732119a9f665a7ee0b77dd8dcb))
+
 ## [0.4.0](https://github.com/happytoolin/happycontext/compare/v0.3.0...v0.4.0) (2026-08-27)
 
 
