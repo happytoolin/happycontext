@@ -3,7 +3,6 @@ package slogadapter
 import (
 	"context"
 	"log/slog"
-	"slices"
 	"testing"
 
 	"github.com/happytoolin/happycontext"
@@ -29,26 +28,6 @@ func TestSinkWriteMapsLevelAndDefaultsMessage(t *testing.T) {
 	}
 	if h.records[0].Attrs["user_id"] != "u_1" {
 		t.Fatalf("missing user_id attr")
-	}
-}
-
-func TestSinkDeterministicOrderSortsKeys(t *testing.T) {
-	h := &captureSlogHandler{}
-	logger := slog.New(h)
-	sink := NewWithOptions(logger, SinkOptions{DeterministicOrder: true})
-
-	sink.Write("INFO", "done", map[string]any{
-		"z": 1,
-		"a": 2,
-		"m": 3,
-	})
-
-	if len(h.records) != 1 {
-		t.Fatalf("expected 1 record, got %d", len(h.records))
-	}
-	expectedOrder := []string{"a", "m", "z"}
-	if !slices.Equal(h.records[0].Order, expectedOrder) {
-		t.Fatalf("expected sorted attrs order %v, got %v", expectedOrder, h.records[0].Order)
 	}
 }
 

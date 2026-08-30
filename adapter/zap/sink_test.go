@@ -1,8 +1,6 @@
 package zapadapter
 
 import (
-	"bytes"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -77,30 +75,6 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 	}
 }
 
-func TestSinkDeterministicOrderSortsKeys(t *testing.T) {
-	var buf bytes.Buffer
-	encoderCfg := zap.NewProductionEncoderConfig()
-	core := zapcore.NewCore(zapcore.NewJSONEncoder(encoderCfg), zapcore.AddSync(&buf), zapcore.DebugLevel)
-	sink := NewWithOptions(zap.New(core), SinkOptions{DeterministicOrder: true})
-
-	sink.Write(hc.LevelInfo, "done", map[string]any{
-		"z": 1,
-		"a": 2,
-		"m": 3,
-	})
-
-	output := buf.String()
-	aIdx := strings.Index(output, `"a":2`)
-	mIdx := strings.Index(output, `"m":3`)
-	zIdx := strings.Index(output, `"z":1`)
-	if aIdx == -1 || mIdx == -1 || zIdx == -1 {
-		t.Fatalf("expected ordered keys in output, got %q", output)
-	}
-	if aIdx >= mIdx || mIdx >= zIdx {
-		t.Fatalf("expected key order a,m,z in output, got %q", output)
-	}
-}
-
 func TestSinkWriteNilSafety(t *testing.T) {
 	var nilSink *Sink
 	nilSink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
@@ -162,13 +136,6 @@ func TestRecycleSliceClearsAndCaps(t *testing.T) {
 	first := fields[:cap(fields)][0]
 	if len(fields) != 0 || first.Key != "" || first.Interface != nil {
 		t.Fatalf("field buffer was not cleared and recycled: len=%d first=%v", len(fields), first)
-	}
-
-	keys := []string{"retained"}
-	var keyPool sync.Pool
-	recycleSlice(&keyPool, &keys, keys)
-	if len(keys) != 0 || keys[:cap(keys)][0] != "" {
-		t.Fatalf("key buffer was not cleared and recycled: len=%d first=%q", len(keys), keys[:cap(keys)][0])
 	}
 
 	oversized := make([]zap.Field, zapPoolMaxCapacity+1)

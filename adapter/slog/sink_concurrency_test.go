@@ -74,7 +74,6 @@ func TestSinkPooledAttrsSurviveRetainingHandler(t *testing.T) {
 func TestSinkConcurrentWritesLargeMaps(t *testing.T) {
 	h := &retainingHandler{}
 	sink := New(slog.New(h))
-	sinkDeterministic := NewWithOptions(slog.New(h), SinkOptions{DeterministicOrder: true})
 
 	bigFields := func(tag string) map[string]any {
 		m := make(map[string]any, 100)
@@ -95,13 +94,12 @@ func TestSinkConcurrentWritesLargeMaps(t *testing.T) {
 			tag := "w" + strconv.Itoa(w)
 			for i := 0; i < writes; i++ {
 				sink.Write(hc.LevelInfo, tag, bigFields(tag))
-				sinkDeterministic.Write(hc.LevelInfo, tag, bigFields(tag))
 			}
 		}(w)
 	}
 	wg.Wait()
 
-	total := writers * writes * 2
+	total := writers * writes
 	if len(h.records) != total {
 		t.Fatalf("got %d records, want %d", len(h.records), total)
 	}
@@ -172,15 +170,6 @@ func TestSinkRecoverableAfterHandlerPanic(t *testing.T) {
 }
 
 func TestRecycleSliceClearsAndCaps(t *testing.T) {
-	var pool sync.Pool
-
-	small := make([]any, 1, slogPoolCapacity)
-	small[0] = new(int)
-	recycleSlice(&pool, &small, small)
-	if len(small) != 0 || small[:cap(small)][0] != nil {
-		t.Fatalf("small buffer was not cleared and recycled: len=%d first=%v", len(small), small[:cap(small)][0])
-	}
-
 	attrs := make([]slog.Attr, 0, slogPoolCapacity)
 	for range 100 {
 		attrs = append(attrs, slog.Attr{})
@@ -196,6 +185,7 @@ func TestRecycleSliceClearsAndCaps(t *testing.T) {
 		t.Fatalf("grown attr buffer was not cleared and recycled: len=%d first=%v", len(attrs), first)
 	}
 
+	var pool sync.Pool
 	oversized := make([]any, slogPoolMaxCapacity+1)
 	oversized[0] = new(int)
 	recycleSlice(&pool, &oversized, oversized)

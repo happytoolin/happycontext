@@ -33,7 +33,6 @@ func adapterFieldsMedium() map[string]any {
 func BenchmarkAdapterSlog(b *testing.B) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	sink := slogadapter.New(logger)
-	deterministicSink := slogadapter.NewWithOptions(logger, slogadapter.SinkOptions{DeterministicOrder: true})
 	medium := adapterFieldsMedium()
 
 	b.Run("write_empty", func(b *testing.B) {
@@ -52,12 +51,6 @@ func BenchmarkAdapterSlog(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			sink.Write(hc.LevelInfo, "request_completed", medium)
-		}
-	})
-	b.Run("write_medium_deterministic", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			deterministicSink.Write(hc.LevelInfo, "request_completed", medium)
 		}
 	})
 	b.Run("write_disabled_medium", func(b *testing.B) {
@@ -145,21 +138,6 @@ func BenchmarkAdapterZerolog(b *testing.B) {
 func BenchmarkAdapterSlogParallel(b *testing.B) {
 	sink := slogadapter.New(slog.New(slog.NewJSONHandler(io.Discard, nil)))
 	fields := adapterFieldsMedium()
-
-	b.ReportAllocs()
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			sink.Write(hc.LevelInfo, "request_completed", fields)
-		}
-	})
-}
-
-func BenchmarkAdapterSlogParallelDeterministic(b *testing.B) {
-	sink := slogadapter.NewWithOptions(
-		slog.New(slog.NewJSONHandler(io.Discard, nil)),
-		slogadapter.SinkOptions{DeterministicOrder: true},
-	)
-	fields := buildBenchmarkFields(15)
 
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {

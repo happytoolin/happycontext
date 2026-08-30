@@ -1,45 +1,24 @@
 package zerologadapter
 
 import (
-	"sort"
-	"sync"
 	"time"
 
 	"github.com/happytoolin/happycontext"
 	"github.com/rs/zerolog"
 )
 
-const (
-	zerologPoolCapacity    = 32
-	zerologPoolMaxCapacity = 160
-)
-
-var zerologKeyPool = sync.Pool{
-	New: func() any {
-		buf := make([]string, 0, zerologPoolCapacity)
-		return &buf
-	},
-}
-
-func recycleKeys(bufPtr *[]string, keys []string) {
-	if cap(keys) > zerologPoolMaxCapacity {
-		return
-	}
-	clear(keys)
-	*bufPtr = keys[:0]
-	zerologKeyPool.Put(bufPtr)
-}
-
 // SinkOptions controls zerolog adapter behavior.
-type SinkOptions struct {
-	// DeterministicOrder sorts keys before writing fields.
-	DeterministicOrder bool
-}
+//
+// It is currently empty and reserved for future options. The previous
+// DeterministicOrder option was removed: adapters no longer sort fields,
+// because the map-based sink contract cannot carry insertion order and
+// sorting on top of it only masked that. Deterministic field order
+// arrives structurally with the v2 record core.
+type SinkOptions struct{}
 
 // Sink writes happycontext events to zerolog.
 type Sink struct {
-	logger             *zerolog.Logger
-	deterministicOrder bool
+	logger *zerolog.Logger
 }
 
 // New creates a zerolog-backed sink.
@@ -49,7 +28,7 @@ func New(l *zerolog.Logger) *Sink {
 
 // NewWithOptions creates a zerolog-backed sink with options.
 func NewWithOptions(l *zerolog.Logger, opts SinkOptions) *Sink {
-	return &Sink{logger: l, deterministicOrder: opts.DeterministicOrder}
+	return &Sink{logger: l}
 }
 
 // Write implements hc.Sink.
@@ -80,26 +59,8 @@ func (z *Sink) Write(level hc.Level, message string, fields map[string]any) {
 		return
 	}
 
-	if !z.deterministicOrder {
-		for k, v := range fields {
-			event = appendField(event, k, v)
-		}
-		event.Msg(message)
-		return
-	}
-
-	keysPtr := zerologKeyPool.Get().(*[]string)
-	keys := (*keysPtr)[:0]
-	defer func() {
-		recycleKeys(keysPtr, keys)
-	}()
-
-	for k := range fields {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		event = appendField(event, k, fields[k])
+	for k, v := range fields {
+		event = appendField(event, k, v)
 	}
 	event.Msg(message)
 }

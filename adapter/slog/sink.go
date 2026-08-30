@@ -3,7 +3,6 @@ package slogadapter
 import (
 	"context"
 	"log/slog"
-	"sort"
 	"sync"
 
 	"github.com/happytoolin/happycontext"
@@ -21,13 +20,6 @@ var slogAttrPool = sync.Pool{
 	},
 }
 
-var slogKeyPool = sync.Pool{
-	New: func() any {
-		buf := make([]string, 0, slogPoolCapacity)
-		return &buf
-	},
-}
-
 func recycleSlice[T any](pool *sync.Pool, bufPtr *[]T, buf []T) {
 	if cap(buf) > slogPoolMaxCapacity {
 		return
@@ -38,15 +30,17 @@ func recycleSlice[T any](pool *sync.Pool, bufPtr *[]T, buf []T) {
 }
 
 // SinkOptions controls slog adapter behavior.
-type SinkOptions struct {
-	// DeterministicOrder sorts keys before writing attributes.
-	DeterministicOrder bool
-}
+//
+// It is currently empty and reserved for future options. The previous
+// DeterministicOrder option was removed: adapters no longer sort fields,
+// because the map-based sink contract cannot carry insertion order and
+// sorting on top of it only masked that. Deterministic field order
+// arrives structurally with the v2 record core.
+type SinkOptions struct{}
 
 // Sink writes happycontext events to slog.
 type Sink struct {
-	logger             *slog.Logger
-	deterministicOrder bool
+	logger *slog.Logger
 }
 
 // New creates a slog-backed sink with default options.
@@ -56,7 +50,7 @@ func New(l *slog.Logger) *Sink {
 
 // NewWithOptions creates a slog-backed sink with options.
 func NewWithOptions(l *slog.Logger, opts SinkOptions) *Sink {
-	return &Sink{logger: l, deterministicOrder: opts.DeterministicOrder}
+	return &Sink{logger: l}
 }
 
 // Write implements hc.Sink.
@@ -93,25 +87,8 @@ func (s *Sink) Write(level hc.Level, message string, fields map[string]any) {
 		recycleSlice(&slogAttrPool, bufPtr, attrs)
 	}()
 
-	if !s.deterministicOrder {
-		for k, v := range fields {
-			attrs = append(attrs, slog.Any(k, v))
-		}
-		s.logger.LogAttrs(ctx, slogLevel, message, attrs...)
-		return
-	}
-	keysPtr := slogKeyPool.Get().(*[]string)
-	keys := (*keysPtr)[:0]
-	defer func() {
-		recycleSlice(&slogKeyPool, keysPtr, keys)
-	}()
-	for k := range fields {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	for _, k := range keys {
-		attrs = append(attrs, slog.Any(k, fields[k]))
+	for k, v := range fields {
+		attrs = append(attrs, slog.Any(k, v))
 	}
 	s.logger.LogAttrs(ctx, slogLevel, message, attrs...)
 }

@@ -311,7 +311,7 @@ func runJob(cfg hc.Config) (err error) {
 - `adapter/zap`
 - `adapter/zerolog`
 
-All adapters expose `NewWithOptions` plus `SinkOptions{DeterministicOrder: true}` when you need stable field ordering.
+All adapters expose `NewWithOptions` plus a `SinkOptions` value reserved for future options. Adapters do not sort fields: field order follows Go's map iteration and is unspecified. Deterministic, insertion-ordered output arrives structurally with the upcoming record-based core.
 
 ## More Examples
 

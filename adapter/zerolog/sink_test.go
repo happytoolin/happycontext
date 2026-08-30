@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -117,29 +116,6 @@ func TestSinkWriteMapsAllLevelsAndMessageBehavior(t *testing.T) {
 	}
 }
 
-func TestSinkDeterministicOrderSortsKeys(t *testing.T) {
-	var buf bytes.Buffer
-	logger := zerolog.New(&buf)
-	sink := NewWithOptions(&logger, SinkOptions{DeterministicOrder: true})
-
-	sink.Write(hc.LevelInfo, "done", map[string]any{
-		"z": 1,
-		"a": 2,
-		"m": 3,
-	})
-
-	output := buf.String()
-	aIdx := strings.Index(output, `"a":2`)
-	mIdx := strings.Index(output, `"m":3`)
-	zIdx := strings.Index(output, `"z":1`)
-	if aIdx == -1 || mIdx == -1 || zIdx == -1 {
-		t.Fatalf("expected ordered keys in output, got %q", output)
-	}
-	if aIdx >= mIdx || mIdx >= zIdx {
-		t.Fatalf("expected key order a,m,z in output, got %q", output)
-	}
-}
-
 func TestSinkWriteNilSafety(t *testing.T) {
 	var nilSink *Sink
 	nilSink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
@@ -182,25 +158,5 @@ func TestSinkSkipsDisabledEvent(t *testing.T) {
 
 	if buf.Len() != 0 {
 		t.Fatalf("disabled debug produced output: %q", buf.String())
-	}
-}
-
-func TestRecycleKeysClearsAndCaps(t *testing.T) {
-	keys := make([]string, 0, zerologPoolCapacity)
-	for range 100 {
-		keys = append(keys, "retained")
-	}
-	if cap(keys) > zerologPoolMaxCapacity {
-		t.Fatalf("100-field buffer exceeds pool limit: cap=%d limit=%d", cap(keys), zerologPoolMaxCapacity)
-	}
-	recycleKeys(&keys, keys)
-	if len(keys) != 0 || keys[:cap(keys)][0] != "" {
-		t.Fatalf("key buffer was not cleared and recycled: len=%d first=%q", len(keys), keys[:cap(keys)][0])
-	}
-
-	oversized := make([]string, zerologPoolMaxCapacity+1)
-	recycleKeys(&oversized, oversized)
-	if len(oversized) != zerologPoolMaxCapacity+1 {
-		t.Fatalf("oversized buffer was retained: len=%d", len(oversized))
 	}
 }
