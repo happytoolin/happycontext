@@ -30,12 +30,12 @@ func TestDomainAnyProducesPlainStrings(t *testing.T) {
 
 func TestOutcomeAnyProducesPlainStrings(t *testing.T) {
 	cases := map[Outcome]string{
-		OutcomeSuccess:  "success",
-		OutcomeFailure:  "failure",
-		OutcomePanic:    "panic",
-		OutcomeCanceled: "canceled",
-		OutcomeTimeout:  "timeout",
-		OutcomeRetry:    "retry",
+		OutcomeSuccess:   "success",
+		OutcomeFailure:   "failure",
+		OutcomePanic:     "panic",
+		OutcomeCanceled:  "canceled",
+		OutcomeTimeout:   "timeout",
+		OutcomeRetry:     "retry",
 		Outcome("weird"): "weird",
 	}
 	for outcome, want := range cases {

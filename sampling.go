@@ -2,6 +2,7 @@ package hc
 
 import (
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"time"
 )
@@ -38,11 +39,11 @@ func ChainSampler(base Sampler, middlewares ...SamplerMiddleware) Sampler {
 		base = NeverSampler()
 	}
 	chained := base
-	for i := len(middlewares) - 1; i >= 0; i-- {
-		if middlewares[i] == nil {
+	for _, middleware := range slices.Backward(middlewares) {
+		if middleware == nil {
 			continue
 		}
-		chained = middlewares[i](chained)
+		chained = middleware(chained)
 	}
 	return chained
 }

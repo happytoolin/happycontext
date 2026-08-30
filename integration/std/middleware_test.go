@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -362,9 +363,7 @@ func (s *memorySink) Write(level hc.Level, message string, fields map[string]any
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cp := make(map[string]any, len(fields))
-	for k, v := range fields {
-		cp[k] = v
-	}
+	maps.Copy(cp, fields)
 	s.events = append(s.events, memoryEvent{
 		Level:   level,
 		Message: message,

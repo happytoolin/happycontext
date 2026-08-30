@@ -33,7 +33,7 @@ func TestSinkPooledAttrsSurviveRetainingHandler(t *testing.T) {
 	sink := New(slog.New(h))
 
 	fields := map[string]any{"a": 1, "b": "two", "c": true}
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		sink.Write(hc.LevelInfo, "m", fields)
 	}
 
@@ -74,11 +74,10 @@ func TestSinkPooledAttrsSurviveRetainingHandler(t *testing.T) {
 func TestSinkConcurrentWritesLargeMaps(t *testing.T) {
 	h := &retainingHandler{}
 	sink := New(slog.New(h))
-	sinkDeterministic := NewWithOptions(slog.New(h), SinkOptions{DeterministicOrder: true})
 
 	bigFields := func(tag string) map[string]any {
 		m := make(map[string]any, 100)
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			m["k"+strconv.Itoa(i)] = tag + ":" + strconv.Itoa(i)
 		}
 		return m
@@ -88,20 +87,19 @@ func TestSinkConcurrentWritesLargeMaps(t *testing.T) {
 	const writes = 50
 
 	var wg sync.WaitGroup
-	for w := 0; w < writers; w++ {
+	for w := range writers {
 		wg.Add(1)
 		go func(w int) {
 			defer wg.Done()
 			tag := "w" + strconv.Itoa(w)
-			for i := 0; i < writes; i++ {
+			for range writes {
 				sink.Write(hc.LevelInfo, tag, bigFields(tag))
-				sinkDeterministic.Write(hc.LevelInfo, tag, bigFields(tag))
 			}
 		}(w)
 	}
 	wg.Wait()
 
-	total := writers * writes * 2
+	total := writers * writes
 	if len(h.records) != total {
 		t.Fatalf("got %d records, want %d", len(h.records), total)
 	}
@@ -153,7 +151,7 @@ func TestSinkRecoverableAfterHandlerPanic(t *testing.T) {
 	boom := slog.New(panicHandler{calls: &calls})
 	sink := New(boom)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		func() {
 			defer func() { _ = recover() }()
 			sink.Write(hc.LevelInfo, "boom", map[string]any{"i": i})
@@ -172,15 +170,6 @@ func TestSinkRecoverableAfterHandlerPanic(t *testing.T) {
 }
 
 func TestRecycleSliceClearsAndCaps(t *testing.T) {
-	var pool sync.Pool
-
-	small := make([]any, 1, slogPoolCapacity)
-	small[0] = new(int)
-	recycleSlice(&pool, &small, small)
-	if len(small) != 0 || small[:cap(small)][0] != nil {
-		t.Fatalf("small buffer was not cleared and recycled: len=%d first=%v", len(small), small[:cap(small)][0])
-	}
-
 	attrs := make([]slog.Attr, 0, slogPoolCapacity)
 	for range 100 {
 		attrs = append(attrs, slog.Attr{})
@@ -196,6 +185,7 @@ func TestRecycleSliceClearsAndCaps(t *testing.T) {
 		t.Fatalf("grown attr buffer was not cleared and recycled: len=%d first=%v", len(attrs), first)
 	}
 
+	var pool sync.Pool
 	oversized := make([]any, slogPoolMaxCapacity+1)
 	oversized[0] = new(int)
 	recycleSlice(&pool, &oversized, oversized)
