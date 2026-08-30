@@ -313,6 +313,21 @@ func runJob(cfg hc.Config) (err error) {
 
 All adapters expose `NewWithOptions` plus a `SinkOptions` value reserved for future options. Adapters do not sort fields: field order follows Go's map iteration and is unspecified. Deterministic, insertion-ordered output arrives structurally with the upcoming record-based core.
 
+### First-party JSON sink (no logger dependency)
+
+`hc.NewJSONSink(w io.Writer)` emits the same canonical event shape as the
+zerolog adapter — lowercase `level`, RFC3339 `time`, your fields, `message`
+last — as one JSON line per event, with zero dependencies beyond the
+standard library:
+
+```go
+sink := hc.NewJSONSink(os.Stdout)
+```
+
+The wire format matches `zerolog.New(w).With().Timestamp().Logger()`
+through `adapter/zerolog`, so existing pipelines ingest it unchanged.
+Field order remains unspecified (map-based, same as the adapters).
+
 ## More Examples
 
 <details>
