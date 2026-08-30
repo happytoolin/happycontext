@@ -105,7 +105,7 @@ func TestStressHeapStable(t *testing.T) {
 
 	// Warm up pools/maps so their one-time growth does not count as a leak.
 	var err error
-	for i := 0; i < 100_000; i++ {
+	for range 100_000 {
 		op := hc.StartOperation(context.Background(), hc.OperationStart{Domain: hc.DomainJob, Name: "warmup"})
 		op.End(cfg, &err)
 	}
@@ -116,7 +116,7 @@ func TestStressHeapStable(t *testing.T) {
 	runtime.ReadMemStats(&before)
 
 	const ops = 2_000_000
-	for i := 0; i < ops; i++ {
+	for range ops {
 		op := hc.StartOperation(context.Background(), hc.OperationStart{
 			Domain:  hc.DomainJob,
 			Name:    "cleanup",
@@ -147,11 +147,11 @@ func TestStressConcurrentMixedAccess(t *testing.T) {
 	const iterations = 20_000
 
 	var wg sync.WaitGroup
-	for g := 0; g < goroutines; g++ {
+	for g := range goroutines {
 		wg.Add(1)
 		go func(g int) {
 			defer wg.Done()
-			for i := 0; i < iterations; i++ {
+			for i := range iterations {
 				hc.Add(sharedCtx, "g", g, "i", i, "note", "x")
 				hc.SetLevel(sharedCtx, hc.LevelWarn)
 				hc.SetMessage(sharedCtx, "mixed")
@@ -189,9 +189,7 @@ func TestStressSamplerUnderContention(t *testing.T) {
 			var kept atomic.Int64
 			var wg sync.WaitGroup
 			for range goroutines {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					local := int64(0)
 					for range iterations {
 						if sampler(hc.SampleInput{Outcome: hc.OutcomeSuccess}) {
@@ -199,7 +197,7 @@ func TestStressSamplerUnderContention(t *testing.T) {
 						}
 					}
 					kept.Add(local)
-				}()
+				})
 			}
 			wg.Wait()
 

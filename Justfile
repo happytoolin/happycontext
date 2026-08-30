@@ -9,12 +9,13 @@ set shell := ["zsh", "-cu"]
 default:
   @just --list
 
-# Maintain clean dependencies.
+# Maintain clean dependencies across all modules.
 tidy:
-  go fmt ./...
-  go fix ./...
-  go mod tidy
-  gofumpt -l -w .
+  while IFS= read -r modfile; do \
+    moddir="$(dirname "$modfile")"; \
+    echo "== tidying $moddir =="; \
+    (cd "$moddir" && go fmt ./... && go fix ./... && go mod tidy && gofumpt -l -w .); \
+  done < <(printf '%s\n' go.mod && git ls-files '**/go.mod')
 
 
 lint:

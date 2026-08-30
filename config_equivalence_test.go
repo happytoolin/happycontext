@@ -259,13 +259,13 @@ func TestNormalizeConfigRandomizedMatchesReference(t *testing.T) {
 
 	randomLevel := func() Level { return levels[rng.Intn(len(levels))] }
 
-	for i := 0; i < 2000; i++ {
+	for i := range 2000 {
 		cfg := Config{SamplingRate: rates[rng.Intn(len(rates))]}
 
 		if rng.Intn(2) == 0 {
 			n := rng.Intn(4)
 			m := make(map[Level]float64, n)
-			for j := 0; j < n; j++ {
+			for range n {
 				m[randomLevel()] = rates[rng.Intn(len(rates))]
 			}
 			if rng.Intn(4) == 0 {
@@ -277,7 +277,7 @@ func TestNormalizeConfigRandomizedMatchesReference(t *testing.T) {
 		if rng.Intn(2) == 0 {
 			n := rng.Intn(3)
 			m := make(map[Domain]OperationPolicy, n)
-			for j := 0; j < n; j++ {
+			for range n {
 				policy := OperationPolicy{
 					SuccessLevel: randomLevel(),
 					FailureLevel: randomLevel(),
@@ -286,7 +286,7 @@ func TestNormalizeConfigRandomizedMatchesReference(t *testing.T) {
 				if rng.Intn(2) == 0 {
 					n := rng.Intn(3)
 					ol := make(map[Outcome]Level, n)
-					for k := 0; k < n; k++ {
+					for range n {
 						ol[outcomes[rng.Intn(len(outcomes))]] = randomLevel()
 					}
 					policy.OutcomeLevels = ol

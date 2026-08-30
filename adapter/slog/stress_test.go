@@ -17,11 +17,11 @@ func TestStressSlogSustainedCorrectness(t *testing.T) {
 	const writes = 20_000
 
 	var wg sync.WaitGroup
-	for g := 0; g < goroutines; g++ {
+	for range goroutines {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i := 0; i < writes; i++ {
+			for range writes {
 				sink.Write(hc.LevelInfo, "stress", fields)
 			}
 		}()

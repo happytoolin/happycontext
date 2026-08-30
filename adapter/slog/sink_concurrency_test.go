@@ -33,7 +33,7 @@ func TestSinkPooledAttrsSurviveRetainingHandler(t *testing.T) {
 	sink := New(slog.New(h))
 
 	fields := map[string]any{"a": 1, "b": "two", "c": true}
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		sink.Write(hc.LevelInfo, "m", fields)
 	}
 
@@ -77,7 +77,7 @@ func TestSinkConcurrentWritesLargeMaps(t *testing.T) {
 
 	bigFields := func(tag string) map[string]any {
 		m := make(map[string]any, 100)
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			m["k"+strconv.Itoa(i)] = tag + ":" + strconv.Itoa(i)
 		}
 		return m
@@ -87,12 +87,12 @@ func TestSinkConcurrentWritesLargeMaps(t *testing.T) {
 	const writes = 50
 
 	var wg sync.WaitGroup
-	for w := 0; w < writers; w++ {
+	for w := range writers {
 		wg.Add(1)
 		go func(w int) {
 			defer wg.Done()
 			tag := "w" + strconv.Itoa(w)
-			for i := 0; i < writes; i++ {
+			for range writes {
 				sink.Write(hc.LevelInfo, tag, bigFields(tag))
 			}
 		}(w)
@@ -151,7 +151,7 @@ func TestSinkRecoverableAfterHandlerPanic(t *testing.T) {
 	boom := slog.New(panicHandler{calls: &calls})
 	sink := New(boom)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		func() {
 			defer func() { _ = recover() }()
 			sink.Write(hc.LevelInfo, "boom", map[string]any{"i": i})
