@@ -2,12 +2,12 @@
 
 ## Unreleased
 
-## [1.0.0](https://github.com/happytoolin/happycontext/compare/v0.4.0...v1.0.0) (2026-08-30)
+## [0.5.0](https://github.com/happytoolin/happycontext/compare/v0.4.0...v0.5.0) (2026-08-30)
 
 
 ### ⚠ BREAKING CHANGES
 
-* remove DeterministicOrder sorting from adapters ([#21](https://github.com/happytoolin/happycontext/issues/21))
+* remove DeterministicOrder sorting from adapters ([#21](https://github.com/happytoolin/happycontext/issues/21)). Pre-1.0 semver: breaking changes may land in 0.x minor releases. Default output is unchanged; `SinkOptions.DeterministicOrder` was opt-in. Migrate stable-byte assertions to `hc.TestSink`, or pin the v0.4 adapter modules (the `Sink` interface is unchanged).
 
 ### Code Refactoring
 
