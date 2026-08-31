@@ -31,17 +31,17 @@ func (s *jsontextSink) Write(level hc.Level, message string, fields map[string]a
 	dst = time.Now().AppendFormat(dst, time.RFC3339)
 	dst = append(dst, '"')
 	for k, v := range fields {
-		dst = append(dst, ',', '"')
+		dst = append(dst, ',')
 		dst, _ = jsontext.AppendQuote(dst, k)
-		dst = append(dst, '"', ':')
+		dst = append(dst, ':')
 		dst = appendJSONTextValue(dst, v)
 	}
 	if message == "" {
 		message = hc.DefaultMessage
 	}
-	dst = append(dst, ',', '"')
+	dst = append(dst, ',')
 	dst, _ = jsontext.AppendQuote(dst, "message")
-	dst = append(dst, '"', ':')
+	dst = append(dst, ':')
 	dst, _ = jsontext.AppendQuote(dst, message)
 	dst = append(dst, '}', '\n')
 	_, _ = s.w.Write(dst)
