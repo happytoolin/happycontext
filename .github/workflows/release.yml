@@ -65,7 +65,7 @@ jobs:
             cmd/examples/go.mod
 
           git commit -m "chore: sync lockstep modules for ${RELEASE_TAG}"
-          git push origin HEAD:main
+          git push origin HEAD:v2
 
       - name: Publish lockstep module releases
         if: ${{ steps.release.outputs.release_created == 'true' }}

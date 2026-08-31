@@ -12,14 +12,14 @@ behind us.
 | --- | --- | --- | --- |
 | **v0.5.0** — shipped | adapter sort removal, `just tidy` all-modules | soft (done) | — |
 | **v0.6.0** | W1: `internal/hcjson` encoder fork (SWAR hybrid, zerolog-table property test, fuzz 1M, golden vs current zerolog adapter) · W2: `hc.NewJSONSink(io.Writer)` on the *current* Sink interface · jsontext fallback backend behind the internal encoder interface | none | golden output ≡ zerolog adapter (modulo ordering); fuzz clean; soak in `benches` |
-| **v1.0.0** — the break, one PR | W3 typed Event (request-WAL) · W4 `Record`/`Sink` · W5 `Compile`/`Runtime` · W6 sampler `Lookup` · W7 single lifecycle · W8 bridges on `[]Field` · W9 field dedupe · `MIGRATION.md` | yes, lockstep (root + all nested modules) | performance gates §4; full matrix green under `-race`; migration guide published *before* merge |
+| **v1.0.0** — the break (S-series) | W3 typed Event (request-WAL) · W4 `Record`/`Sink` · W5 `Compile`/`Runtime` · W6 sampler `Lookup` · W7 single lifecycle · W8 bridges on `[]Field` · W9 field dedupe · `MIGRATION.md` | yes, lockstep (root + all nested modules) | performance gates §4; full matrix green under `-race`; migration guide published *before* merge |
 | **v1.1.0** | W11 `BufferedSink` (async drain, writev batches) · W12 stall watchdog + in-flight records + timeline arming · encode-once multi-sink reuse | none | buffered append ≤ 100 ns; watchdog emits within 1 s of threshold under load |
 | **later, data-gated** | W10 `hc/log` mini logger · console writer | none | only if post-1.0 profiles justify |
 
 The v0.6 encoder exists so the highest-risk component earns production
 trust on the old core before anything breaks. Nothing else ships
-between v0.6 and the 1.0 core PR — the break is coordinated, atomic,
-and never partially merged.
+between v0.6 and 1.0.0 — the break lands as the coordinated S-series on
+v2 (§9) and releases only when complete.
 
 ## 2. The public API
 
