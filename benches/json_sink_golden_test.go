@@ -155,6 +155,7 @@ func TestJSONSinkGoldenZerologParity(t *testing.T) {
 				"object":     map[string]any{"b": 2, "a": 1},
 				"empty_map":  map[string]any{},
 				"byte_slice": []byte("binary\x00bytes"),
+				"html":       map[string]any{"note": "<b>a&b</b>"},
 			},
 		},
 		{

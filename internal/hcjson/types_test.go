@@ -93,6 +93,28 @@ func TestAppendFloats(t *testing.T) {
 	}
 }
 
+// TestAppendInterfaceNoHTMLEscape pins the any-fallback bytes to
+// zerolog's InterfaceMarshalFunc semantics: <, >, & emitted raw (std
+// json.Marshal would emit \u003c — parses equal, differs on the wire)
+// and no trailing newline from json.Encoder.Encode.
+func TestAppendInterfaceNoHTMLEscape(t *testing.T) {
+	cases := []struct {
+		val  any
+		want string
+	}{
+		{map[string]any{"note": "<b>a&b</b>"}, `{"note":"<b>a&b</b>"}`},
+		{map[string]any{"u": "café ☃"}, `{"u":"café ☃"}`},
+		{[]any{"<x>", 1}, `["<x>",1]`},
+		{map[string]any{"script": "</script><script>"}, `{"script":"</script><script>"}`},
+	}
+	for _, c := range cases {
+		got := string(Encoder{}.AppendInterface(nil, c.val))
+		if got != c.want {
+			t.Errorf("AppendInterface(%v) = %s, want %s (HTML escaping or newline leaked)", c.val, got, c.want)
+		}
+	}
+}
+
 func TestAppendInterface(t *testing.T) {
 	cases := []struct {
 		val  any

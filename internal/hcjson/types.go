@@ -1,6 +1,7 @@
 package hcjson
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -8,9 +9,27 @@ import (
 )
 
 // jsonMarshal is the fallback marshaller used by AppendInterface for
-// values without a dedicated append method. It is a variable to keep the
-// vendored zerolog seam (JSONMarshalFunc) swappable in tests.
-var jsonMarshal = json.Marshal
+// values without a dedicated append method. It mirrors zerolog's default
+// InterfaceMarshalFunc (globals.go): encoding/json with HTML escaping
+// disabled, and json.Encoder.Encode's trailing newline trimmed — so
+// any-fallback bytes match the zerolog adapter byte-for-byte (std
+// json.Marshal would emit \u003c for <, which parses equal but differs
+// on the wire). A variable keeps the vendored seam (JSONMarshalFunc)
+// swappable in tests.
+var jsonMarshal = func(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(v); err != nil {
+		return nil, err
+	}
+	b := buf.Bytes()
+	if len(b) > 0 {
+		// Remove the trailing \n added by Encode.
+		return b[:len(b)-1], nil
+	}
+	return b, nil
+}
 
 // AppendNil inserts a 'Nil' object into the dst byte array.
 func (Encoder) AppendNil(dst []byte) []byte {
