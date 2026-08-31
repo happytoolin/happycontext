@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>happycontext v2 — Faster, Cleaner, Simpler</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #121722;
+    --panel2: #0e1320;
+    --line: #232b3b;
+    --text: #e8ecf4;
+    --muted: #939cb0;
+    --faint: #6b7488;
+    --amber: #f5b132;
+    --amber-dim: #f5b13233;
+    --green: #4cd88a;
+    --green-dim: #4cd88a22;
+    --red: #f2635f;
+    --red-dim: #f2635f22;
+    --blue: #5aa2f0;
+    --blue-dim: #5aa2f022;
+    --violet: #b48cf2;
+    --violet-dim: #b48cf222;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 28px 96px; }
+
+  /* ---------- header ---------- */
+  header { padding: 72px 0 40px; border-bottom: 1px solid var(--line); position: relative; overflow: hidden; }
+  header::before {
+    content: ""; position: absolute; inset: -200px -200px auto -200px; height: 420px;
+    background: radial-gradient(ellipse at 30% 0%, #f5b13214 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .kicker { font: 600 12px/1 var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--amber); }
+  h1 { font-size: clamp(34px, 5vw, 52px); font-weight: 800; letter-spacing: -0.02em; margin: 14px 0 10px; }
+  h1 .dim { color: var(--faint); font-weight: 300; }
+  .sub { font-size: 19px; color: var(--muted); max-width: 720px; }
+  .sub strong { color: var(--text); font-weight: 600; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+  .pill {
+    font: 500 12.5px/1 var(--mono); padding: 7px 12px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted); background: var(--panel);
+  }
+  .pill b { color: var(--text); font-weight: 600; }
+
+  /* ---------- sections ---------- */
+  section { margin-top: 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .sec-num { font: 700 13px var(--mono); color: var(--amber); letter-spacing: .08em; }
+  h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+  .sec-sub { color: var(--muted); max-width: 780px; margin-bottom: 22px; }
+
+  /* ---------- decision banner ---------- */
+  .decision {
+    margin-top: 48px; border: 1px solid var(--amber-dim); background:
+    linear-gradient(180deg, #f5b1320d, transparent); border-radius: 14px; padding: 22px 24px;
+    display: flex; gap: 18px; align-items: flex-start;
+  }
+  .decision .mark {
+    flex: none; width: 38px; height: 38px; border-radius: 10px; background: var(--amber-dim);
+    display: grid; place-items: center; font-size: 19px; font-weight: 800; color: var(--amber);
+  }
+  .decision h3 { font-size: 16px; margin-bottom: 4px; }
+  .decision p { color: var(--muted); font-size: 14.5px; }
+  .decision p code { font-family: var(--mono); font-size: 13px; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
+  .decision b { color: var(--text); }
+
+  /* ---------- tables ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th {
+    text-align: left; font: 600 11.5px var(--mono); letter-spacing: .1em; text-transform: uppercase;
+    color: var(--faint); padding: 10px 14px; border-bottom: 1px solid var(--line);
+  }
+  td { padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-size: 13.5px; white-space: nowrap; }
+  td.name { font-weight: 600; }
+  td .note { color: var(--faint); font-size: 12.5px; font-weight: 400; }
+  tr:last-child td { border-bottom: none; }
+
+  /* ---------- bar charts ---------- */
+  .chart { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px 18px; }
+  .chart h4 { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 16px; letter-spacing: .02em; }
+  .bar-row { display: grid; grid-template-columns: 250px 1fr 124px; gap: 14px; align-items: center; padding: 7px 0; }
+  .bar-label { font-size: 13.5px; color: var(--text); }
+  .bar-label span { color: var(--faint); font-size: 12px; }
+  .bar-track { height: 12px; background: var(--panel2); border-radius: 99px; overflow: hidden; border: 1px solid var(--line); }
+  .bar-fill { height: 100%; border-radius: 99px; }
+  .bar-val { font: 600 12.5px var(--mono); color: var(--muted); text-align: right; white-space: nowrap; }
+  .fill-red { background: linear-gradient(90deg, #f2635f99, var(--red)); }
+  .fill-amber { background: linear-gradient(90deg, #f5b13288, var(--amber)); }
+  .fill-green { background: linear-gradient(90deg, #4cd88a88, var(--green)); }
+  .fill-blue { background: linear-gradient(90deg, #5aa2f088, var(--blue)); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { .two-col { grid-template-columns: 1fr; } .bar-row { grid-template-columns: 170px 1fr 116px; } }
+
+  /* ---------- thesis cards ---------- */
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 860px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px;
+  }
+  .card .tag {
+    display: inline-flex; font: 600 10.5px var(--mono); letter-spacing: .12em; text-transform: uppercase;
+    padding: 5px 9px; border-radius: 6px; margin-bottom: 14px;
+  }
+  .card h3 { font-size: 16.5px; margin-bottom: 8px; letter-spacing: -0.01em; }
+  .card p { color: var(--muted); font-size: 13.8px; }
+  .card p + p { margin-top: 8px; }
+  .card code, p code, li code {
+    font-family: var(--mono); font-size: .88em; color: var(--text);
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px;
+  }
+  .tag-amber { background: var(--amber-dim); color: var(--amber); }
+  .tag-green { background: var(--green-dim); color: var(--green); }
+  .tag-blue { background: var(--blue-dim); color: var(--blue); }
+  .tag-violet { background: var(--violet-dim); color: var(--violet); }
+  .tag-red { background: var(--red-dim); color: var(--red); }
+
+  .why-box {
+    margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  @media (max-width: 860px) { .why-box { grid-template-columns: 1fr; } }
+  .mini { background: var(--panel2); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+  .mini h4 { font-size: 13px; letter-spacing: .02em; margin-bottom: 10px; }
+  .mini ul { list-style: none; }
+  .mini li { color: var(--muted); font-size: 13.5px; padding: 3.5px 0 3.5px 24px; position: relative; }
+  .mini li::before { content: "→"; position: absolute; left: 2px; font-family: var(--mono); color: var(--faint); }
+  .mini li b { color: var(--text); font-weight: 600; }
+
+  /* ---------- architecture ---------- */
+  .arch { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px; overflow-x: auto; }
+  .arch svg { display: block; min-width: 840px; width: 100%; height: auto; }
+
+  /* ---------- workstreams ---------- */
+  .ws-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 860px) { .ws-grid { grid-template-columns: 1fr; } }
+  .ws { background: var(--panel); border: 1px solid var(--line); border-radius: 13px; padding: 18px 20px; }
+  .ws-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .ws-id { font: 700 12px var(--mono); color: var(--amber); background: var(--amber-dim); border-radius: 6px; padding: 4px 8px; }
+  .ws h3 { font-size: 15.5px; font-weight: 650; letter-spacing: -0.01em; }
+  .ws p { color: var(--muted); font-size: 13.4px; }
+  .chips { display: flex; gap: 6px; margin-left: auto; }
+  .chip { font: 600 10.5px var(--mono); letter-spacing: .06em; padding: 3.5px 8px; border-radius: 6px; text-transform: uppercase; }
+  .chip-s { background: var(--green-dim); color: var(--green); }
+  .chip-m { background: var(--amber-dim); color: var(--amber); }
+  .chip-l { background: var(--red-dim); color: var(--red); }
+  .chip-break { background: var(--violet-dim); color: var(--violet); }
+  .chip-add { background: var(--blue-dim); color: var(--blue); }
+
+  /* ---------- WAL ---------- */
+  .wal-hero {
+    border: 1px solid var(--blue-dim); background: linear-gradient(180deg, #5aa2f00a, transparent);
+    border-radius: 14px; padding: 24px; margin-bottom: 18px;
+  }
+  .wal-hero h3 { font-size: 17px; margin-bottom: 8px; }
+  .wal-hero p { color: var(--muted); font-size: 14.5px; max-width: 820px; }
+  .wal-hero p b { color: var(--text); }
+  .wal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 860px) { .wal-grid { grid-template-columns: 1fr; } }
+  .wal-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; }
+  .wal-card .tag { display: inline-flex; font: 600 10.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; padding: 5px 9px; border-radius: 6px; margin-bottom: 12px; }
+  .wal-card h3 { font-size: 16px; margin-bottom: 6px; }
+  .wal-card .problem { font-size: 13.5px; color: var(--red); margin-bottom: 10px; font-weight: 550; }
+  .wal-card p { color: var(--muted); font-size: 13.6px; margin-bottom: 8px; }
+  .wal-card ul { list-style: none; margin-top: 6px; }
+  .wal-card li { color: var(--muted); font-size: 13.4px; padding: 3px 0 3px 22px; position: relative; }
+  .wal-card li::before { content: "▸"; position: absolute; left: 4px; color: var(--faint); }
+  .wal-card li b { color: var(--text); font-weight: 600; }
+  .wal-reject {
+    margin-top: 16px; border: 1px dashed var(--line); border-radius: 13px; padding: 16px 20px;
+    display: flex; gap: 14px; align-items: baseline; background: var(--panel2);
+  }
+  .wal-reject .x { font: 700 13px var(--mono); color: var(--red); white-space: nowrap; }
+  .wal-reject p { color: var(--muted); font-size: 13.6px; }
+  .wal-reject b { color: var(--text); }
+
+  /* ---------- targets ---------- */
+  .delta { font: 650 12px var(--mono); padding: 3px 8px; border-radius: 6px; background: var(--green-dim); color: var(--green); white-space: nowrap; }
+  .delta.new { background: var(--blue-dim); color: var(--blue); }
+
+  /* ---------- timeline ---------- */
+  .timeline { position: relative; padding-left: 30px; }
+  .timeline::before { content: ""; position: absolute; left: 8px; top: 8px; bottom: 8px; width: 2px; background: var(--line); }
+  .phase { position: relative; padding: 4px 0 30px; }
+  .phase:last-child { padding-bottom: 4px; }
+  .phase::before {
+    content: ""; position: absolute; left: -28px; top: 10px; width: 12px; height: 12px;
+    border-radius: 50%; background: var(--bg); border: 3px solid var(--amber);
+  }
+  .phase.p2::before { border-color: var(--violet); }
+  .phase.p3::before { border-color: var(--blue); }
+  .phase.p4::before { border-color: var(--green); }
+  .phase h3 { font-size: 16.5px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .phase p { color: var(--muted); font-size: 14px; margin-top: 4px; max-width: 760px; }
+
+  /* ---------- gates & rejected ---------- */
+  .gate-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 860px) { .gate-grid { grid-template-columns: 1fr; } }
+  .gate-grid ul { list-style: none; }
+  .gate-grid li { color: var(--muted); font-size: 13.8px; padding: 5px 0 5px 26px; position: relative; }
+  .gate-grid li::before {
+    content: "✓"; position: absolute; left: 0; top: 5px; color: var(--green); font-weight: 700; font-size: 13px;
+  }
+  .rejected li::before { content: "✕" !important; color: var(--red) !important; }
+  .rejected li b { color: var(--text); }
+
+  .code {
+    background: #0a0d13; border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px 20px; overflow-x: auto; margin: 12px 0;
+    font: 12.5px/1.7 var(--mono); color: #c9d3e2; white-space: pre; tab-size: 4;
+  }
+  .code .cm { color: #5c6578; }
+  .code .kw { color: var(--violet); }
+  .code .st { color: var(--green); }
+  .code .fn { color: var(--blue); }
+  .api-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 10px; }
+  .api-tab {
+    font: 600 12px var(--mono); padding: 7px 13px; border-radius: 999px; cursor: default;
+    border: 1px solid var(--line); color: var(--muted); background: var(--panel);
+  }
+  .api-tab.on { border-color: var(--amber); color: var(--amber); background: var(--amber-dim); }
+
+  .steps { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+  .step { display: grid; grid-template-columns: 36px 1fr; gap: 14px; background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 13px 16px; }
+  .step .n { font: 700 13px var(--mono); color: var(--amber); background: var(--amber-dim); border-radius: 8px; display: grid; place-items: center; height: 28px; }
+  .step h4 { font: 600 13px var(--mono); color: var(--text); margin-bottom: 3px; }
+  .step p { font-size: 13px; color: var(--muted); }
+  .step p code { font-size: 12px; }
+  .step p b { color: var(--text); }
+  .step .cost { float: right; font: 600 11px var(--mono); color: var(--green); background: var(--green-dim); border-radius: 6px; padding: 2px 8px; margin-left: 8px; }
+
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
+  .toc a {
+    font: 500 12px var(--mono); padding: 7px 12px; border-radius: 999px; text-decoration: none;
+    border: 1px solid var(--line); color: var(--muted); background: var(--panel); transition: border-color .15s;
+  }
+  .toc a:hover { border-color: var(--amber); color: var(--amber); }
+  .toc a b { color: var(--amber); font-weight: 700; margin-right: 5px; }
+  .faq { background: var(--panel); border: 1px solid var(--line); border-radius: 13px; padding: 18px 20px; }
+  .faq h3 { font-size: 14.5px; margin-bottom: 6px; color: var(--text); }
+  .faq h3::before { content: "Q · "; color: var(--amber); font-family: var(--mono); font-weight: 700; }
+  .faq p { color: var(--muted); font-size: 13.4px; }
+  .faq p b { color: var(--text); }
+
+  footer {
+    margin-top: 80px; padding-top: 24px; border-top: 1px solid var(--line);
+    color: var(--faint); font-size: 13px; display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+  }
+  footer code { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Design locked · 2026-08-30 · spec: V2_DESIGN.md · supersedes breaking section of PERFORMANCE_PLAN.md</div>
+  <h1>happycontext <span class="dim">v2</span></h1>
+  <p class="sub"><strong>Faster, cleaner, simpler.</strong> One typed-field event core, one first-party writer, thin bridges — and an optional WAL layer for when the sink is slow or the request never comes back.</p>
+  <div class="meta-row">
+    <span class="pill">baseline <b>main @ d79a41b</b> (v0.4.0)</span>
+    <span class="pill">Apple M4 · 3–5 runs</span>
+    <span class="pill">12 workstreams</span>
+    <span class="pill">compat perf work <b>shipped</b> in #18 / #19</span>
+  </div>
+
+  <div class="toc">
+    <a href="#baseline"><b>01</b> Baseline</a>
+    <a href="#thesis"><b>02</b> Thesis</a>
+    <a href="#arch"><b>03</b> Architecture</a>
+    <a href="#wal"><b>04</b> WAL</a>
+    <a href="#tricks"><b>05</b> Speed inventory</a>
+    <a href="#workstreams"><b>06</b> Workstreams</a>
+    <a href="#api"><b>07</b> Sample API</a>
+    <a href="#targets"><b>08</b> Targets</a>
+    <a href="#sequence"><b>09</b> Sequence</a>
+    <a href="#gates"><b>10</b> Gates</a>
+    <a href="#faq"><b>11</b> FAQ &amp; glossary</a>
+    <a href="#locked"><b>12</b> Final design</a>
+  </div>
+
+  <div class="decision">
+    <div class="mark">?</div>
+    <div>
+      <h3>Open decision — the literal version number</h3>
+      <p><b>Recommended: ship the break as v1.0.0.</b> The project never shipped 1.0, so this is the natural first stable release — no module-path churn across 12 nested modules, users keep their imports, and “v2” remains the architecture codename. A literal <code>v2.0.0</code> forces <code>github.com/happytoolin/happycontext/v2</code> paths plus <code>/v2</code> directories in every adapter and integration module — real churn, no technical gain.</p>
+    </div>
+  </div>
+</header>
+
+<!-- ================= 1. BASELINE ================= -->
+<section id="baseline">
+  <div class="sec-head"><span class="sec-num">01</span><h2>Where we are</h2></div>
+  <p class="sec-sub">Measured on main <code>d79a41b</code>. The happycontext tax on a request is ~600–950 ns and 14–22 extra allocations — and middleware with a discard sink is currently <b>slower than plain slog JSON logging</b> and ~15× direct zerolog. That is the gap v2 closes.</p>
+
+  <div class="two-col">
+    <div class="chart">
+      <h4>Request path cost (std router, ns/op)</h4>
+      <div class="bar-row">
+        <div class="bar-label">Direct zerolog <span>· nop logger</span></div>
+        <div class="bar-track"><div class="bar-fill fill-green" style="width:7%"></div></div>
+        <div class="bar-val">67 ns / 4 al</div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Direct slog JSON <span>· no middleware</span></div>
+        <div class="bar-track"><div class="bar-fill fill-amber" style="width:60%"></div></div>
+        <div class="bar-val">605 ns / 8 al</div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">happycontext middleware <span>· discard sink</span></div>
+        <div class="bar-track"><div class="bar-fill fill-red" style="width:100%"></div></div>
+        <div class="bar-val">1,000 ns / 26 al</div>
+      </div>
+    </div>
+    <div class="chart">
+      <h4>Adapter write, 12 fields (ns/op)</h4>
+      <div class="bar-row">
+        <div class="bar-label">zerolog adapter</div>
+        <div class="bar-track"><div class="bar-fill fill-green" style="width:21%"></div></div>
+        <div class="bar-val">354 ns</div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">zap adapter</div>
+        <div class="bar-track"><div class="bar-fill fill-amber" style="width:50%"></div></div>
+        <div class="bar-val">858 ns</div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">slog adapter</div>
+        <div class="bar-track"><div class="bar-fill fill-red" style="width:100%"></div></div>
+        <div class="bar-val">1,699 ns</div>
+      </div>
+    </div>
+  </div>
+
+  <table style="margin-top:18px">
+    <tr><th>Core benchmark</th><th class="num">ns/op</th><th class="num">B/op</th><th class="num">allocs/op</th></tr>
+    <tr><td class="name">OperationLifecycle <span class="note">· full, kept</span></td><td class="num">~615</td><td class="num">1,648</td><td class="num">14</td></tr>
+    <tr><td class="name">OperationLifecycleDropped <span class="note">· 8 fields, rate 0</span></td><td class="num">~628</td><td class="num">1,240</td><td class="num">9</td></tr>
+    <tr><td class="name">CommitPath</td><td class="num">~266</td><td class="num">832</td><td class="num">6</td></tr>
+    <tr><td class="name">EventAddMany <span class="note">· 5 fields, incl. NewContext</span></td><td class="num">~178</td><td class="num">496</td><td class="num">4</td></tr>
+  </table>
+
+  <p class="sec-sub" style="margin-top:18px; margin-bottom:0">The cost concentrates in four places: <code>map[string]any</code> storage with scalar boxing, <code>maps.Clone</code> on every kept write, <code>slog.Any</code>/<code>zap.Any</code> reflection in adapters, and the sort + pool machinery needed just to get deterministic field order. The API also carries a parallel low-level lifecycle (<code>BeginOperation</code>/<code>FinishOperation</code>) plus ~100 lines of hydration kept only for it.</p>
+
+  <div class="chart" style="margin-top:16px">
+    <h4>Where the ~615 ns lifecycle actually goes — and what kills each slice</h4>
+    <p style="color:var(--faint);font-size:12px;margin-bottom:8px">Profile-guided estimates (pprof attribution from <code>BENCHMARK_REPORT.md</code>: <code>maps.clone</code>, <code>(*Event).addKV</code>, <code>context.WithValue</code> dominate; per-item costs measured in §05). Ranges, not gospel — confirmed with pprof during implementation.</p>
+    <table>
+      <tr><th>Cost slice (v0.4.0)</th><th class="num">≈ ns</th><th class="num">≈ allocs</th><th>v2 removes it via</th></tr>
+      <tr><td class="name">Context plumbing <span class="note">· WithValue + req.WithContext</span></td><td class="num">40–70</td><td class="num">2–3</td><td>kept — it's the context contract; the only slice that survives</td></tr>
+      <tr><td class="name">Event + map allocate &amp; grow</td><td class="num">80–150</td><td class="num">3–4</td><td>W3 · pooled typed records, no map at all</td></tr>
+      <tr><td class="name">Scalar boxing into <code>any</code></td><td class="num">30–60</td><td class="num">2–5</td><td>W3 · kind-discriminated record slots — nothing boxes</td></tr>
+      <tr><td class="name">Policy path + per-finish validation</td><td class="num">30–60</td><td class="num">0</td><td>W5 · compiled runtime, precomputed lookups</td></tr>
+      <tr><td class="name">Extra <code>time.Now()</code> reads</td><td class="num">~32</td><td class="num">0</td><td>§05 · reuse the start-time reading</td></tr>
+      <tr><td class="name"><code>maps.Clone</code> snapshot per kept write</td><td class="num">100–250</td><td class="num">2–3</td><td>W4 · Record is a read-only view — zero copy</td></tr>
+      <tr><td class="name">Hydration/reconciliation on finish</td><td class="num">20–40</td><td class="num">0</td><td>W7 · single lifecycle, deleted path</td></tr>
+      <tr><td class="name">Adapter conversion <span class="note">· real sinks, 12 fields</span></td><td class="num">350–1,700</td><td class="num">0–18</td><td>W8 · typed records → native fields, no reflection; first-party sink ≈ 350–400</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ================= 2. THESIS ================= -->
+<section id="thesis">
+  <div class="sec-head"><span class="sec-num">02</span><h2>The v2 thesis</h2></div>
+  <p class="sec-sub">Three moves. Each one removes an entire class of cost rather than shaving a constant.</p>
+
+  <div class="cards">
+    <div class="card">
+      <span class="tag tag-amber">Core</span>
+      <h3>Typed, insertion-ordered field slice</h3>
+      <p>Event storage becomes a discriminated-union field slice: kind + int64/float64/string/any slots. No map, no scalar boxing, no clone per write, no mutex (request-confined).</p>
+      <p>Deterministic order becomes a <b>property of the data structure</b> — so <code>DeterministicOrder</code>, key pools, and sorting are deleted from every adapter.</p>
+    </div>
+    <div class="card">
+      <span class="tag tag-green">Output</span>
+      <h3>happycontext owns its writer</h3>
+      <p>Fork zerolog’s JSON encoder (MIT, ~800 LOC of non-test encoder code) into <code>internal/</code>, ship <code>hc.NewJSONSink(io.Writer)</code> — zero third-party dependencies, single buffered write per event, byte-compatible with today’s zerolog adapter output.</p>
+      <p>New users install no logger library at all.</p>
+    </div>
+    <div class="card">
+      <span class="tag tag-blue">Surface</span>
+      <h3>One lifecycle, compiled once</h3>
+      <p><code>hc.Compile(Config)</code> clamps and precomputes at middleware construction; <code>hc.Start</code> + <code>op.End(&amp;err)</code> is the only lifecycle. The parallel begin/finish path and its hydration move internal.</p>
+      <p>~40 exported symbols in the root shrink to the set people actually use.</p>
+    </div>
+  </div>
+
+  <div class="why-box">
+    <div class="mini">
+      <h4>Why fork zerolog specifically</h4>
+      <ul>
+        <li><b>Smallest correct core</b> — <code>internal/json</code> appender suite ≈ 800 LOC non-test</li>
+        <li><b>Buffer-append style</b> matches append-at-<code>Add</code> — no reflection</li>
+        <li><b>Output continuity</b> — byte-compatible with what zerolog adapter users already ingest</li>
+      </ul>
+    </div>
+    <div class="mini">
+      <h4>Why not the alternatives</h4>
+      <ul>
+        <li><b>Pre-encoded JSON buffer as Event store</b> — breaks bridge/sampler field access or forces dual storage; one representation beats a faster one nobody can read</li>
+        <li><b>Fork zap</b> — larger, reflection-centric encoder core</li>
+        <li><b>Fork phuslu/log</b> — fastest in microbenchmarks, but no output-format continuity; the win we want is the encoder, which the zerolog fork gives anyway</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="two-col" style="margin-top:18px">
+    <div class="chart">
+      <h4>The same request today — v0.4.0, ~1,000 ns · 26 allocs</h4>
+      <ul style="list-style:none">
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--red)">1</span>Middleware: <code>context.WithValue</code> — box the event into an interface, allocate</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--red)">2</span>Start: allocate Event + <code>map[string]any(8)</code>, insert header fields — every non-trivial int boxed</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--red)">3</span>Handler: two <code>hc.Add</code> — mutex, map writes, more boxing</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--red)">4</span>Finish: re-hydrate start fields (RLock, re-read map), select policy, validate levels, second <code>time.Now()</code></li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--red)">5</span>Write three completion fields into the map — <code>duration_ms</code> boxes an int64</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--red)">6</span>Snapshot: <code>maps.Clone</code> the whole field map so the sink can own it</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--red)">7</span>Adapter: iterate the map (random order), pool + sort keys, convert each value through reflection</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--red)">8</span>GC later: ~2.6 KB and 26 allocations to collect, per request</li>
+      </ul>
+    </div>
+    <div class="chart">
+      <h4>The same request in v2 — target ≤ 350 ns · ≤ 8 allocs</h4>
+      <ul style="list-style:none">
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--green)">1</span>Middleware: one <code>context.WithValue</code> (kept — it's the contract) + claim a pooled event, append header <b>records</b></li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--green)">2</span>Handler: two <code>hc.Add</code> — two typed record appends, ~10 ns each, zero boxing</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--green)">3</span>End: outcome resolution, three completion records — no map, no hydration, no second clock read</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--green)">4</span>Policy: precomputed in the compiled runtime — a lookup, not a validation pass</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--green)">5</span>Sample on scalars + <code>Lookup</code>; drop → recycle buffer, done at ≤ 100 ns</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--green)">6</span>Commit: <code>Record</code> wraps the buffer zero-copy — no clone, ever</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--green)">7</span>Encode: one forward pass, SWAR escaping, precomputed prefix, single <code>Write</code></li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--green)">8</span>Buffer zeroed and pooled — steady state approaches zero garbage per request</li>
+      </ul>
+    </div>
+  </div>
+  <p class="sec-sub" style="margin-top:14px">The emitted JSON line is the same shape either way — v2 changes what happens <b>before</b> the line exists, not the line. That is the whole trick: the event was never a map that needed cloning, converting, and sorting; it was always an ordered list of facts about one request.</p>
+</section>
+
+<!-- ================= 3. ARCHITECTURE ================= -->
+<section id="arch">
+  <div class="sec-head"><span class="sec-num">03</span><h2>v2 architecture</h2></div>
+  <p class="sec-sub">One representation flows from <code>hc.Add</code> to the destination with zero conversion on the first-party path, and a single type-switch on bridges. The WAL drain (W11) is an opt-in detour that decouples request latency from sink health.</p>
+
+  <div class="arch">
+  <svg viewBox="0 0 960 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Segoe UI, Roboto, sans-serif">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#6b7488"/>
+      </marker>
+      <marker id="arA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#f5b132"/>
+      </marker>
+    </defs>
+
+    <!-- Request -->
+    <rect x="20" y="170" width="96" height="56" rx="10" fill="#121722" stroke="#232b3b"/>
+    <text x="68" y="194" fill="#e8ecf4" font-size="13" font-weight="600" text-anchor="middle">Request</text>
+    <text x="68" y="211" fill="#6b7488" font-size="10.5" text-anchor="middle" font-family="ui-monospace, Menlo, monospace">hc.Add(...)</text>
+
+    <!-- Event -->
+    <rect x="160" y="140" width="180" height="116" rx="12" fill="#121722" stroke="#f5b132" stroke-opacity=".55"/>
+    <text x="250" y="166" fill="#f5b132" font-size="12" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, monospace">EVENT v2</text>
+    <text x="250" y="187" fill="#939cb0" font-size="11" text-anchor="middle">typed []field (insertion order)</text>
+    <text x="250" y="204" fill="#939cb0" font-size="11" text-anchor="middle">scalar header · start, msg, level</text>
+    <text x="250" y="226" fill="#4cd88a" font-size="10.5" text-anchor="middle" font-family="ui-monospace, Menlo, monospace">no map · no clone · no mutex</text>
+    <text x="250" y="242" fill="#6b7488" font-size="10.5" text-anchor="middle" font-family="ui-monospace, Menlo, monospace">pooled → near-0 allocs</text>
+
+    <!-- policy/sampler -->
+    <rect x="386" y="150" width="164" height="96" rx="12" fill="#121722" stroke="#232b3b"/>
+    <text x="468" y="176" fill="#e8ecf4" font-size="12.5" font-weight="650" text-anchor="middle">Compile’d policy</text>
+    <text x="468" y="196" fill="#e8ecf4" font-size="12.5" font-weight="650" text-anchor="middle">+ sampler</text>
+    <text x="468" y="216" fill="#939cb0" font-size="10.5" text-anchor="middle" font-family="ui-monospace, Menlo, monospace">scalars + Lookup(k)</text>
+    <text x="468" y="232" fill="#939cb0" font-size="10.5" text-anchor="middle" font-family="ui-monospace, Menlo, monospace">zero Event access</text>
+
+    <!-- dropped path -->
+    <line x1="468" y1="150" x2="468" y2="96" stroke="#f2635f" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#ar)"/>
+    <rect x="386" y="52" width="164" height="40" rx="9" fill="#f2635f11" stroke="#f2635f" stroke-opacity=".4"/>
+    <text x="468" y="70" fill="#f2635f" font-size="11" font-weight="600" text-anchor="middle">dropped — no completion work</text>
+    <text x="468" y="84" fill="#f2635f" font-size="10.5" text-anchor="middle" font-family="ui-monospace, Menlo, monospace">≤ 100 ns / ≤ 2 allocs</text>
+
+    <!-- Record -->
+    <rect x="596" y="150" width="150" height="96" rx="12" fill="#121722" stroke="#b48cf2" stroke-opacity=".55"/>
+    <text x="671" y="178" fill="#b48cf2" font-size="12.5" font-weight="700" text-anchor="middle" font-family="ui-monospace, Menlo, monospace">RECORD</text>
+    <text x="671" y="198" fill="#939cb0" font-size="10.5" text-anchor="middle">read-only view · Level,</text>
+    <text x="671" y="212" fill="#939cb0" font-size="10.5" text-anchor="middle">Message, Fields()</text>
+    <text x="671" y="232" fill="#939cb0" font-size="10.5" text-anchor="middle" font-family="ui-monospace, Menlo, monospace">valid during Write only</text>
+
+    <line x1="116" y1="198" x2="156" y2="198" stroke="#6b7488" stroke-width="1.6" marker-end="url(#ar)"/>
+    <line x1="340" y1="198" x2="382" y2="198" stroke="#6b7488" stroke-width="1.6" marker-end="url(#ar)"/>
+    <line x1="550" y1="198" x2="592" y2="198" stroke="#6b7488" stroke-width="1.6" marker-end="url(#ar)"/>
+
+    <!-- outputs -->
+    <line x1="746" y1="176" x2="790" y2="120" stroke="#f5b132" stroke-width="1.8" marker-end="url(#arA)"/>
+    <line x1="746" y1="198" x2="790" y2="198" stroke="#6b7488" stroke-width="1.6" marker-end="url(#ar)"/>
+    <line x1="746" y1="222" x2="790" y2="288" stroke="#5aa2f0" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#ar)"/>
+
+    <rect x="794" y="66" width="150" height="108" rx="12" fill="#f5b13210" stroke="#f5b132"/>
+    <text x="869" y="90" fill="#f5b132" font-size="12" font-weight="700" text-anchor="middle">First-party sink</text>
+    <text x="869" y="110" fill="#e8ecf4" font-size="10.5" text-anchor="middle" font-family="ui-monospace, Menlo, monospace">internal/hcjson</text>
+    <text x="869" y="125" fill="#939cb0" font-size="10.5" text-anchor="middle">← zerolog fork (MIT)</text>
+    <text x="869" y="146" fill="#939cb0" font-size="10.5" text-anchor="middle">one buffered write</text>
+    <text x="869" y="162" fill="#4cd88a" font-size="10" text-anchor="middle" font-family="ui-monospace, Menlo, monospace">default path · 0 deps</text>
+
+    <rect x="794" y="172" width="150" height="56" rx="12" fill="#121722" stroke="#232b3b"/>
+    <text x="869" y="194" fill="#e8ecf4" font-size="12" font-weight="650" text-anchor="middle">Bridges</text>
+    <text x="869" y="212" fill="#939cb0" font-size="10.5" text-anchor="middle">slog · zap · zerolog</text>
+
+    <!-- WAL ring -->
+    <rect x="794" y="262" width="150" height="98" rx="12" fill="#5aa2f010" stroke="#5aa2f0" stroke-dasharray="6 4"/>
+    <text x="869" y="286" fill="#5aa2f0" font-size="12" font-weight="700" text-anchor="middle">WAL ring buffer</text>
+    <text x="869" y="306" fill="#939cb0" font-size="10.5" text-anchor="middle" font-family="ui-monospace, Menlo, monospace">opt-in (W11)</text>
+    <text x="869" y="322" fill="#939cb0" font-size="10.5" text-anchor="middle">drop-oldest, never block</text>
+    <text x="869" y="342" fill="#939cb0" font-size="10.5" text-anchor="middle">drainer → any writer</text>
+    <text x="869" y="356" fill="#4cd88a" font-size="10" text-anchor="middle" font-family="ui-monospace, Menlo, monospace">append ≤ 100 ns</text>
+
+    <text x="480" y="404" fill="#6b7488" font-size="11" text-anchor="middle">solid = sync path · dashed = opt-in async / rejection paths</text>
+  </svg>
+  </div>
+</section>
+
+<!-- ================= 4. WAL ================= -->
+<section id="wal">
+  <div class="sec-head"><span class="sec-num">04</span><h2>WAL — the request is the log</h2></div>
+
+  <div class="wal-hero">
+    <h3>The request itself is the WAL — in-memory, per request, no disk</h3>
+    <p>Every <code>hc.Add</code> during a handler <b>appends one typed record</b> to a pooled, request-confined buffer: no map, no lock, no boxing — ~10 ns and 0 allocs steady-state (today's map insert under the mutex costs ~30–80 ns). <code>op.End</code> is the <b>commit point</b>: one pass encodes the log into the final event, writes it, and recycles the buffer. Duplicate keys keep v0 last-write-wins semantics via a short scan; oversized logs grow for correctness and recycle only under the pool cap.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:16px">
+      <span class="pill" style="border-color:var(--amber);color:var(--text)"><b>hc.Add</b>(ctx, "user_id", …)</span>
+      <span style="color:var(--faint)">→</span>
+      <span class="pill">record <b>#1</b> appended</span>
+      <span style="color:var(--faint)">→</span>
+      <span class="pill" style="border-color:var(--amber);color:var(--text)"><b>hc.Error</b>(ctx, err)</span>
+      <span style="color:var(--faint)">→</span>
+      <span class="pill">record <b>#2</b> appended</span>
+      <span style="color:var(--faint)">→</span>
+      <span class="pill" style="border-color:var(--violet);color:var(--text)"><b>op.End</b> = commit</span>
+      <span style="color:var(--faint)">→</span>
+      <span class="pill">encode once → write</span>
+      <span style="color:var(--faint)">→</span>
+      <span class="pill">buffer → pool</span>
+    </div>
+    <p style="margin-top:14px"><b>Black-box timeline (optional):</b> record positions are implicit sequence numbers, so a policy can emit the log itself as a <code>steps</code> array (<code>{"seq":3,"t_ms":412.1,"k":"db.query"}</code>) for slow or failed requests — zero cost when unarmed, ~32 ns per record once armed (one <code>time.Now()</code> each). This one structure is also what W12 reads mid-request, and it is precisely the W3 typed core — two read patterns, one representation.</p>
+  </div>
+
+  <div class="chart" style="margin-top:18px">
+    <h4>How a request flows through the WAL — every call, in order</h4>
+    <div class="steps">
+      <div class="step"><span class="n">1</span><div>
+        <h4>hc.Start(ctx, rt, start) <span class="cost">~0 allocs pooled</span></h4>
+        <p>A pooled buffer is claimed and reset (<code>records[:0]</code>), header records are appended (<code>op.domain</code>, <code>op.name</code>, <code>op.id</code>, …), a slot is registered in the active-set for the watchdog, and the context now carries the event. Everything downstream — middleware, handlers, anything with <code>ctx</code> — appends to <b>this one log</b>.</p>
+      </div></div>
+      <div class="step"><span class="n">2</span><div>
+        <h4>hc.Add(ctx, key, value, …) <span class="cost">~10 ns · 0 allocs</span></h4>
+        <p>The value is type-switched to a <b>typed record</b> (see layout below) and appended. Strings and keys copy only their 16-byte headers — no bytes move. Adding the same key twice overwrites that record in place (short scan): v0's last-write-wins semantics, and the log stays deduplicated so the encoder remains a single forward pass.</p>
+      </div></div>
+      <div class="step"><span class="n">3</span><div>
+        <h4>hc.Error / SetMessage / SetLevel / AddRawJSON</h4>
+        <p>The error is stored as a record — its structured form (<code>message</code>, <code>type</code>, <code>cause.*</code>) is materialized once at encode time. Message and level live in the scalar header. <code>AddRawJSON</code> stores pre-encoded JSON verbatim; the escape scan is skipped for it entirely.</p>
+      </div></div>
+      <div class="step"><span class="n">4</span><div>
+        <h4>[background] watchdog arms on stall <span class="cost">zero cost until armed</span></h4>
+        <p>A per-Runtime ticker scans active-set slots. An operation past <code>InflightThreshold</code> emits <code>operation_stalled</code> carrying <b>the WAL tail — the log so far, in order</b> — and flips the event to guarded mode: from now on each append also records <code>t_ms</code>. This is the read pattern that makes hung and OOM-killed requests visible.</p>
+      </div></div>
+      <div class="step"><span class="n">5</span><div>
+        <h4>op.End(&amp;err) — the commit point</h4>
+        <p>Outcome resolves as <b>panic &gt; error &gt; explicit &gt; 5xx &gt; success</b>; three completion records are appended (<code>duration_ms</code>, <code>op.code</code>, <code>op.outcome</code>); the level comes from the compiled policy merged with any requested floor. Nothing has been encoded or written yet — the whole request was "ahead," exactly like a database WAL before its checkpoint.</p>
+      </div></div>
+      <div class="step"><span class="n">6</span><div>
+        <h4>sampling decision <span class="cost">drop path ≤ 100 ns total</span></h4>
+        <p>The sampler sees scalars plus <code>Lookup</code> — never the records slice, never a lock. A dropped event appends nothing, encodes nothing, releases its slot, and the buffer goes straight back to the pool.</p>
+      </div></div>
+      <div class="step"><span class="n">7</span><div>
+        <h4>sink.Write(rec) → pool <span class="cost">encode ~25 ns/field</span></h4>
+        <p>The <code>Record</code> wraps the buffer <b>zero-copy</b> (read-only, valid during the call). The JSON sink encodes all records in one pass — SWAR escaping, precomputed level prefix, timestamp from the reused start reading — and issues a single write. Bridges iterate the same records into native fields. Then: slot released, buffer zeroed ≤ cap and pooled; oversized requests keep their allocation rather than polluting the pool.</p>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="two-col" style="margin-top:16px">
+    <div class="chart">
+      <h4>The record — one per Add, ~64 bytes</h4>
+      <div class="code" style="margin:6px 0 0"><span class="kw">type</span> record <span class="kw">struct</span> {
+    key  string  <span class="cm">// field name — header copy, no bytes move</span>
+    kind uint8   <span class="cm">// string|int|float|bool|time|dur|err|raw|any</span>
+    num  int64   <span class="cm">// ints, bools, unix-ms, durations</span>
+    flt  float64 <span class="cm">// floats</span>
+    str  string  <span class="cm">// string values (header only)</span>
+    any  any     <span class="cm">// fallback: error, raw JSON, structs (rare)</span>
+}</div>
+    </div>
+    <div class="chart">
+      <h4>Rules of the log</h4>
+      <ul style="list-style:none">
+        <li style="color:var(--muted);font-size:13.4px;padding:5px 0 5px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--amber)">▸</span><b style="color:var(--text)">Append-mostly, one writer.</b> The request goroutine owns the log; no lock exists on the fast path.</li>
+        <li style="color:var(--muted);font-size:13.4px;padding:5px 0 5px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--amber)">▸</span><b style="color:var(--text)">Insertion order is emission order.</b> Deterministic output is structural — no sorting anywhere downstream.</li>
+        <li style="color:var(--muted);font-size:13.4px;padding:5px 0 5px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--amber)">▸</span><b style="color:var(--text)">Exactly two readers:</b> the commit encoder at <code>End</code>, and the watchdog snapshot — never concurrent with appends (guarded mode serializes the rare armed case; the fast path never touches that mutex).</li>
+        <li style="color:var(--muted);font-size:13.4px;padding:5px 0 5px 24px;position:relative"><span style="position:absolute;left:2px;color:var(--amber)">▸</span><b style="color:var(--text)">Bounded recycling.</b> The pool takes buffers back only up to a cap; bigger requests keep their allocation — correctness first.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="chart" style="margin-top:16px">
+    <h4>Timeline arming — how timestamps come to life on a slow request</h4>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px">
+      <span class="pill"><b>t=0</b> Start — no timestamps, zero per-Add cost</span>
+      <span style="color:var(--faint)">→</span>
+      <span class="pill" style="border-color:var(--blue);color:var(--text)"><b>t=2.0s</b> threshold crossed → <b>armed</b>: each Add now records t_ms (~32 ns)</span>
+      <span style="color:var(--faint)">→</span>
+      <span class="pill"><b>t=3.8s</b> End → commit</span>
+    </div>
+    <p style="color:var(--faint);font-size:12px;margin-top:10px">In the emitted <code>steps</code> array, records before arming carry <code>seq</code> only — sequence is the array position, so it's always known — and records since arming carry <code>seq + t_ms</code>. Late arming loses nothing that matters: the tail is where the slowness lives, and the tail is exactly what got timestamped.</p>
+  </div>
+
+  <div class="chart" style="margin-top:16px">
+    <h4>Failure modes — exhaustively</h4>
+    <table>
+      <tr><th>Scenario</th><th>What the WAL does</th></tr>
+      <tr><td class="name">Panic in handler</td><td><code>End</code> recovers, appends panic + error records, commits with <code>op.outcome:"panic"</code>, re-panics</td></tr>
+      <tr><td class="name">OOM-kill / SIGKILL mid-request</td><td>Commit never runs — the process is gone. Your trace is what the watchdog already emitted (<code>operation_stalled</code>), or the eager <code>operation_started</code> record where the domain policy enables it</td></tr>
+      <tr><td class="name">Sink blocked / slow pipe</td><td>Sync mode: request blocks (v0 behavior). Buffered mode (W11): the pre-encoded line appends to the ring and the request returns immediately</td></tr>
+      <tr><td class="name">Sampler drops the event</td><td>No completion records, nothing encoded, buffer recycled — the entire dropped path is ≤ 100 ns</td></tr>
+      <tr><td class="name">Same key added twice</td><td>Last write wins — record overwritten in place, v0 semantics</td></tr>
+      <tr><td class="name">Request outgrows the cap</td><td>Keeps growing for correctness; buffer does not return to the pool</td></tr>
+      <tr><td class="name">Second goroutine calls hc.Add</td><td>Request-confined contract: caller synchronizes, or the event is in guarded mode (armed events serialize appends)</td></tr>
+    </table>
+  </div>
+
+  <div class="wal-grid">
+    <div class="wal-card">
+      <span class="tag tag-blue">W11 · S/M</span>
+      <h3>Buffered sink — WAL-style async drain</h3>
+      <p class="problem">Problem: blocked sink ⇒ blocked request goroutine</p>
+      <p>Opt-in <code>hc.BufferedSink</code> wrapping any sink or writer:</p>
+      <ul>
+        <li>Finalized records are <b>pre-encoded</b> (W4/W8) and appended to a bounded ring — a memcpy plus index bump; never blocks, never encodes twice</li>
+        <li>One background drainer <b>batch-writes</b> buffered lines</li>
+        <li>Ring full ⇒ <b>drop-oldest</b> + dropped counter via stats hook — never block, never grow unbounded</li>
+        <li><code>Flush(timeout)</code> + flush-on-signal helpers for graceful shutdown</li>
+        <li>Crash window: undrained lines are lost on hard exit — same trade as zerolog diode / zap <code>BufferedWriteSyncer</code>, and the reason W12 exists</li>
+      </ul>
+    </div>
+    <div class="wal-card">
+      <span class="tag tag-violet">W12 · M · data-gated</span>
+      <h3>In-flight records — literal write-ahead</h3>
+      <p class="problem">Problem: requests that never end leave no event at all</p>
+      <p>Reads the in-request WAL tail — the log so far, in append order, timeline if armed:</p>
+      <ul>
+        <li><b>Watchdog flush (first):</b> active ops register in a pool-slot set (one index append); a timer emits <code>operation_stalled</code> past <code>InflightThreshold</code> (off by default, e.g. 10s) with the event’s current fields — zero steady-state cost, catches hangs and kills</li>
+        <li><b>Eager start records:</b> emit <code>operation_started</code> at begin — doubles volume, viable only per-domain via policy for low-QPS, high-stakes domains</li>
+        <li>Correlation via <code>op.id</code>; end records supersede start/stall records in consumers</li>
+        <li>Both additive — completion path untouched</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="wal-reject">
+    <span class="x">✕ REJECTED</span>
+    <p><b>Durable disk-backed WAL.</b> Append-only file, fsync policy, rotation, permissions, disk-full behavior — that is log-shipper territory (Vector, Fluent Bit), not a Go logging library, and it would dwarf the rest of v2 in maintenance. The buffered sink’s crash-loss window stays documented; users needing durability run a shipper.</p>
+  </div>
+</section>
+
+<!-- ================= 5. SPEED INVENTORY ================= -->
+<section id="tricks">
+  <div class="sec-head"><span class="sec-num">05</span><h2>Speed inventory — SIMD, SWAR &amp; friends</h2></div>
+  <p class="sec-sub">Deeper tier of tricks, measured on this M4 under Go 1.27.0 (or sourced from library docs). Every number below survived a 200k-case property test against the reference implementation — see the warning at the end of this section for why that gate exists.</p>
+
+  <div class="two-col">
+    <div class="chart">
+      <h4>String escaping race — who finds the bytes fastest</h4>
+      <table>
+        <tr><th>Payload</th><th class="num">fork table</th><th class="num">hybrid SWAR</th><th class="num">jsontext</th></tr>
+        <tr><td class="name">7-char key</td><td class="num">4.8 ns</td><td class="num">5.2 ns</td><td class="num">7.1 ns</td></tr>
+        <tr><td class="name">22-char path</td><td class="num">9.2 ns</td><td class="num" style="color:var(--green)">8.2 ns</td><td class="num">12.6 ns</td></tr>
+        <tr><td class="name">96-char URL</td><td class="num">30.9 ns</td><td class="num" style="color:var(--green)">25.4 ns</td><td class="num">~50 ns</td></tr>
+        <tr><td class="name">escape-heavy</td><td class="num">22.2 ns</td><td class="num">25.4 ns</td><td class="num">22.3 ns</td></tr>
+        <tr><td class="name">unicode</td><td class="num">25.3 ns</td><td class="num">25.7 ns</td><td class="num" style="color:var(--green)">21.6 ns</td></tr>
+      </table>
+      <p style="color:var(--faint);font-size:12px;margin-top:10px">SWAR scans 8 bytes per iteration in pure Go — wins 11–18% on the clean ASCII that dominates log fields; the fork’s byte table stays primary for short and escape-heavy strings. Hybrid: SWAR for len ≥ 16, table otherwise.</p>
+    </div>
+    <div class="chart">
+      <h4>Time field cost — the hidden per-event tax</h4>
+      <div class="bar-row">
+        <div class="bar-label">Coarse clock <span>· atomic, opt-in</span></div>
+        <div class="bar-track"><div class="bar-fill fill-green" style="width:13%"></div></div>
+        <div class="bar-val">8 ns</div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label"><code>time.Now()</code> alone</div>
+        <div class="bar-track"><div class="bar-fill fill-blue" style="width:53%"></div></div>
+        <div class="bar-val">32 ns</div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">epoch-ms stamp</div>
+        <div class="bar-track"><div class="bar-fill fill-blue" style="width:58%"></div></div>
+        <div class="bar-val">35 ns</div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">RFC3339Nano string</div>
+        <div class="bar-track"><div class="bar-fill fill-red" style="width:100%"></div></div>
+        <div class="bar-val">60 ns</div>
+      </div>
+      <p style="color:var(--faint);font-size:12px;margin-top:10px">The event already captures <code>time.Now()</code> at start — v2 reuses that reading for the timestamp field, so completion pays <b style="color:var(--text)">zero</b> marginal clock cost. Integer epoch-ms default; RFC3339 strings opt-in; coarse 8 ns clock opt-in for extreme hot paths.</p>
+    </div>
+  </div>
+
+  <div class="chart" style="margin-top:16px">
+    <h4>The any-fallback race — whole-event map marshaling vs the typed core (12-field payload, M4/arm64, Go 1.27)</h4>
+    <table>
+      <tr><th>Encoder</th><th class="num">flat map</th><th class="num">nested map</th><th class="num">allocs (flat)</th></tr>
+      <tr><td class="name">stdlib <code>encoding/json</code> <span class="note">· now json/v2-backed</span></td><td class="num">~1,552 ns</td><td class="num">~1,350 ns</td><td class="num">29</td></tr>
+      <tr><td class="name">goccy/go-json</td><td class="num">~793 ns</td><td class="num">~1,643 ns</td><td class="num">2</td></tr>
+      <tr><td class="name">bytedance/sonic</td><td class="num">~1,070 ns</td><td class="num">~1,900 ns</td><td class="num">3</td></tr>
+      <tr><td class="name" style="color:var(--green)">typed fork append loop <span class="note">· the v2 core</span></td><td class="num" style="color:var(--green)">~11 ns</td><td class="num">n/a — fields are typed</td><td class="num" style="color:var(--green)">0</td></tr>
+    </table>
+    <p style="color:var(--faint);font-size:12px;margin-top:10px">The SIMD/JIT libraries (sonic: JIT + AVX2 on amd64; goccy: compiler-based) are built for whole-struct marshaling — goccy wins ~2× on flat maps but <b style="color:var(--text)">both lose to the Go 1.27 stdlib on nested maps on arm64</b>. Their advantage is payload- and platform-dependent, which is exactly why they stay out of the core. The ~140× gap between any map marshaler and the typed loop is the single strongest justification for W3/W4. Users with struct-heavy <code>any</code> fields can still plug their own marshaler via the encoder interface.</p>
+  </div>
+
+  <div class="ws-grid" style="margin-top:16px">
+    <div class="ws"><div class="ws-head"><span class="ws-id" style="background:var(--green-dim);color:var(--green)">ADOPT</span><h3>Encoder &amp; write path</h3></div>
+      <p>Hybrid SWAR escape scan · precomputed <code>{"level":"info",</code> prefixes · <code>RawJSON</code> field kind (skip re-escaping pre-encoded blobs) · encode-once multi-sink reuse via Record byte cache · batch drain with single <code>Write</code> + <code>net.Buffers</code> writev (phuslu documents ~10× under load) · shortest round-trip floats (~25 ns via strconv).</p></div>
+    <div class="ws"><div class="ws-head"><span class="ws-id" style="background:var(--amber-dim);color:var(--amber)">EVALUATE</span><h3>Assembly SIMD &amp; json/v2</h3></div>
+      <p>True AVX2/NEON escaping (go:build-tagged, like sonic/goccy on amd64) — only if post-v2 profiles show escape scan &gt; 5% of lifecycle. Go 1.27 ships <code>json/v2</code> as the default <code>encoding/json</code> backend, so our <code>any</code> fallback gets faster free with the toolchain bump. Also rejected: jsontext as <i>primary</i> encoder (~45% slower on clean strings — the race table above) and the arenas experiment (still restricted; pooling already reaches near-zero allocs).</p></div>
+    <div class="ws"><div class="ws-head"><span class="ws-id" style="background:var(--red-dim);color:var(--red)">REJECT</span><h3>goccy &amp; sonic as deps</h3></div>
+      <p>Measured (§05 table): goccy wins ~2× on flat maps, but both it and sonic lose to the Go 1.27 stdlib on nested maps on arm64 — platform- and payload-dependent wins don’t justify the dependency. The ~140× gap to the typed loop is the argument for the core, not for a library. Pluggable via the encoder interface for users who want them.</p></div>
+    <div class="ws" style="border:1px dashed var(--red);background:linear-gradient(180deg,#f2635f0a,transparent)">
+      <div class="ws-head"><span class="ws-id" style="background:var(--red-dim);color:var(--red)">⚠ CAUTIONARY</span><h3>Fast because wrong</h3></div>
+      <p>The first SWAR prototype benchmarked 3× faster than everything — because a subtly wrong zero-byte detector (missing <code>&^x</code> term) meant it silently skipped escaping entirely. Benchmarks smiled; output was corrupt. Only a 200k-case property test caught it. This is why equivalence + fuzz tests are hard gates for W1, not nice-to-haves.</p></div>
+  </div>
+</section>
+
+<!-- ================= 6. WORKSTREAMS ================= -->
+<section id="workstreams">
+  <div class="sec-head"><span class="sec-num">06</span><h2>Workstreams</h2></div>
+  <p class="sec-sub">Effort: S &lt; M &lt; L. “break” marks breaking changes; “add” marks purely additive features.</p>
+
+  <div class="ws-grid">
+    <div class="ws"><div class="ws-head"><span class="ws-id">W1</span><h3>Fork the encoder + SWAR scan</h3><div class="chips"><span class="chip chip-s">S/M</span><span class="chip chip-add">add</span></div></div>
+      <p>Vendor zerolog v1.34.0’s <code>internal/json</code> (MIT, attributed), add a pure-Go SWAR escape fast path (−11–18% on clean ASCII, measured), and keep a <code>jsontext</code> fallback backend behind an internal interface. Property test + fuzz are hard gates — see §05’s cautionary tale.</p></div>
+
+    <div class="ws"><div class="ws-head"><span class="ws-id">W2</span><h3>First-party JSON sink</h3><div class="chips"><span class="chip chip-s">S</span><span class="chip chip-add">add</span></div></div>
+      <p><code>hc.NewJSONSink(w)</code> on today’s map-based Sink interface — additive, lands as v0.5.0. Puts the forked encoder into production soak before anything breaks. Users can drop their adapter dependency immediately.</p></div>
+
+    <div class="ws"><div class="ws-head"><span class="ws-id">W3</span><h3>Typed Event core</h3><div class="chips"><span class="chip chip-l">M/L</span><span class="chip chip-break">break</span></div></div>
+      <p><code>[]field</code> discriminated union + scalar header; <code>hc.Add</code> appends typed fields with zero boxing; request-confined (no mutex); events pooled so steady-state allocs approach zero. The breaking heart of v2.</p></div>
+
+    <div class="ws"><div class="ws-head"><span class="ws-id">W4</span><h3>Record + sink contract v2</h3><div class="chips"><span class="chip chip-m">M</span><span class="chip chip-break">break</span></div></div>
+      <p><code>Sink.Write(ctx, rec *Record)</code> — the <code>slog.Handler.Handle</code> shape: a read-only, insertion-ordered view valid during the call, carrying the operation's real context. No owned map, no clone: 2–4 allocs and 300–2,400 B removed per kept event. Sinks must not retain the record and must be concurrency-safe (watchdog/drainer may Write concurrently).</p></div>
+
+    <div class="ws"><div class="ws-head"><span class="ws-id">W5</span><h3>Compiled runtime config</h3><div class="chips"><span class="chip chip-s">S/M</span><span class="chip chip-break">break</span></div></div>
+      <p><code>hc.Compile(Config) *Runtime</code> — clamp, validate, resolve aliases, precompute policy lookup once at construction; fail fast on bad config. The finish path reads precomputed values only.</p></div>
+
+    <div class="ws"><div class="ws-head"><span class="ws-id">W6</span><h3>Sampler v2</h3><div class="chips"><span class="chip chip-s">S</span><span class="chip chip-break">break</span></div></div>
+      <p><code>SampleInput</code> drops <code>Event</code>, gains <code>Lookup(key)</code>. Dropped events skip completion appends entirely — the ≤100 ns dropped path. All chain helpers keep signatures; error/panic retention unchanged.</p></div>
+
+    <div class="ws"><div class="ws-head"><span class="ws-id">W7</span><h3>Single lifecycle</h3><div class="chips"><span class="chip chip-m">M</span><span class="chip chip-break">break</span></div></div>
+      <p><code>hc.Start</code> + <code>op.End(&amp;err)</code> only. <code>BeginOperation</code>/<code>FinishOperation</code>/<code>OperationFinish</code> and ~100 lines of hydration/reconciliation move internal or vanish. All integrations finalize through one path.</p></div>
+
+    <div class="ws"><div class="ws-head"><span class="ws-id">W8</span><h3>Bridges rewrite</h3><div class="chips"><span class="chip chip-m">M</span><span class="chip chip-break">break</span></div></div>
+      <p>slog/zap/zerolog consume <code>[]Field</code> in insertion order via native typed constructors — no <code>zap.Any</code>/<code>slog.Any</code> reflection, no key pools, no sorting; <code>DeterministicOrder</code> deleted. Adapter medium writes roughly halve.</p></div>
+
+    <div class="ws"><div class="ws-head"><span class="ws-id">W9</span><h3>Field dedupe</h3><div class="chips"><span class="chip chip-s">S</span><span class="chip chip-break">break</span></div></div>
+      <p><code>op.*</code> becomes the canonical lifecycle namespace. HTTP keeps <code>http.method/path/route/status</code>; <code>op.code</code> goes non-HTTP-only; worker drops its <code>job.*</code> mirrors. Mapping table published with the migration guide.</p></div>
+
+    <div class="ws"><div class="ws-head"><span class="ws-id">W10</span><h3>Mini logger <span style="color:var(--faint);font-weight:400">(deferred)</span></h3><div class="chips"><span class="chip chip-m">M</span><span class="chip chip-add">add</span></div></div>
+      <p><code>hc/log</code>: Debug/Info/Warn/Error on the same forked encoder + writer, for ordinary non-request lines. Makes happycontext a one-stop logger — but the decision waits until the core lands and gets measured.</p></div>
+
+    <div class="ws"><div class="ws-head"><span class="ws-id">W11</span><h3>Buffered sink (WAL drain)</h3><div class="chips"><span class="chip chip-s">S/M</span><span class="chip chip-add">add</span></div></div>
+      <p>Opt-in async drain: pre-encoded lines into a bounded ring, background batch writer, drop-oldest backpressure, <code>Flush</code> for shutdown. Sink call drops to ~100 ns regardless of destination health. Depends on W4/W8.</p></div>
+
+    <div class="ws"><div class="ws-head"><span class="ws-id">W12</span><h3>In-flight records <span style="color:var(--faint);font-weight:400">(data-gated)</span></h3><div class="chips"><span class="chip chip-m">M</span><span class="chip chip-add">add</span></div></div>
+      <p>Watchdog <code>operation_stalled</code> flush for operations exceeding a threshold, with eager <code>operation_started</code> as a per-domain policy option. Correlated by <code>op.id</code>. Makes OOM-kills and deadlocks visible.</p></div>
+  </div>
+</section>
+
+<!-- ================= 7. SAMPLE API ================= -->
+<section id="api">
+  <div class="sec-head"><span class="sec-num">07</span><h2>The v2 API — sample code</h2></div>
+  <p class="sec-sub">Concrete shape of the plan’s contracts (W2–W9). Names are working names — the contracts are the point. Side-by-side with what it replaces at the end of the section.</p>
+
+  <div class="api-tabs">
+    <span class="api-tab on">HTTP service</span>
+  </div>
+  <div class="code"><span class="cm">// zero logger deps: first-party sink + compile-once runtime</span>
+sink := hc.<span class="fn">NewJSONSink</span>(os.Stdout)          <span class="cm">// W2 · forked encoder, one write/event</span>
+
+rt, err := hc.<span class="fn">Compile</span>(hc.Config{              <span class="cm">// W5 · clamp+validate once, fail fast</span>
+    <span class="cm">// literal configs: rt := hc.MustCompile(cfg) — regexp idiom</span>
+    Sink:         sink,
+    SamplingRate: <span class="st">0.05</span>,                      <span class="cm">// healthy 5%; errors always kept</span>
+    Timeline:     hc.<span class="fn">TimelineOnSlow</span>(<span class="st">2</span> * time.Second), <span class="cm">// black-box steps (§04)</span>
+})
+<span class="kw">if</span> err != <span class="kw">nil</span> { log.<span class="fn">Fatal</span>(err) }
+
+mux.<span class="fn">HandleFunc</span>(<span class="st">"GET /orders/{id}"</span>, <span class="kw">func</span>(w http.ResponseWriter, r *http.Request) {
+    hc.<span class="fn">Add</span>(r.Context(), <span class="st">"user_id"</span>, <span class="st">"u_8472"</span>, <span class="st">"feature"</span>, <span class="st">"checkout"</span>)
+    hc.<span class="fn">AddRawJSON</span>(r.Context(), <span class="st">"cart"</span>, preEncodedCartJSON) <span class="cm">// W1 · skip re-escaping</span>
+
+    <span class="kw">if</span> err := <span class="fn">charge</span>(r.Context()); err != <span class="kw">nil</span> {
+        hc.<span class="fn">SetMessage</span>(r.Context(), <span class="st">"checkout_failed"</span>)
+        hc.<span class="fn">Error</span>(r.Context(), err)
+        http.<span class="fn">Error</span>(w, <span class="st">"internal error"</span>, <span class="st">500</span>)
+        <span class="kw">return</span>
+    }
+    w.<span class="fn">WriteHeader</span>(http.StatusOK)
+})
+
+_ = http.<span class="fn">ListenAndServe</span>(<span class="st">":8080"</span>, stdhc.<span class="fn">Middleware</span>(rt)(mux)) <span class="cm">// rt, not Config</span></div>
+
+  <div class="api-tabs">
+    <span class="api-tab on">Background job — the request-WAL lifecycle</span>
+  </div>
+  <div class="code"><span class="kw">func</span> <span class="fn">runJob</span>(ctx context.Context, rt *hc.Runtime, meta workerhc.JobMeta) (err <span class="kw">error</span>) {
+    op := hc.<span class="fn">Start</span>(ctx, rt, hc.OperationStart{   <span class="cm">// W7 · the one lifecycle</span>
+        Domain: hc.DomainJob, Name: <span class="st">"billing.reconcile"</span>,
+        ID: meta.ID, Source: meta.Queue,
+    })
+    <span class="kw">defer</span> op.<span class="fn">End</span>(&amp;err)                              <span class="cm">// §3a commit: encode WAL → write → recycle</span>
+
+    hc.<span class="fn">Add</span>(op.<span class="fn">Context</span>(), <span class="st">"tenant"</span>, <span class="st">"enterprise"</span>)
+    <span class="kw">return</span> <span class="fn">reconcile</span>(ctx)
+}</div>
+
+  <div class="api-tabs">
+    <span class="api-tab on">Sampling — Lookup, no Event access</span>
+  </div>
+  <div class="code">rt, _ := hc.<span class="fn">Compile</span>(hc.Config{
+    Sink: sink,
+    Sampler: hc.<span class="fn">ChainSampler</span>(                    <span class="cm">// W6 · same helpers as v0</span>
+        hc.<span class="fn">RateSampler</span>(<span class="st">0.05</span>),
+        hc.<span class="fn">KeepErrors</span>(),
+        hc.<span class="fn">KeepSlowerThan</span>(<span class="st">500</span>*time.Millisecond),
+        <span class="kw">func</span>(next hc.Sampler) hc.Sampler {      <span class="cm">// custom rule</span>
+            <span class="kw">return func</span>(in hc.SampleInput) <span class="kw">bool</span> {
+                <span class="kw">if</span> tier, ok := in.<span class="fn">Lookup</span>(<span class="st">"user_tier"</span>); ok &amp;&amp; tier == <span class="st">"enterprise"</span> {
+                    <span class="kw">return true</span>
+                }
+                <span class="kw">return</span> <span class="fn">next</span>(in)
+            }
+        },
+    ),
+})</div>
+
+  <div class="api-tabs">
+    <span class="api-tab on">Sinks — Record view, bridges, buffered mode</span>
+  </div>
+  <div class="code"><span class="kw">type</span> Sink <span class="kw">interface</span> {                    <span class="cm">// W4 · slog.Handler.Handle shape</span>
+    <span class="fn">Write</span>(ctx context.Context, rec *Record) <span class="cm">// read-only; concurrency-safe</span>
+}
+
+<span class="kw">func</span> (r *Record) <span class="fn">Level</span>() Level                <span class="cm">// + Message(), Fields() []Field (insertion order),</span>
+<span class="cm">// Lookup(key), Encoded() []byte (W8 encode-once cache)</span>
+
+sloghc.<span class="fn">New</span>(logger)      <span class="cm">// bridges keep their constructor shape; no sort, no map</span>
+zerologhc.<span class="fn">New</span>(&amp;logger)  <span class="cm">// may reuse rec.Encoded() bytes directly</span>
+
+<span class="kw">type</span> redisSink <span class="kw">struct</span>{ rdb *redis.Client }         <span class="cm">// custom sink example</span>
+<span class="kw">func</span> (s redisSink) <span class="fn">Write</span>(ctx context.Context, rec *hc.Record) { s.rdb.<span class="fn">RPush</span>(ctx, <span class="st">"events"</span>, <span class="fn">append</span>([]<span class="st">byte</span>(<span class="kw">nil</span>), rec.<span class="fn">Encoded</span>()...)) } <span class="cm">// copy — bytes recycle after Write</span>
+
+buf := hc.<span class="fn">NewBufferedSink</span>(sink,                      <span class="cm">// W11 · opt-in async drain</span>
+    hc.<span class="fn">WithBufferCapacity</span>(<span class="st">4096</span>),                  <span class="cm">// events; drop-oldest when full</span>
+    hc.<span class="fn">WithDroppedHook</span>(<span class="kw">func</span>(n <span class="st">uint64</span>) { metrics.LogsDropped.<span class="fn">Add</span>(n) }))
+<span class="kw">defer</span> buf.<span class="fn">Flush</span>(<span class="st">2</span> * time.Second)                           <span class="cm">// shutdown drain; never blocks requests</span></div>
+
+  <div class="api-tabs">
+    <span class="api-tab on">Emitted event — timeline armed on a slow failure</span>
+  </div>
+  <div class="code">{"level":"error","time":"2026-08-30T14:03:12Z","message":"checkout_failed",
+ "op.domain":"http","op.name":"GET /orders/{id}","http.method":"GET",
+ "http.path":"/orders/8472","http.status":500,"duration_ms":1837,
+ "op.outcome":"failure","user_id":"u_8472",
+ "error":{"message":"charge declined","type":"*app.ChargeError"},
+ "steps":[{"seq":1,"k":"user_id"},{"seq":2,"k":"cart"},
+          {"seq":3,"t_ms":1836.9,"k":"stripe.charge"}]}</div>
+
+  <div class="chart">
+    <h4>v0 → v2 migration map</h4>
+    <table>
+      <tr><th>v0</th><th>v2</th></tr>
+      <tr><td class="name"><code>stdhc.Middleware(hc.Config{...})</code></td><td><code>rt, err := hc.Compile(cfg)</code> · <code>stdhc.Middleware(rt)</code></td></tr>
+      <tr><td class="name"><code>hc.StartOperation(ctx, start)</code> + <code>op.End(cfg, &amp;err)</code></td><td><code>hc.Start(ctx, rt, start)</code> + <code>op.End(&amp;err)</code></td></tr>
+      <tr><td class="name"><code>BeginOperation</code> / <code>FinishOperation</code> / <code>OperationFinish</code></td><td>internal — gone from the public API</td></tr>
+      <tr><td class="name"><code>hc.EventFields(in.Event)["k"]</code></td><td><code>in.Lookup("k")</code></td></tr>
+      <tr><td class="name"><code>Sink.Write(level, msg, map[string]any)</code></td><td><code>Sink.Write(ctx, rec *Record)</code></td></tr>
+      <tr><td class="name"><code>SinkOptions{DeterministicOrder: true}</code></td><td>deleted — insertion order is structural</td></tr>
+      <tr><td class="name">worker <code>job.*</code> mirror fields</td><td>canonical <code>op.*</code> only (mapping table in guide)</td></tr>
+      <tr><td class="name">explicit outcome + error</td><td>error wins — panic &gt; error &gt; explicit &gt; 5xx &gt; success</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ================= 8. TARGETS ================= -->
+<section id="targets">
+  <div class="sec-head"><span class="sec-num">08</span><h2>Targets</h2></div>
+  <p class="sec-sub">Gates for the v2 core PR — same machine, same harness as the baseline. Nothing merges without benchstat evidence against these numbers.</p>
+
+  <table>
+    <tr><th>Benchmark</th><th class="num">v0.4.0</th><th class="num">v2 target</th><th></th></tr>
+    <tr><td class="name">OperationLifecycle <span class="note">· kept</span></td><td class="num">~615 ns / 14 al</td><td class="num">≤ 250 ns / ≤ 4 al</td><td style="text-align:right"><span class="delta">−59% time · −71% allocs</span></td></tr>
+    <tr><td class="name">OperationLifecycle <span class="note">· stretch</span></td><td class="num">~615 ns</td><td class="num">≤ 150 ns / ≤ 2 al</td><td style="text-align:right"><span class="delta">−76% time</span></td></tr>
+    <tr><td class="name">Dropped event <span class="note">· 8 fields</span></td><td class="num">~628 ns / 9 al</td><td class="num">≤ 100 ns / ≤ 2 al</td><td style="text-align:right"><span class="delta">−84% time</span></td></tr>
+    <tr><td class="name">Add-only steady state</td><td class="num">~30 ns/field + boxing</td><td class="num">≤ 20 ns/field · 0 al</td><td style="text-align:right"><span class="delta">0 allocs</span></td></tr>
+    <tr><td class="name">std middleware <span class="note">· discard sink</span></td><td class="num">~1,000 ns / 26 al</td><td class="num">≤ 350 ns / ≤ 8 al</td><td style="text-align:right"><span class="delta">−65% time · −69% allocs</span></td></tr>
+    <tr><td class="name">First-party JSON sink <span class="note">· 12 fields</span></td><td class="num">n/a</td><td class="num">≤ 400 ns / ≤ 2 al</td><td style="text-align:right"><span class="delta new">new default path</span></td></tr>
+    <tr><td class="name">String escape <span class="note">· 96-char clean ASCII</span></td><td class="num">~31 ns <span class="note">fork table</span></td><td class="num">≤ 26 ns <span class="note">hybrid SWAR</span></td><td style="text-align:right"><span class="delta">−18% measured</span></td></tr>
+    <tr><td class="name">Buffered sink append <span class="note">· opt-in W11</span></td><td class="num">n/a</td><td class="num">≤ 100 ns · never blocks</td><td style="text-align:right"><span class="delta new">new</span></td></tr>
+    <tr><td class="name">Bridges medium write <span class="note">· slog / zap / zerolog</span></td><td class="num">1,699 / 858 / 354 ns</td><td class="num">~900 / ~450 / ~300 ns</td><td style="text-align:right"><span class="delta">≈ −45% / −48% / −15%</span></td></tr>
+    <tr><td class="name">Disabled-level adapter writes</td><td class="num">~3 ns</td><td class="num">unchanged</td><td style="text-align:right"><span class="delta">held</span></td></tr>
+  </table>
+</section>
+
+<!-- ================= 9. SEQUENCE ================= -->
+<section id="sequence">
+  <div class="sec-head"><span class="sec-num">09</span><h2>Sequence</h2></div>
+  <p class="sec-sub">Every phase keeps the full test matrix green and carries before/after benchstat output in the PR. v0.5.0 exists so the forked encoder earns production trust before anything breaks.</p>
+
+  <div class="timeline">
+    <div class="phase">
+      <h3>v0.5.0 <span class="chip chip-add" style="margin-left:2px">soft break¹</span></h3>
+      <p>W1 encoder fork + golden/fuzz tests · W2 <code>hc.NewJSONSink</code> · <b>remove the adapter sort machinery</b> (<code>DeterministicOrder</code> + key pools, ~90 LOC across three modules) · remaining small compatible cuts. Default output bytes unchanged — the option was off by default; opt-in users get a loud compile error and migrate to <code>hc.TestSink</code> or pinned v0.4 adapters. Destination loggers <b>cannot</b> take over sorting (none offers it, and the map contract has already erased order) — the capability is removed, honestly.</p>
+    </div>
+    <div class="phase p2">
+      <h3>v2 core PR <span class="chip chip-break">coordinated break</span></h3>
+      <p>W3 typed Event · W4 Record/Sink · W5 Compile · W6 sampler · W7 single lifecycle — one PR, because the storage change cuts across all of them.</p>
+    </div>
+    <div class="phase p3">
+      <h3>v2 follow-ups <span class="chip chip-break">module breaks</span></h3>
+      <p>W8 bridges on <code>[]Field</code> · W9 field dedupe + mapping table · W11 buffered sink · <code>MIGRATION.md</code> with before/after for every removed symbol · benchmarks refresh.</p>
+    </div>
+    <div class="phase p4">
+      <h3>Later <span class="chip chip-add" style="margin-left:2px">decided by data</span></h3>
+      <p>W10 mini logger · W12 in-flight records · console/pretty output. The outcome-precedence fix (panic &gt; error &gt; explicit &gt; 5xx &gt; success) lands with a changelog callout.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 10. GATES & REJECTED ================= -->
+<section id="gates">
+  <div class="sec-head"><span class="sec-num">10</span><h2>Acceptance gates &amp; rejections</h2></div>
+  <div class="gate-grid">
+    <div class="mini">
+      <h4>Gates — every v2 phase</h4>
+      <ul>
+        <li>Benchmarks at 0 / 8 / 32 / 128 fields; sampling rates 0 / 0.05 / 0.5 / 1; policies 0 / 1 / 16 / 128</li>
+        <li>Enabled <b>and</b> disabled adapter levels; serial and parallel sampler runs</li>
+        <li>Golden equivalence: first-party sink output ≡ v1 zerolog-adapter output (modulo insertion ordering)</li>
+        <li>Encoder property test vs the zerolog table (random bytes + edge cases) — every micro-benchmark must pass it first</li>
+        <li>Encoder fuzzing — 1M execs in CI</li>
+        <li>All-module tests + <code>-race</code>; request-confinement tests replace concurrent-Event tests</li>
+        <li>Failure / panic / cancellation / timeout retention matrix stays green</li>
+      </ul>
+    </div>
+    <div class="mini rejected">
+      <h4>Explicitly rejected</h4>
+      <ul>
+        <li><b>Pre-encoded JSON buffer as the Event store</b> — nobody downstream could read fields without parsing</li>
+        <li><b>Forking zap or phuslu/log</b> — larger core / no output continuity</li>
+        <li><b>sonic / goccy deps, assembly SIMD, jsontext as primary</b> — see §05; pure-Go SWAR owns the hot path</li>
+        <li><b>A cache, a config framework, any new runtime dependency</b> — still true from PERFORMANCE_PLAN.md</li>
+        <li><b>Durable disk-backed WAL</b> — shipper territory (Vector, Fluent Bit); the crash window stays documented</li>
+        <li><b>Generics-heavy typed public API</b> — <code>Add(ctx, key, any)</code> ergonomics stay; the type switch lives inside</li>
+        <li><b>Cross-module adapter codegen</b> — previously rejected; the bridge rewrite shrinks the problem anyway</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 11. FAQ & GLOSSARY ================= -->
+<section id="faq">
+  <div class="sec-head"><span class="sec-num">11</span><h2>FAQ &amp; glossary</h2></div>
+  <p class="sec-sub">The questions a reviewer asks, answered once — and the vocabulary the plan uses.</p>
+
+  <div class="gate-grid">
+    <div>
+      <div class="faq"><h3>Why a slice instead of a map? Aren't map lookups O(1)?</h3>
+        <p>Writes don't need random access — every <code>hc.Add</code> is an append. The map's O(1) lookup was only ever used by the sink clone and samplers, which read a handful of fields at most. Meanwhile the map costs hashing, boxing, growth rehashing, a clone per write, and random iteration order. The slice append is ~10 ns, deterministic, and zero-copy for every consumer. <b>Lookup stays available for the rare read — a linear scan over a dozen records is faster than a map hashing a string.</b></p></div>
+      <div class="faq"><h3>Can I share an Event across goroutines?</h3>
+        <p>Not on the fast path — v2 Events are <b>request-confined</b>: one writer, no lock, by contract. v0 allowed concurrent access under an internal mutex that every request paid for. If you must fan out, synchronize externally or clone the record view. Armed (stalled) events are the one internal exception — they switch to guarded mode, and that path is by definition the slow one.</p></div>
+      <div class="faq"><h3>Why change the Sink interface? My custom sink works.</h3>
+        <p>The v0 contract forces a clone per kept event (the sink owns the map) and pushes every value through reflection-based conversion. The v2 <code>Record</code> is a read-only, ordered, typed view — zero copy for the sink, no reflection for bridges, and <code>rec.Encoded()</code> hands you finished bytes if that's all you need. Migration is one signature; the migration guide shows a before/after for a typical custom sink.</p></div>
+      <div class="faq"><h3>Why fork zerolog instead of just importing it?</h3>
+        <p>We need ~800 LOC of append-only encoder, not a logger API — importing zerolog's surface (events, hooks, samplers, writers) to reach one internal package inverts the dependency. The fork is vendored with MIT attribution, property-tested, and sits behind an internal interface with a stdlib <code>jsontext</code> backend as the exit ramp if we ever want zero fork again.</p></div>
+    </div>
+    <div>
+      <div class="faq"><h3>Isn't drop-oldest in the buffered sink lossy?</h3>
+        <p>Yes — deliberately. When the ring is full the alternative is blocking the request path (v0 behavior) or unbounded memory. Errors and panics bypass <b>rate sampling</b>, but buffering is deliberately uniform — during a genuine outage, downstream backpressure deciding what survives is the honest trade. Dropped counts are surfaced via hook, and <code>Flush</code> drains at shutdown.</p></div>
+      <div class="faq"><h3>Doesn't insertion order leak internal call order?</h3>
+        <p>It exposes exactly what a reader wants: the order fields were attached, deterministic for a given code path and stable across runs of the same binary. That replaces v0's random map order papered over by an optional sort — v2 makes the natural order the only order and deletes the sorting machinery.</p></div>
+      <div class="faq"><h3>Why is a dropped event ≤ 100 ns and not zero?</h3>
+        <p>Sampler decision (~7 ns), slot release, and pool return remain — plus the three completion records are never even appended, which is where the other ~500 ns of v0's dropped path went. Zero isn't achievable while the event still returns to a pool; ~100 ns is.</p></div>
+      <div class="faq"><h3>Why does field order matter at all? Why did v0 sort?</h3>
+        <p>Three real needs: <b>tests</b> — golden/snapshot tests need stable bytes, and map-random order forces field-by-field parsing instead of a string compare; <b>incident diffing</b> — comparing two events reads as a clean field diff only when order is stable; <b>downstream compression</b> — shippers get better ratios when similar lines share byte layout. v0 needed the sort machinery because Go randomizes map iteration order on purpose, so a map-walk encode emits a different order every event — the pooled-key sort (replicated in all three adapters, +380 ns / +22% on slog medium writes) was the only fix, hidden behind an option because it cost speed. <b>v2 makes the choice disappear:</b> insertion order <i>is</i> the byte order — determinism becomes free, the option is deleted, and the order is more meaningful than alphabetical (header fields, user fields in attach order, completion last).</p>
+        <p><b>Why not let each adapter sort if its user wants it?</b> Because someone must still pick an order when bytes get emitted — if the core doesn't, then every sink sorts independently: the same machinery replicated per adapter (v0's exact situation), inconsistent output across sinks for the same event, and custom-sink authors each reinventing it. Fixing order at creation is the only placement where it costs zero. Consumers remain free to reorder for <i>display</i> (zerolog's ConsoleWriter does exactly this), and the rare user who wants alphabetical bytes can wrap their sink in ~10 lines that sort <code>rec.Fields()</code> before delegating — a consumer concern, not core machinery.</p>
+        <p><b>Then why keep the sort at all before the break?</b> We don't — v0.5.0 removes <code>DeterministicOrder</code> and its machinery a release early. Default bytes are unchanged (the option was off by default), opt-in users get a loud compile error, and stable-byte tests migrate to <code>hc.TestSink</code> or pinned v0.4 adapters. The one migration claim we must <i>not</i> make is "your logger can sort it": no host logger offers sorting, and the map contract has already thrown the order away by the time any logger sees a field.</p></div>
+      <div class="faq"><h3>What happens to my dashboards?</h3>
+        <p>Field names change in exactly one place: worker <code>job.*</code> mirrors collapse into canonical <code>op.*</code>, and <code>op.code</code> goes non-HTTP-only. The mapping table ships with the migration guide, and a dual-write compatibility window is offered during the preview so queries can move before the old names disappear.</p></div>
+    </div>
+  </div>
+
+  <div class="chart" style="margin-top:16px">
+    <h4>Glossary</h4>
+    <table>
+      <tr><th style="width:170px">Term</th><th>Meaning</th></tr>
+      <tr><td class="name">WAL / Event</td><td>The per-request, in-memory, append-only log of typed records. One writer, two readers (commit, watchdog). §04.</td></tr>
+      <tr><td class="name">Record (the storage one)</td><td>One entry in that log: key + kind + typed value slots, ~64 B, appended per <code>hc.Add</code>. Not the public <code>Record</code> below.</td></tr>
+      <tr><td class="name">Record (the public one)</td><td>The read-only view handed to a sink during <code>Write</code>: level, message, ordered fields, <code>Lookup</code>, <code>Encoded()</code>. Valid only inside the call.</td></tr>
+      <tr><td class="name">Commit</td><td><code>op.End</code> — outcome resolution, completion records, sampling, encode, single write, pool return. The only moment anything is emitted.</td></tr>
+      <tr><td class="name">Runtime</td><td>The compiled, immutable result of <code>hc.Compile(Config)</code> — clamped rates, validated policies, precomputed lookups. Built once, shared by all requests.</td></tr>
+      <tr><td class="name">Bridge</td><td>An adapter module (slog / zap / zerolog) that consumes the Record's typed fields into a host logger's native representation. No sorting, no maps.</td></tr>
+      <tr><td class="name">First-party sink</td><td><code>hc.NewJSONSink(w)</code> — the built-in encoder writing one JSON line per event; no third-party logger needed.</td></tr>
+      <tr><td class="name">Active-set</td><td>The registry of in-flight operations (pool-slot indices) the watchdog scans to detect stalls.</td></tr>
+      <tr><td class="name">Guarded mode</td><td>State an armed (stalled/slow) event enters: appends serialize behind a mutex so the watchdog can snapshot safely. The fast path never touches this lock.</td></tr>
+      <tr><td class="name">Timeline arming</td><td>Switching an event to also record <code>t_ms</code> per record once a duration threshold is crossed. Sequence numbers are always implicit; timestamps only matter on the tail.</td></tr>
+      <tr><td class="name">Request-confined</td><td>The ownership contract: an Event belongs to one goroutine for its lifetime; no internal locking is provided or needed.</td></tr>
+      <tr><td class="name">Drop-oldest</td><td>The buffered sink's backpressure policy: when the ring is full, the oldest line is discarded (counted via hook) so producers never block.</td></tr>
+      <tr><td class="name">RawJSON</td><td>A field kind holding pre-encoded JSON appended verbatim — the escape scan is skipped for that value entirely.</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ================= 12. FINAL DESIGN ================= -->
+<section id="locked">
+  <div class="sec-head"><span class="sec-num">12</span><h2>Final design — locked</h2></div>
+  <p class="sec-sub">Every open question from this document is now answered in <code>V2_DESIGN.md</code>, the buildable specification. This is the digest: the path, the surface, the feel, the gates — plus the full decisions ledger.</p>
+
+  <div class="two-col">
+    <div class="chart">
+      <h4>The path — five releases, one break</h4>
+      <table>
+        <tr><th>Release</th><th>Contents</th><th>Breaking</th></tr>
+        <tr><td class="name">v0.5.0 <span class="note">· shipped</span></td><td>adapter sort removal, all-module tidy</td><td>soft (done)</td></tr>
+        <tr><td class="name">v0.6.0</td><td>W1 encoder fork (SWAR + property/fuzz gates) · W2 <code>hc.NewJSONSink</code> on the current interface — production soak on the old core</td><td>none</td></tr>
+        <tr><td class="name">v1.0.0 <span class="note">· one PR</span></td><td>W3–W9: typed WAL Event, Record/Sink, Compile, sampler Lookup, single lifecycle, bridges on []Field, field dedupe, MIGRATION.md</td><td>lockstep</td></tr>
+        <tr><td class="name">v1.1.0</td><td>W11 BufferedSink · W12 watchdog + in-flight records + timeline</td><td>none</td></tr>
+        <tr><td class="name">later</td><td>W10 mini logger, console — data-gated only</td><td>none</td></tr>
+      </table>
+    </div>
+    <div class="chart">
+      <h4>The feel — eight principles</h4>
+      <ul style="list-style:none">
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 22px;position:relative"><span style="position:absolute;left:2px;color:var(--amber)">▸</span><b style="color:var(--text)">Two lines to adopt</b> — Compile + middleware; misconfiguration fails at startup, once.</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 22px;position:relative"><span style="position:absolute;left:2px;color:var(--amber)">▸</span><b style="color:var(--text)">Add reads as annotation, not logging.</b></li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 22px;position:relative"><span style="position:absolute;left:2px;color:var(--amber)">▸</span><b style="color:var(--text)">One event, always</b> — header → handler → completion, deterministic by construction.</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 22px;position:relative"><span style="position:absolute;left:2px;color:var(--amber)">▸</span><b style="color:var(--text)">Zero dependencies by default.</b></li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 22px;position:relative"><span style="position:absolute;left:2px;color:var(--amber)">▸</span><b style="color:var(--text)">Failures are sacred</b> — errors and panics are never sampled away.</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 22px;position:relative"><span style="position:absolute;left:2px;color:var(--amber)">▸</span><b style="color:var(--text)">The worst requests are the most visible</b> — timeline for slow, <code>operation_stalled</code> for hung.</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 22px;position:relative"><span style="position:absolute;left:2px;color:var(--amber)">▸</span><b style="color:var(--text)">Contracts printed on the box</b> — three sentences, no fine print.</li>
+        <li style="color:var(--muted);font-size:13.2px;padding:4px 0 4px 22px;position:relative"><span style="position:absolute;left:2px;color:var(--amber)">▸</span><b style="color:var(--text)">Go-shaped</b> — context-first, no fluent hot path, options only where earned.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="chart" style="margin-top:16px">
+    <h4>The surface — what stays, what goes (complete list in V2_DESIGN.md §2)</h4>
+    <div class="code" style="margin:6px 0 0"><span class="cm">// construction — fail fast, once; integrations take *Runtime, not Config</span>
+rt, err := hc.<span class="fn">Compile</span>(hc.Config{Sink: hc.<span class="fn">NewJSONSink</span>(os.Stdout), SamplingRate: <span class="st">0.05</span>})
+
+<span class="cm">// write path — the request WAL</span>
+hc.<span class="fn">Start</span>(ctx, rt, start) → hc.<span class="fn">Add</span>/<span class="fn">AddRawJSON</span>/<span class="fn">Error</span>/<span class="fn">SetMessage</span>/<span class="fn">SetRoute</span>/<span class="fn">SetLevel</span> → op.<span class="fn">End</span>(&amp;err)
+
+<span class="cm">// read path — Record: Level, Message, Fields() []Field, Lookup(k), Encoded()</span>
+<span class="cm">// sampling: SampleInput scalars + in.Lookup(k); chain helpers unchanged</span>
+<span class="cm">// testing: NewTestSink() — the order-free assertion path</span>
+
+<span class="cm">// removed: BeginOperation FinishOperation OperationFinish Commit GetLevel</span>
+<span class="cm">//          LevelRank MergeLevelWithFloor EventFields Event* NewContext</span>
+<span class="cm">//          FromContext NormalizeConfig SinkOptions NewWithOptions(bridges)</span></div>
+  </div>
+
+  <div class="chart" style="margin-top:16px">
+    <h4>Decisions ledger — 20 answers, no open questions</h4>
+    <table>
+      <tr><th>Question</th><th>Decision</th></tr>
+      <tr><td class="name">Version of the break</td><td>v1.0.0 — "v2" is the codename; /v2 paths avoided</td></tr>
+      <tr><td class="name">Storage</td><td>typed []Field WAL — not a map, not a pre-encoded buffer</td></tr>
+      <tr><td class="name">Order / duplicates</td><td>insertion order, structural; last write wins in place</td></tr>
+      <tr><td class="name">Concurrency</td><td>request-confined; no fast-path lock; guarded mode only when armed</td></tr>
+      <tr><td class="name">Sink contract</td><td>Write(ctx, *Record) read-only view; no clone; no retention; concurrency-safe</td></tr>
+      <tr><td class="name">Introspection</td><td>Lookup on SampleInput and Record; FromContext removed</td></tr>
+      <tr><td class="name">Time field</td><td>epoch-ms from reused start reading; RFC3339 only on demand</td></tr>
+      <tr><td class="name">Encoder / JSON libs</td><td>zerolog fork + hybrid SWAR; jsontext fallback; sonic/goccy rejected</td></tr>
+      <tr><td class="name">Config / lifecycle</td><td>Compile once; Start + End(&amp;err) only</td></tr>
+      <tr><td class="name">Outcome precedence</td><td>panic &gt; error &gt; explicit &gt; 5xx &gt; success</td></tr>
+      <tr><td class="name">Fields</td><td>op.* canonical; http.* for HTTP; op.code non-HTTP only; job.* mirrors dropped</td></tr>
+      <tr><td class="name">Bridges / sinks</td><td>New only; single sink per config — compose (BufferedSink, Encoded reuse)</td></tr>
+      <tr><td class="name">Buffered / timeline / watchdog</td><td>all opt-in, off by default; drop-oldest counted; arm-on-stall</td></tr>
+      <tr><td class="name">Disk WAL</td><td>rejected — shipper territory</td></tr>
+    </table>
+    <p style="color:var(--faint);font-size:12px;margin-top:10px">Performance gates are §08 of this document, restated as hard acceptance criteria in V2_DESIGN.md §4 — with the standing rule that no number counts until the property test passes. Design reopens only per V2_DESIGN.md §6: an unmeetable gate after two honest attempts, an unpatchable correctness bug, or Go changing the cost structure.</p>
+    <p style="margin-top:10px"><b style="color:var(--amber)">Reviewed by an external model panel</b> (deepseek-v4-pro · qwen3.7-max · glm-5.3 · big-pickle; 4/4 ship-with-changes) — twelve amendments accepted and integrated into <code>V2_DESIGN.md</code> §5, notably: the guarded-mode arming protocol (one atomic flag load per append), a Sink concurrency-safety contract, duplicate-key dedupe moved from Add-time to encode-time (was O(n²)), completion-time RFC3339 default for v0 output parity, <code>SampleInput.Fields()</code> restoring iteration, and gates restated per shape.</p>
+  </div>
+</section>
+
+<footer>
+  <div>happycontext v2 proposal · 2026-08-30 · supersedes the breaking section (A–F) of <code>PERFORMANCE_PLAN.md</code></div>
+  <div>Full text: <code>V2_PLAN.md</code> · baseline: <code>BENCHMARK_REPORT.md</code> + fresh run on main <code>d79a41b</code> · cost anatomy and FAQ mirrored in the markdown plan</div>
+</footer>
+
+</div>
+</body>
+</html>
