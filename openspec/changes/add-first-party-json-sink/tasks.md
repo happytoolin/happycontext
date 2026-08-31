@@ -1,8 +1,8 @@
 # Tasks: add-first-party-json-sink
 
-Two PRs, sequential (not stacked), then release. Retargeted to `v2`
-(§9 amendment, 2026-08-31): v2 is the single release line; main stays
-frozen at v0.5.0. Stack depth: 0.
+Two PRs, then release, on the single v2 release line (§9 amendment,
+2026-08-31). PR-B is stacked on PR-A — merge order is fixed:
+**#26 (release line) → PR-A → PR-B**. Stack depth: 1.
 
 ## 1. PR-A `feat: add first-party JSON sink with SWAR encoder` (target: v2)
 
@@ -22,7 +22,7 @@ frozen at v0.5.0. Stack depth: 0.
 - [x] Verify: full module matrix green, `-race` on root, benchstat vs the
       §4 gate (≤ 400 ns / ≤ 2 allocs for 12 fields), property test passing
 
-## 2. PR-B `chore: go 1.25 floor, CI matrix with race and format gates` (target: v2)
+## 2. PR-B `chore: go 1.25 floor, CI matrix with race and format gates` (target: v2, stacked on PR-A)
 
 - [x] Harmonize all `go.mod` directives to `go 1.25` (fiberv3 already there)
 - [x] CI: matrix {1.25.x, 1.26.x, 1.27.x}; add `-race` pass and `gofmt -l`
