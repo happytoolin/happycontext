@@ -1,5 +1,11 @@
 # happycontext
 
+> **Development and releases have moved to the [`v2` branch`](https://github.com/happytoolin/happycontext/tree/v2).**
+> This branch is frozen at v0.5.0 and kept only as the home of the 0.x
+> tags; the 0.x line remains installable via
+> `go get github.com/happytoolin/happycontext@v0.5.0`. New work —
+> starting with v0.6.0 — ships from `v2`.
+
 ![happycontext banner](./assets/og-image.svg)
 
 [![CI](https://github.com/happytoolin/happycontext/actions/workflows/ci.yml/badge.svg)](https://github.com/happytoolin/happycontext/actions/workflows/ci.yml)
