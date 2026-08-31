@@ -5,10 +5,11 @@
 ### Requirement: Breaking releases compute the major
 A release PR containing a breaking conventional-commit marker SHALL
 compute a major version bump via release-please; maintainers SHALL
-verify the computed version before merging any release PR.
+verify the computed version before merging any release PR. The release
+branch is `v2` (§9 amendment); release-please runs on v2 pushes only.
 
-#### Scenario: Cutover bump
-- GIVEN main at 0.6.x and a cutover commit titled `feat!: v2 record core`
+#### Scenario: Record-core bump
+- GIVEN v2 at 0.6.x and a record-core commit titled `feat!: v2 record core`
 - WHEN release-please runs
 - THEN the release PR proposes `1.0.0`
 

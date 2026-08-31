@@ -582,6 +582,11 @@ Decision needed: the literal version number.
 Either way: v0.5.0 ships W1 + W2 (first-party sink, non-breaking) first,
 so the encoder gets production soak time before the break.
 
+> Amended 2026-08-31: the non-breaking encoder release is **v0.6.0**, and
+> per the V2_DESIGN §9 amendment everything ships from the `v2` branch —
+> one release line, main frozen at v0.5.0. The 1.0.0 computation is
+> unchanged.
+
 Migration support:
 
 - A `MIGRATION.md` with a before/after table for every removed or changed

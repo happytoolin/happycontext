@@ -1,8 +1,10 @@
 name: release
 
+# v2 is the release line (V2_DESIGN.md §9 amendment, 2026-08-31).
+# Exactly one branch may run release-please; main is frozen at v0.5.0.
 on:
   push:
-    branches: [main]
+    branches: [v2]
 
 permissions:
   contents: write
