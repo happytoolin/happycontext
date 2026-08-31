@@ -1,8 +1,8 @@
 # Tasks: add-first-party-json-sink
 
-Two PRs, sequential (not stacked), then release. Retargeted to `v2`
-(§9 amendment, 2026-08-31): v2 is the single release line; main stays
-frozen at v0.5.0. Stack depth: 0.
+Two PRs, then release, on the single v2 release line (§9 amendment,
+2026-08-31). PR-B is stacked on PR-A — merge order is fixed:
+**#26 (release line) → PR-A → PR-B**. Stack depth: 1.
 
 ## 1. PR-A `feat: add first-party JSON sink with SWAR encoder` (target: v2)
 
