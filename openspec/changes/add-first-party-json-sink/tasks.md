@@ -1,8 +1,10 @@
 # Tasks: add-first-party-json-sink
 
-Two PRs to main, sequential (not stacked), then release. Stack depth: 0.
+Two PRs, sequential (not stacked), then release. Retargeted to `v2`
+(§9 amendment, 2026-08-31): v2 is the single release line; main stays
+frozen at v0.5.0. Stack depth: 0.
 
-## 1. PR-A `feat: add first-party JSON sink with SWAR encoder` (target: main)
+## 1. PR-A `feat: add first-party JSON sink with SWAR encoder` (target: v2)
 
 - [x] Vendor `internal/hcjson` from zerolog v1.34.0 `internal/json`
       (types/string/time/bytes/base), MIT notice + attribution file
@@ -20,7 +22,7 @@ Two PRs to main, sequential (not stacked), then release. Stack depth: 0.
 - [x] Verify: full module matrix green, `-race` on root, benchstat vs the
       §4 gate (≤ 400 ns / ≤ 2 allocs for 12 fields), property test passing
 
-## 2. PR-B `chore: go 1.25 floor, CI matrix with race and format gates` (target: main)
+## 2. PR-B `chore: go 1.25 floor, CI matrix with race and format gates` (target: v2)
 
 - [ ] Harmonize all `go.mod` directives to `go 1.25` (fiberv3 already there)
 - [ ] CI: matrix {1.25.x, 1.26.x, 1.27.x}; add `-race` pass and `gofmt -l`
@@ -29,6 +31,8 @@ Two PRs to main, sequential (not stacked), then release. Stack depth: 0.
 
 ## 3. Release
 
-- [ ] Merge PR-A, PR-B; let release-please open the v0.6.0 release PR
-      (`feat:` → minor from 0.5.0; no breaking markers in scope)
-- [ ] After release: merge main into `v2` so the branch carries the encoder
+- [ ] Merge PR-A, PR-B into v2; let release-please open the v0.6.0
+      release PR on v2 (`feat:` → minor from 0.5.0; no breaking markers
+      in scope)
+- [ ] After release: nothing to sync — v2 is the release line (the old
+      "merge main into v2" step is retired with the §9 amendment)
