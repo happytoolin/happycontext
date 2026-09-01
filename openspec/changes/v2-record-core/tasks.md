@@ -1,8 +1,9 @@
 # Tasks: v2-record-core
 
-Four stacked PRs to `v2` (each rebased on its parent), plus an opportunistic
-port-back lane. Every PR ships with the full module matrix, `-race`, and
-benchstat evidence against the `V2_DESIGN.md` §4 gates.
+Four stacked PRs to `v2` (each rebased on its parent). Every PR ships
+with the full module matrix, `-race`, and benchstat evidence against the
+`V2_DESIGN.md` §4 gates. (The opportunistic port-back lane to main is
+retired with the §9 amendment, 2026-08-31 — v2 is the only line.)
 
 ## 1. PR-S1 `feat(core)!: typed WAL record core` (target: v2, stack base)
 
@@ -61,11 +62,3 @@ benchstat evidence against the `V2_DESIGN.md` §4 gates.
       outcome-precedence and field-rename callouts
 - [ ] README v2 rewrite (quick starts from the spec's §2 samples)
 - [ ] Verify: `go test` runs examples; docs build; full matrix final pass
-
-## 5. Port-back lane (target: main, opportunistic — never stacked)
-
-- [ ] After each PR-S merges: cherry-pick compatible items to main
-      (encoder/SWAR improvements, property+fuzz suites, bench harness,
-      docs, CI) as small `chore:`/`test:` PRs feeding the next v0.6.x
-- [ ] Never port: API-shape work (S1–S3) or pool-dependent internals
-      (sealing, arming, timeline, watchdog)

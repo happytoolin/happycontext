@@ -13,7 +13,7 @@ provided.
 Examples:
   ./scripts/publish-lockstep-release.sh v0.2.3
   ./scripts/publish-lockstep-release.sh --push --github-releases v0.2.3
-  ./scripts/publish-lockstep-release.sh --push v0.2.3 origin/main
+  ./scripts/publish-lockstep-release.sh --push v0.2.3 origin/v2
 EOF
 }
 

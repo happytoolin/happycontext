@@ -11,7 +11,8 @@ Full design, measurements, and the 21 amendments: `V2_DESIGN.md`.
 ## What Changes
 
 Delivered as **four stacked PRs to the `v2` branch** (stack depth 4 —
-deliberately shallow), then port-backs flow to main:
+deliberately shallow). Per the §9 amendment (2026-08-31) v2 is the only
+line — nothing flows to main:
 
 - **PR-S1 — core**: typed `Field`/record WAL (append-only, sealed after
   `End`, atomic arming protocol), pooled events, encode-time last-wins
@@ -32,7 +33,7 @@ deliberately shallow), then port-backs flow to main:
 
 - BufferedSink, stall watchdog, timeline (v1.1+; `v2_DESIGN.md` §8 ledger).
 - OTel correlation or any destination adapter (parking lot).
-- Any change to the classic line beyond port-backs of compatible work.
+- Any change to frozen main (retired with the port-back lane, §9 amendment).
 
 ## Impact
 

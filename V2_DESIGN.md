@@ -12,14 +12,14 @@ behind us.
 | --- | --- | --- | --- |
 | **v0.5.0** — shipped | adapter sort removal, `just tidy` all-modules | soft (done) | — |
 | **v0.6.0** | W1: `internal/hcjson` encoder fork (SWAR hybrid, zerolog-table property test, fuzz 1M, golden vs current zerolog adapter) · W2: `hc.NewJSONSink(io.Writer)` on the *current* Sink interface · jsontext fallback backend behind the internal encoder interface | none | golden output ≡ zerolog adapter (modulo ordering); fuzz clean; soak in `benches` |
-| **v1.0.0** — the break, one PR | W3 typed Event (request-WAL) · W4 `Record`/`Sink` · W5 `Compile`/`Runtime` · W6 sampler `Lookup` · W7 single lifecycle · W8 bridges on `[]Field` · W9 field dedupe · `MIGRATION.md` | yes, lockstep (root + all nested modules) | performance gates §4; full matrix green under `-race`; migration guide published *before* merge |
+| **v1.0.0** — the break (S-series) | W3 typed Event (request-WAL) · W4 `Record`/`Sink` · W5 `Compile`/`Runtime` · W6 sampler `Lookup` · W7 single lifecycle · W8 bridges on `[]Field` · W9 field dedupe · `MIGRATION.md` | yes, lockstep (root + all nested modules) | performance gates §4; full matrix green under `-race`; migration guide published *before* merge |
 | **v1.1.0** | W11 `BufferedSink` (async drain, writev batches) · W12 stall watchdog + in-flight records + timeline arming · encode-once multi-sink reuse | none | buffered append ≤ 100 ns; watchdog emits within 1 s of threshold under load |
 | **later, data-gated** | W10 `hc/log` mini logger · console writer | none | only if post-1.0 profiles justify |
 
 The v0.6 encoder exists so the highest-risk component earns production
 trust on the old core before anything breaks. Nothing else ships
-between v0.6 and the 1.0 core PR — the break is coordinated, atomic,
-and never partially merged.
+between v0.6 and 1.0.0 — the break lands as the coordinated S-series on
+v2 (§9) and releases only when complete.
 
 ## 2. The public API
 
@@ -401,38 +401,37 @@ Every question raised during design, and its final answer.
 | Destination adapters | bridges (slog/zap/zerolog) = formats, shipped at 1.0; `adapter/otlp` = the only first-party destination, post-1.0; per-vendor drains rejected — the Sink interface plus a documented recipe covers custom destinations |
 | Timeline / watchdog | off by default; arm-on-stall; `t_ms` only when armed |
 | Disk-backed WAL | rejected — shipper territory |
-| Compatibility window | old 0.x bridges keep compiling against 0.x core via module versioning; no dual-write in core (mapping table only) |
+| Compatibility window | none needed — zero users; `v2` is the only release line (owner, 2026-08-31), main frozen at v0.5.0; port-back lane retired |
 
 ## 9. Branching and release choreography
 
-`v2` is a long-lived branch off main carrying this spec. Main remains
-the classic-API line until cutover.
+> **Amended 2026-08-31 (owner decision): the dual-line choreography is
+> retired.** With zero external users, the 0.x compatibility window it
+> protected doesn't exist. `v2` is the single development and release
+> line; `main` is frozen at v0.5.0 behind a pointer banner. Version
+> mechanics are unchanged — `feat:` on v2 releases 0.6.0, and the
+> record-core `feat!:` computes 1.0.0 through the same release-please
+> flow, just aimed at v2. The port-back lane is dead: nothing flows to
+> main anymore.
 
-1. **v0.6.0 ships from main** — W1 encoder fork + W2 `NewJSONSink` are
-   additive; they release on the old API (plus the Go-version policy:
-   floor 1.25, CI matrix 1.25/1.26/1.27). After release, main merges
-   into `v2`.
-2. **The break develops on `v2`** — sequenced PRs targeting the `v2`
-   branch: core first (W3 typed WAL with sealing and arming), then
-   W5 Compile/Runtime, W4 Record/Sink, W7 lifecycle, W6 sampler, then
-   W8 bridges, W9 dedupe, integrations, `MIGRATION.md`, runnable
-   examples. Every PR carries the full matrix, `-race`, and benchstat
-   evidence against the §4 gates.
-3. **Port-backs flow v2 → main** whenever compatible: encoder and SWAR
-   improvements, property/fuzz test suites, benchmark harness, small
-   cuts, docs, CI. Never the API-shape work (W3–W9) or pool-dependent
-   internals (sealing, timeline, watchdog).
-4. **Final classic release from main** — feature freeze after the last
-   v0.6.x; fixes only; README banner announcing the classic line's end
-   and pointing at `MIGRATION.md`.
-5. **Cutover** — one PR merging `v2` into main titled
-   `feat!: v2 record core (W3–W9)`. Release-please computes the major
-   bump from the breaking marker: **0.6.x → 1.0.0** — the same
-   mechanism that misfired on v0.5.0 now works for us. Lockstep
-   scripts tag all nested modules 1.0.0; README and docs swap; the
-   classic line lives on as installable 0.x tags.
-6. **Post-cutover**: v1.1.0 (W11 BufferedSink, W12 watchdog, `adapter/
-   otlp` evaluation) proceeds on main, trunk-based.
+1. **v0.6.0 ships from v2** — W1 encoder fork + W2 `NewJSONSink` plus
+   the Go-floor/CI PR merge into v2; release-please opens the release
+   PR there (the release workflow triggers on v2 pushes; CI gates v2
+   PRs).
+2. **The break develops on v2** — sequenced PRs targeting the `v2`
+   branch: core first (W3 typed WAL with sealing and arming), then W5
+   Compile/Runtime, W4 Record/Sink, W7 lifecycle, W6 sampler, then W8
+   bridges, W9 dedupe, integrations, `MIGRATION.md`, runnable examples.
+   Every PR carries the full matrix, `-race`, and benchstat evidence
+   against the §4 gates.
+3. **v1.0.0 releases from v2** — when the S-series merges, release-
+   please computes 0.6.x → 1.0.0 from the breaking marker and lockstep
+   scripts tag all nested modules 1.0.0. No cutover merge, no feature
+   freeze, no classic-line retirement PR.
+4. **main** — frozen at v0.5.0 with a README banner pointing at the v2
+   line; the 0.x tags keep a home. Afterwards, either switch the
+   default branch to v2 or fast-forward main to v2 (a plain merge —
+   main never releases again).
 
 ## 10. What would reopen this design
 
