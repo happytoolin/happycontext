@@ -32,20 +32,9 @@ func (z *Sink) Write(ctx context.Context, rec *hc.Record) {
 		return
 	}
 
-	var seen map[string]struct{}
-	if len(rec.Fields()) > 24 {
-		seen = make(map[string]struct{}, len(rec.Fields())*2)
-	}
 	fields := rec.Fields()
-	for i := range fields {
-		f := fields[i]
-		if !lastOccurrence(fields, i, seen) {
-			continue
-		}
-		if seen != nil {
-			seen[f.Key()] = struct{}{}
-		}
-		event = appendField(event, f)
+	for _, i := range lastOccurrences(fields) {
+		event = appendField(event, fields[i])
 	}
 	event.Time("time", time.Now())
 	event.Msg(rec.Message())
@@ -103,21 +92,40 @@ func appendField(event *zerolog.Event, f hc.Field) *zerolog.Event {
 	return event.Interface(key, f.Any())
 }
 
-// lastOccurrence reports whether index i holds the field's last write
-// (the encode-side duplicate resolution, mirrored from the core: linear
-// scan for narrow events, seen-set for wide ones so the 128-field
-// matrix point stays linear).
-func lastOccurrence(fields []hc.Field, i int, seen map[string]struct{}) bool {
-	if seen != nil {
-		_, dup := seen[fields[i].Key()]
-		return !dup
-	}
-	for j := i + 1; j < len(fields); j++ {
-		if fields[j].Key() == fields[i].Key() {
-			return false
+// lastOccurrences returns the indices of each key's last write, in
+// forward emission order — the same duplicate resolution the core
+// encoder applies (linear scan for narrow events, backward seen-set
+// collection for wide ones).
+func lastOccurrences(fields []hc.Field) []int {
+	if len(fields) <= 24 {
+		out := make([]int, 0, len(fields))
+		for i := range fields {
+			last := true
+			for j := i + 1; j < len(fields); j++ {
+				if fields[j].Key() == fields[i].Key() {
+					last = false
+					break
+				}
+			}
+			if last {
+				out = append(out, i)
+			}
 		}
+		return out
 	}
-	return true
+	seen := make(map[string]struct{}, len(fields)*2)
+	kept := make([]int, 0, len(fields))
+	for i := len(fields) - 1; i >= 0; i-- {
+		if _, dup := seen[fields[i].Key()]; dup {
+			continue
+		}
+		seen[fields[i].Key()] = struct{}{}
+		kept = append(kept, i)
+	}
+	for i, j := 0, len(kept)-1; i < j; i, j = i+1, j-1 {
+		kept[i], kept[j] = kept[j], kept[i]
+	}
+	return kept
 }
 
 var _ hc.Sink = (*Sink)(nil)

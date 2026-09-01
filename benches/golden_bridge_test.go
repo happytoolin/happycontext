@@ -51,6 +51,16 @@ func TestGoldenZerologBridgeParity(t *testing.T) {
 			}
 		}, nil},
 		{"error", nil, errors.New("boom")},
+		{"wide_duplicates", func(ctx context.Context) {
+			hc.Add(ctx, "dup", "first-write")
+			for i := 0; i < 28; i++ {
+				hc.Add(ctx, "k"+strings.Repeat("x", i+1), i)
+			}
+			hc.Add(ctx, "dup", "last-write")
+		}, nil},
+		{"float32", func(ctx context.Context) {
+			hc.Add(ctx, "f", float32(0.1), "g", 0.1)
+		}, nil},
 	}
 
 	for _, c := range corpus {

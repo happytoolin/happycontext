@@ -66,20 +66,11 @@ func (s *Sink) Write(ctx context.Context, rec *hc.Record) {
 		return
 	}
 
-	var seen map[string]struct{}
-	if len(fields) > 24 {
-		seen = make(map[string]struct{}, len(fields)*2)
-	}
 	bufPtr := slogAttrPool.Get().(*[]slog.Attr)
 	attrs := (*bufPtr)[:0]
 	defer func() { recycleAttrs(bufPtr, attrs) }()
-	for i := range fields {
-		f := fields[i]
-		if !lastOccurrence(fields, i, seen) {
-			continue
-		}
-		markSeen(fields, i, seen)
-		attrs = append(attrs, attrOf(f))
+	for _, i := range lastOccurrences(fields) {
+		attrs = append(attrs, attrOf(fields[i]))
 	}
 	s.logger.LogAttrs(ctx, slogLevel, rec.Message(), attrs...)
 }
@@ -104,6 +95,9 @@ func attrOf(f hc.Field) slog.Attr {
 		return slog.Uint64(f.Key(), u)
 	}
 	if fl, ok := f.Float(); ok {
+		if f.Kind() == hc.KindFloat32 {
+			return slog.Any(f.Key(), float32(fl)) // preserves 32-bit JSON rendering
+		}
 		return slog.Float64(f.Key(), fl)
 	}
 	if b, ok := f.Bool(); ok {
@@ -118,27 +112,41 @@ func attrOf(f hc.Field) slog.Attr {
 	return slog.Any(f.Key(), f.Any())
 }
 
-// lastOccurrence reports whether index i holds the field's last write
-// (the encode-side duplicate resolution, mirrored from the core: linear
-// scan for narrow events, seen-set for wide ones so the 128-field
-// matrix point stays linear).
-func lastOccurrence(fields []hc.Field, i int, seen map[string]struct{}) bool {
-	if seen != nil {
-		_, dup := seen[fields[i].Key()]
-		return !dup
-	}
-	for j := i + 1; j < len(fields); j++ {
-		if fields[j].Key() == fields[i].Key() {
-			return false
+// lastOccurrences returns the indices of each key's last write, in
+// forward emission order — the same duplicate resolution the core
+// encoder applies (linear scan for narrow events, backward seen-set
+// collection for wide ones so the 128-field matrix point stays linear
+// and last-write-wins holds at every width).
+func lastOccurrences(fields []hc.Field) []int {
+	if len(fields) <= 24 {
+		out := make([]int, 0, len(fields))
+		for i := range fields {
+			last := true
+			for j := i + 1; j < len(fields); j++ {
+				if fields[j].Key() == fields[i].Key() {
+					last = false
+					break
+				}
+			}
+			if last {
+				out = append(out, i)
+			}
 		}
+		return out
 	}
-	return true
-}
-
-func markSeen(fields []hc.Field, i int, seen map[string]struct{}) {
-	if seen != nil {
+	seen := make(map[string]struct{}, len(fields)*2)
+	kept := make([]int, 0, len(fields))
+	for i := len(fields) - 1; i >= 0; i-- {
+		if _, dup := seen[fields[i].Key()]; dup {
+			continue
+		}
 		seen[fields[i].Key()] = struct{}{}
+		kept = append(kept, i)
 	}
+	for i, j := 0, len(kept)-1; i < j; i, j = i+1, j-1 {
+		kept[i], kept[j] = kept[j], kept[i]
+	}
+	return kept
 }
 
 var _ hc.Sink = (*Sink)(nil)
