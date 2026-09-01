@@ -177,7 +177,7 @@ mw := stdhc.Middleware(hc.MustCompile(hc.Config{
 		hc.LevelWarn:  1.0, // keep all warns
 		hc.LevelDebug: 0.01,
 	},
-})
+}))
 ```
 
 Custom sampler (route/user/latency rules):
@@ -198,14 +198,11 @@ mw := stdhc.Middleware(hc.MustCompile(hc.Config{
 			return true
 		}
 		// Keep enterprise requests based on event fields.
-		fields := hc.EventFields(in.Event)
-		tier, _ := fields["user_tier"].(string)
+		tier, _ := in.Lookup("user_tier")
 		return tier == "enterprise"
 	},
-})
+}))
 ```
-
-`hc.EventFields` returns a shallow copy of top-level fields. Nested maps/slices are shared references.
 
 `hc.Add` accepts one or more key/value pairs:
 `hc.Add(ctx, "k1", v1, "k2", v2, "k3", v3)`.
@@ -224,7 +221,7 @@ mw := stdhc.Middleware(hc.MustCompile(hc.Config{
 		hc.KeepPathPrefix("/admin"), // always keep admin paths
 		hc.KeepSlowerThan(500*time.Millisecond),
 	),
-})))
+}))
 ```
 
 Sampler building blocks:
@@ -316,7 +313,7 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	sink := sloghc.New(logger)
-	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
+	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -480,7 +477,7 @@ import (
 func main() {
 	logger := zap.NewExample()
 	sink := zaphc.New(logger)
-	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
+	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -513,7 +510,7 @@ import (
 func main() {
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
 	sink := zerologhc.New(&logger)
-	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
+	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
