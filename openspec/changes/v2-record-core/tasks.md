@@ -30,15 +30,18 @@ retired with the §9 amendment, 2026-08-31 — v2 is the only line.)
 
 ## 2. PR-S2 `feat(lifecycle): single lifecycle + integrations` (stacked on S1)
 
-- [ ] Internalize begin/finish path; `hc.Start(ctx, rt, start)` +
+- [x] Internalize begin/finish path; `hc.Start(ctx, rt, start)` +
       `op.End(&err)` only; delete hydration/reconciliation (~100 LOC)
-- [ ] Sampler: `SampleInput` scalars + `Lookup` + `Fields()`; chain
+      (achieved in PR-S1: the v0 begin/finish/hydration machinery was
+      removed with the core rewrite)
+- [x] Sampler: `SampleInput` scalars + `Lookup` + `Fields()`; chain
       helpers unchanged; error/panic bypass enforced before custom sampler
-- [ ] Outcome precedence: panic > error > explicit > 5xx > success
-- [ ] Add `replace … => ../` to all nested modules' go.mod on the branch
-- [ ] Port `common`, `std`, `gin`, `echo`, `fiber`, `fiberv3`, `worker`
+- [x] Outcome precedence: panic > error > explicit > 5xx > success
+      (landed in PR-S1)
+- [x] Add `replace … => ../` to all nested modules' go.mod on the branch
+- [x] Port `common`, `std`, `gin`, `echo`, `fiber`, `fiberv3`, `worker`
       to `*Runtime` constructors; keep per-framework semantics
-- [ ] Verify: integration suites green + `-race`; router benchmarks
+- [x] Verify: integration suites green + `-race`; router benchmarks
       captured for the middleware ≤ 350 ns gate
 
 ## 3. PR-S3 `feat(adapters): bridges on []Field + canonical fields` (stacked on S2)

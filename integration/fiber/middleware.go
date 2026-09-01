@@ -10,17 +10,16 @@ import (
 )
 
 // Middleware returns a Fiber v2 middleware that captures one event per request.
-func Middleware(cfg hc.Config) fiber.Handler {
-	cfg = common.NormalizeConfig(cfg)
-	if cfg.Sink == nil {
+func Middleware(rt *hc.Runtime) fiber.Handler {
+	if rt == nil {
 		return func(c *fiber.Ctx) error {
 			return c.Next()
 		}
 	}
 
 	return func(c *fiber.Ctx) (err error) {
-		ctx, event := common.StartRequest(c.UserContext(), c.Method(), c.Path())
-		c.SetUserContext(ctx)
+		op := common.StartRequest(c.UserContext(), rt, c.Method(), c.Path())
+		c.SetUserContext(op.Context())
 		var finalizeErr error
 
 		defer func() {
@@ -32,14 +31,7 @@ func Middleware(cfg hc.Config) fiber.Handler {
 			status := c.Response().StatusCode()
 			responseStarted := status != 0 && (status != http.StatusOK || len(c.Response().Body()) > 0)
 			status = common.ResolveStatus(status, finalizeErr, recovered, responseStarted, statusFromFiberError(finalizeErr))
-			common.FinalizeRequest(cfg, common.FinalizeInput{
-				Ctx:        ctx,
-				Event:      event,
-				Route:      routePath,
-				StatusCode: status,
-				Err:        finalizeErr,
-				Recovered:  recovered,
-			})
+			common.FinalizeRequest(op, routePath, status, finalizeErr, recovered)
 
 			if recovered != nil {
 				panic(recovered)

@@ -7,15 +7,15 @@ require (
 	github.com/gofiber/fiber/v2 v2.52.11
 	github.com/gofiber/fiber/v3 v3.0.0-rc.3
 	github.com/happytoolin/happycontext v0.5.0
-	github.com/happytoolin/happycontext/adapter/slog v0.0.0
-	github.com/happytoolin/happycontext/adapter/zap v0.0.0
-	github.com/happytoolin/happycontext/adapter/zerolog v0.0.0
-	github.com/happytoolin/happycontext/integration/echo v0.0.0
-	github.com/happytoolin/happycontext/integration/fiber v0.0.0
-	github.com/happytoolin/happycontext/integration/fiberv3 v0.0.0
-	github.com/happytoolin/happycontext/integration/gin v0.0.0
-	github.com/happytoolin/happycontext/integration/std v0.0.0
-	github.com/happytoolin/happycontext/integration/worker v0.0.0
+	github.com/happytoolin/happycontext/adapter/slog v0.5.0
+	github.com/happytoolin/happycontext/adapter/zap v0.5.0
+	github.com/happytoolin/happycontext/adapter/zerolog v0.5.0
+	github.com/happytoolin/happycontext/integration/echo v0.5.0
+	github.com/happytoolin/happycontext/integration/fiber v0.5.0
+	github.com/happytoolin/happycontext/integration/fiberv3 v0.5.0
+	github.com/happytoolin/happycontext/integration/gin v0.5.0
+	github.com/happytoolin/happycontext/integration/std v0.5.0
+	github.com/happytoolin/happycontext/integration/worker v0.5.0
 	github.com/labstack/echo/v4 v4.15.0
 	github.com/rs/zerolog v1.34.0
 	go.uber.org/zap v1.27.1
@@ -70,21 +70,3 @@ require (
 	golang.org/x/tools v0.39.0 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
 )
-
-replace github.com/happytoolin/happycontext/adapter/slog => ../../adapter/slog
-
-replace github.com/happytoolin/happycontext/adapter/zap => ../../adapter/zap
-
-replace github.com/happytoolin/happycontext/adapter/zerolog => ../../adapter/zerolog
-
-replace github.com/happytoolin/happycontext/integration/gin => ../../integration/gin
-
-replace github.com/happytoolin/happycontext/integration/echo => ../../integration/echo
-
-replace github.com/happytoolin/happycontext/integration/fiber => ../../integration/fiber
-
-replace github.com/happytoolin/happycontext/integration/fiberv3 => ../../integration/fiberv3
-
-replace github.com/happytoolin/happycontext/integration/std => ../../integration/std
-
-replace github.com/happytoolin/happycontext/integration/worker => ../../integration/worker

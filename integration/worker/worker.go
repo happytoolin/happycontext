@@ -17,9 +17,17 @@ type JobMeta struct {
 	ScheduledAt time.Time
 }
 
-// Start initializes a worker operation handle.
-func Start(ctx context.Context, meta JobMeta) *hc.Operation {
-	op := hc.StartOperation(ctx, hc.OperationStart{
+// Start initializes a worker operation handle. rt comes from
+// hc.Compile/MustCompile; a nil *hc.Runtime runs the operation with no
+// emission. End the operation with the deferred-error idiom:
+//
+//	func run(ctx context.Context) (err error) {
+//		op := workerhc.Start(ctx, rt, meta)
+//		defer op.End(&err)
+//		...
+//	}
+func Start(ctx context.Context, rt *hc.Runtime, meta JobMeta) *hc.Operation {
+	op := hc.Start(ctx, rt, hc.OperationStart{
 		Domain:      hc.DomainJob,
 		Name:        meta.Name,
 		ID:          meta.ID,
