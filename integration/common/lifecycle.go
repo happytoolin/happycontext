@@ -39,6 +39,10 @@ func FinalizeRequest(op *hc.Operation, route string, statusCode int, err error, 
 	}
 	if route != "" {
 		hc.Add(op.Context(), "http.route", route)
+		// v0 parity: the operation's name is the resolved route template
+		// (the locked plan's wire sample: "op.name":"GET /orders/{id}");
+		// last-write-wins keeps this over StartRequest's "request".
+		hc.Add(op.Context(), "op.name", route)
 	}
 	hc.Add(op.Context(), "http.status", statusCode)
 
