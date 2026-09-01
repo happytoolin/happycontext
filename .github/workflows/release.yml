@@ -25,6 +25,10 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: .release-please-config.json
           manifest-file: .release-please-manifest.json
+          # v2 is the release line (§9 amendment): the action's default
+          # branch input is the repo default (main), which made it scan
+          # frozen main and find nothing releasable.
+          branch: v2
 
       - name: Checkout
         if: ${{ steps.release.outputs.releases_created == 'true' }}
