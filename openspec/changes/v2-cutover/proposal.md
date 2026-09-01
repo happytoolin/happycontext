@@ -1,33 +1,36 @@
-# v2 cutover — final classic release, then publish v1.0.0
+# v2 single-line release — publish v1.0.0 from v2
 
 ## Why
 
-The classic line must end deliberately (with the migration guide already
-published) and the v2 architecture must publish as **v1.0.0** — reserving
-`/v2` module-path churn and making the stability promise at the moment
-the new API lands. Choreography: `V2_DESIGN.md` §9.
+Zero external users means the dual-line choreography (classic main line,
+port-back lane, cutover merge) protects a compatibility window that does
+not exist. Owner decision 2026-08-31: `v2` becomes the single
+development and release line; `main` freezes at v0.5.0 behind a pointer
+banner. `V2_DESIGN.md` §9 is amended accordingly.
 
 ## What Changes
 
-- Feature-freeze main after the last v0.6.x; final classic release with a
-  README banner pointing to `MIGRATION.md`.
-- One cutover PR merges `v2` into main as `feat!: v2 record core (W3–W9)`.
-  Release-please computes **0.6.x → 1.0.0** from the breaking marker — the
-  same mechanism hand-corrected at v0.5.0, now working for us.
-- Lockstep scripts strip branch-local `replace` directives, tag root
-  `v1.0.0` and every nested module `<path>/v1.0.0`.
-- README/docs swap to v2; the classic line remains installable as 0.x tags.
+- Release workflow triggers on `v2` pushes only (exactly one branch may
+  run release-please); CI gates PRs against `v2` as well as `main`.
+- v0.6.0 (`add-first-party-json-sink`) releases **from v2**: PR-A/PR-B
+  retarget to v2, release-please computes 0.5.0 → 0.6.0 there.
+- The v1.0.0 path is unchanged in mechanism: the record-core breaking
+  markers compute 0.6.x → 1.0.0 on v2; lockstep scripts tag all nested
+  modules; no cutover merge, no classic-line retirement PR.
+- `main` keeps the 0.x tags and a banner; afterwards the default branch
+  moves to v2 (or main is fast-forwarded once — a plain merge).
 
 ## Non-goals
 
 - v1.1 features (BufferedSink, watchdog, `adapter/otlp` evaluation) —
-  trunk-based after cutover.
-- Renaming the module or moving to `/v2` paths.
+  sequenced after 1.0.0 as fresh changes.
+- Renaming the module or moving to `/v2` import paths.
+- Any change to the record-core work itself (`v2-record-core` is
+  unaffected: it already targets `v2`).
 
 ## Impact
 
-- Affected specs: `release-process` (new capability).
-- Affected code: none beyond merges — all code landed via `v2-record-core`.
+- Affected specs: `release-process` (branch references retargeted).
+- Affected code: CI/release workflows only.
 - Risk: release automation surprises — mitigated by verifying the v0.6.0
-  release flow end-to-end first and watching the cutover workflow's
-  `RELEASE_TAG`.
+  release end-to-end on v2 before any breaking work lands.

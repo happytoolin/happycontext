@@ -582,6 +582,11 @@ Decision needed: the literal version number.
 Either way: v0.5.0 ships W1 + W2 (first-party sink, non-breaking) first,
 so the encoder gets production soak time before the break.
 
+> Amended 2026-08-31: the non-breaking encoder release is **v0.6.0**, and
+> per the V2_DESIGN §9 amendment everything ships from the `v2` branch —
+> one release line, main frozen at v0.5.0. The 1.0.0 computation is
+> unchanged.
+
 Migration support:
 
 - A `MIGRATION.md` with a before/after table for every removed or changed
@@ -943,3 +948,65 @@ table plus dual-write window during the preview.
   (counted) rather than block producers.
 - **RawJSON** — field kind holding pre-encoded JSON appended verbatim;
   escape scan skipped.
+
+## 11. Prior art: wide-event and canonical-log-line libraries
+
+Research pass 2026-08-31 (sources cloned and read at file:line level;
+beeline-go micro-benchmarks measured locally on the M4, everything else
+as claimed by the projects). Question: what public libraries implement
+the "one wide event per request" model, and how do their performance,
+error handling, and sampling compare to ours?
+
+### The primary sources
+
+- **Stripe — canonical log lines (internal, blog-published).** One line
+  per request per service, emitted in a Ruby `ensure` block (fires even
+  while the middleware stack unwinds on an exception) with the logging
+  statement itself wrapped in a nested `rescue` — building a canonical
+  line can never fail a request. Field names are a formal **protobuf
+  contract**; schema changes are breaking changes. Lines ship
+  asynchronously Kafka → S3 → Presto/Redshift and power the Developer
+  Dashboard and incident queries — logs in place of a metrics pipeline.
+  (stripe.com/blog/canonical-log-lines)
+- **Honeycomb — "wide events."** Coined the term; their archived
+  **beeline** SDKs (Go/Node/Python/Ruby/Java) are the closest public
+  analog to hc: middleware opens a request span, fields accumulate,
+  one enriched event per request. Sun-setted in favor of OTel, but the
+  design DNA is ours.
+
+### The public libraries, compared
+
+| Library | Language | Field accumulation | Performance | Error capture | Sampling |
+| --- | --- | --- | --- | --- | --- |
+| beeline-go (archived 2025-08) | Go | ctx span + mutexed map; map copied at send | **measured, M4**: `AddField` 39–49 ns; `CreateSpan` 488 ns / 7 al; `SendSpan` 345 ns / 8 al; async batched transport (50/batch, 100 ms, 10k queue, drop-on-overflow) | 5xx → status field; **no `recover()`** — panics propagate, event sent sans status via deferred Send; drops are silent | SHA-1(traceID) deterministic whole-trace; field-based hook; no salt |
+| pino-http | Node | pino child-logger bindings — **no mutable event** | their stale autocannon (2013 MBP): 21.5k req/s vs 46.1k no-logger | real err on socket errors; 5xx → **synthetic** Error, no stack; aborted-request path known-broken (own skipped test) | none (level-silent trick + `ignore` predicate) |
+| evlog (HugoRCD; audited §7) | TS | closure over one mutable object, in-place merge, stringify once at emit | their published suite: ~2.7 µs/req lifecycle; `emit` 400 ns; wide-event 7.7× pino | full error objects + rethrow; drain failures swallowed; **circular values can crash emit's stringify** | head Math.random per level (errors 100%) + tail keep-rules; not deterministic |
+| lograge | Ruby | ActiveSupport notifications → one KV line | no benchmarks; sync string building | exception → status via ExceptionWrapper; **no rescue around its own emission** — formatter bug breaks requests | none (binary include/exclude) |
+| Serilog.AspNetCore `UseSerilogRequestLogging` | C# | middleware + DiagnosticContext collector | qualitative claim only ("fewer events constructed/transmitted/stored") | exceptions & ≥500 → Error; **4xx stays Information**; logger exceptions propagate | none |
+
+### What it says about our design
+
+1. **The 12-field gate (293 ns / 0 al) is a different class.** It beats
+   beeline-go's span *creation* alone (488 ns / 7 al) before any send;
+   nobody else has pooled-buffer + single-`Write` on the hot path.
+2. **Error-bypass-sampling is unique.** Zero OSS implementations have
+   "always emit errors, sample successes" (amendment 4 is a real
+   differentiator). The only kindred philosophy is Stripe's
+   ensure+rescue: observability must be most reliable when things are
+   worst.
+3. **Sealing (amendment 20) is validated** — evlog's post-emit warning
+   path is exactly the use-after-emit bug class sealing prevents.
+4. **BufferedSink (W11) would be a library-level first.** Every OSS
+   implementation punts buffering to downstream infrastructure (Kafka,
+   Serilog.Sinks.Async, SonicBoom); Stripe does it in infra, not the
+   library.
+5. **Worth stealing: schema discipline.** Stripe's protobuf field
+   contract built org-wide "muscle memory" for querying logs. A short
+   README policy note — `op.*`/`http.*` names are stable, renames are
+   breaking — is the cheap version of that.
+
+Sources: github.com/honeycombio/beeline-go@cb95e4b, github.com/pinojs/
+pino-http, github.com/HugoRCD/evlog, github.com/roidrage/lograge,
+github.com/serilog/serilog-aspnetcore, stripe.com/blog/canonical-log-
+lines, docs.honeycomb.io. Full research notes with file:line citations
+in the PR that added this section.

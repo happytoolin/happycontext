@@ -18,7 +18,8 @@ amendment 10.
 - Add the jsontext comparator in `benches/` behind a `go1.27` build tag.
 - Harmonize Go floors to 1.25 across all modules; CI matrix 1.25/1.26/1.27
   with `-race` and a gofmt gate.
-- Release v0.6.0 from main via release-please (`feat:` → minor).
+- Release v0.6.0 from v2 via release-please (`feat:` → minor); v2 is
+  the single release line (§9 amendment, 2026-08-31).
 
 ## Non-goals
 
