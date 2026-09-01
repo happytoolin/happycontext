@@ -63,10 +63,10 @@ retired with the §9 amendment, 2026-08-31 — v2 is the only line.)
 
 ## 4. PR-S4 `docs: examples, migration guide, README` (stacked on S3)
 
-- [ ] `example_test.go`: output-checked Examples for `Compile`,
+- [x] `example_test.go`: output-checked Examples for `Compile`,
       `MustCompile`, `Start`/`End`, `Add` family, `NewJSONSink`,
       `NewTestSink`, one bridge, one integration
-- [ ] `MIGRATION.md`: the v0→v1 map from `V2_DESIGN.md` §2 plus the
+- [x] `MIGRATION.md`: the v0→v1 map from `V2_DESIGN.md` §2 plus the
       outcome-precedence and field-rename callouts
-- [ ] README v2 rewrite (quick starts from the spec's §2 samples)
-- [ ] Verify: `go test` runs examples; docs build; full matrix final pass
+- [x] README v2 rewrite (quick starts from the spec's §2 samples)
+- [x] Verify: `go test` runs examples; docs build; full matrix final pass
