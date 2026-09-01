@@ -48,3 +48,26 @@ jobs:
               go vet ./...
             )
           done < <(printf '%s\n' go.mod && git ls-files '**/go.mod')
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Go
+        uses: actions/setup-go@v6.2.0
+        with:
+          go-version: '1.25.x'
+          check-latest: true
+          cache: true
+
+      # 60s per target comfortably exceeds the 1M-exec gate (~200k
+      # execs/s for these oracles locally); increase if CI runners
+      # regress.
+      - name: Fuzz hcjson encoder (SWAR vs zerolog table)
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test ./internal/hcjson -run '^$' -fuzz '^FuzzAppendString$' -fuzztime 60s
+          go test ./internal/hcjson -run '^$' -fuzz '^FuzzAppendBytes$' -fuzztime 60s
