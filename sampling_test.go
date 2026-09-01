@@ -1,75 +1,88 @@
 package hc
 
 import (
-	"fmt"
 	"math"
 	"testing"
 	"time"
 )
 
-func TestChainSampler(t *testing.T) {
-	s := ChainSampler(
-		NeverSampler(),
-		KeepErrors(),
-		KeepPathPrefix("/admin"),
-		KeepSlowerThan(250*time.Millisecond),
-	)
-
-	if !s(SampleInput{Path: "/admin/users", StatusCode: 200, Duration: 10 * time.Millisecond}) {
-		t.Fatal("expected admin path to be kept")
-	}
-	if !s(SampleInput{Path: "/api/orders", StatusCode: 500, Duration: 10 * time.Millisecond}) {
-		t.Fatal("expected 5xx request to be kept")
-	}
-	if !s(SampleInput{Path: "/api/orders", StatusCode: 200, Duration: 300 * time.Millisecond}) {
-		t.Fatal("expected slow request to be kept")
-	}
-	if s(SampleInput{Path: "/api/orders", StatusCode: 200, Duration: 10 * time.Millisecond}) {
-		t.Fatal("expected fast healthy request to be dropped")
+func sampleIn(path string, hasError bool) SampleInput {
+	return SampleInput{
+		Domain:     DomainHTTP,
+		Operation:  "GET /x",
+		Outcome:    OutcomeSuccess,
+		StatusCode: 200,
+		Path:       path,
+		Duration:   10 * time.Millisecond,
+		Level:      LevelInfo,
+		HasError:   hasError,
 	}
 }
 
-func TestKeepSlowerThanNegativeDuration(t *testing.T) {
-	s := ChainSampler(NeverSampler(), KeepSlowerThan(-1*time.Second))
-	if !s(SampleInput{StatusCode: 200, Duration: 0}) {
-		t.Fatal("expected negative threshold to behave like zero")
+func TestSamplerHelpers(t *testing.T) {
+	base := func(SampleInput) bool { return false }
+
+	if !KeepErrors()(base)(sampleIn("/x", true)) {
+		t.Fatal("KeepErrors dropped an error")
+	}
+	if KeepErrors()(base)(sampleIn("/x", false)) {
+		t.Fatal("KeepErrors kept a healthy event past base")
+	}
+	if !KeepSlowerThan(5 * time.Millisecond)(base)(sampleIn("/x", false)) {
+		t.Fatal("KeepSlowerThan dropped a slow event")
+	}
+	if KeepPathPrefix("/health")(base)(sampleIn("/api", false)) {
+		t.Fatal("KeepPathPrefix kept a non-matching path")
+	}
+	if !KeepPathPrefix("/api")(base)(sampleIn("/api/v1", false)) {
+		t.Fatal("KeepPathPrefix dropped a matching prefix")
+	}
+	if KeepPathPrefix()(base)(sampleIn("/api", false)) {
+		t.Fatal("empty KeepPathPrefix must pass through to base (drop)")
 	}
 }
 
-func TestRateSamplerBounds(t *testing.T) {
-	if RateSampler(0)(SampleInput{}) {
-		t.Fatal("rate 0 should always drop")
+func TestChainSamplerOrder(t *testing.T) {
+	calls := []string{}
+	mk := func(name string) SamplerMiddleware {
+		return func(next Sampler) Sampler {
+			return func(in SampleInput) bool {
+				calls = append(calls, name)
+				return next(in)
+			}
+		}
 	}
-	if RateSampler(-1)(SampleInput{}) {
-		t.Fatal("negative rate should always drop")
+	chained := ChainSampler(AlwaysSampler(), mk("a"), mk("b"))
+	if !chained(sampleIn("/x", false)) {
+		t.Fatal("chained sampler dropped")
 	}
-	if !RateSampler(1)(SampleInput{}) {
-		t.Fatal("rate 1 should always keep")
-	}
-	if !RateSampler(2)(SampleInput{}) {
-		t.Fatal("rate >1 should always keep")
-	}
-	if RateSampler(math.NaN())(SampleInput{}) {
-		t.Fatal("NaN rate should always drop")
-	}
-	if shouldSample(math.NaN()) {
-		t.Fatal("NaN built-in rate should always drop")
+	if len(calls) != 2 || calls[0] != "a" || calls[1] != "b" {
+		t.Fatalf("middleware order = %v, want [a b] (a wraps b)", calls)
 	}
 }
 
-func ExampleChainSampler() {
-	sampler := ChainSampler(
-		RateSampler(0),
-		KeepErrors(),
-		KeepPathPrefix("/checkout"),
-	)
+func TestRateSamplerBoundaries(t *testing.T) {
+	if RateSampler(-1)(sampleIn("/x", false)) {
+		t.Fatal("negative rate kept")
+	}
+	if RateSampler(0)(sampleIn("/x", false)) {
+		t.Fatal("zero rate kept")
+	}
+	if RateSampler(2)(sampleIn("/x", false)) == false {
+		t.Fatal("rate >= 1 dropped")
+	}
+	// NaN never keeps
+	if RateSampler(math.NaN())(sampleIn("/x", false)) {
+		t.Fatal("NaN rate kept")
+	}
+}
 
-	fmt.Println(sampler(SampleInput{Path: "/catalog", StatusCode: 200}))
-	fmt.Println(sampler(SampleInput{Path: "/checkout/start", StatusCode: 200}))
-	fmt.Println(sampler(SampleInput{Path: "/catalog", StatusCode: 503}))
-
-	// Output:
-	// false
-	// true
-	// true
+func TestSampleInputSyntheticLookup(t *testing.T) {
+	in := SampleInput{}
+	if _, ok := in.Lookup("k"); ok {
+		t.Fatal("synthetic input found a key")
+	}
+	if in.Fields() != nil {
+		t.Fatal("synthetic input returned fields")
+	}
 }

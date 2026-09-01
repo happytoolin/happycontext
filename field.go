@@ -1,0 +1,215 @@
+package hc
+
+import (
+	"time"
+)
+
+// FieldKind discriminates the typed value slot of a Field, following the
+// slog.Value convention: one kind per representable type plus KindAny for
+// everything else (marshalled at encode time).
+type FieldKind uint8
+
+const (
+	KindInvalid FieldKind = iota
+	KindString
+	KindInt
+	KindUint
+	KindFloat
+	KindFloat32
+	KindBool
+	KindTime
+	KindDuration
+	KindErr
+	KindRaw
+	KindAny
+)
+
+// Field is one typed key/value record in the request WAL. Fields are
+// append-only, carry insertion order, and are read through the typed
+// getters; the zero value is an unset field (KindInvalid).
+type Field struct {
+	key  string
+	kind FieldKind
+
+	num int64   // KindInt, KindUint (uint64 bits), KindDuration
+	f   float64 // KindFloat
+	b   bool    // KindBool
+	str string  // KindString
+	t   time.Time
+	val any // KindErr (error), KindRaw ([]byte), KindAny
+}
+
+// Key returns the field key.
+func (f Field) Key() string { return f.key }
+
+// Kind returns the field's value kind.
+func (f Field) Kind() FieldKind { return f.kind }
+
+// Str returns the value as a string; ok reports whether the field is a
+// string kind.
+func (f Field) Str() (s string, ok bool) {
+	if f.kind == KindString {
+		return f.str, true
+	}
+	return "", false
+}
+
+// Int returns the value as an int64 for integer kinds.
+func (f Field) Int() (i int64, ok bool) {
+	if f.kind == KindInt {
+		return f.num, true
+	}
+	return 0, false
+}
+
+// Uint returns the value as a uint64 for unsigned kinds.
+func (f Field) Uint() (u uint64, ok bool) {
+	if f.kind == KindUint {
+		return uint64(f.num), true
+	}
+	return 0, false
+}
+
+// Float returns the value as a float64 for float kinds.
+func (f Field) Float() (fl float64, ok bool) {
+	if f.kind == KindFloat || f.kind == KindFloat32 {
+		return f.f, true
+	}
+	return 0, false
+}
+
+// Bool returns the value for boolean kinds.
+func (f Field) Bool() (b bool, ok bool) {
+	if f.kind == KindBool {
+		return f.b, true
+	}
+	return false, false
+}
+
+// Time returns the value for time kinds.
+func (f Field) Time() (t time.Time, ok bool) {
+	if f.kind == KindTime {
+		return f.t, true
+	}
+	return time.Time{}, false
+}
+
+// Duration returns the value for duration kinds.
+func (f Field) Duration() (d time.Duration, ok bool) {
+	if f.kind == KindDuration {
+		return time.Duration(f.num), true
+	}
+	return 0, false
+}
+
+// Err returns the value for error kinds.
+func (f Field) Err() (err error, ok bool) {
+	if f.kind == KindErr {
+		if e, isErr := f.val.(error); isErr {
+			return e, true
+		}
+	}
+	return nil, false
+}
+
+// Raw returns the pre-encoded JSON bytes for raw kinds.
+func (f Field) Raw() (raw []byte, ok bool) {
+	if f.kind == KindRaw {
+		if b, isBytes := f.val.([]byte); isBytes {
+			return b, true
+		}
+	}
+	return nil, false
+}
+
+// Any returns the value for any-kinds (and the underlying error/raw
+// payload for those kinds). It never boxes: typed kinds return nil.
+func (f Field) Any() any {
+	if f.kind == KindAny {
+		return f.val
+	}
+	return nil
+}
+
+// fieldOf builds a typed Field from key and an arbitrary value using the
+// same type mapping the v0 zerolog adapter used, so wire output is
+// unchanged for every supported type.
+func fieldOf(key string, value any) Field {
+	switch v := value.(type) {
+	case string:
+		return Field{key: key, kind: KindString, str: v}
+	case int:
+		return Field{key: key, kind: KindInt, num: int64(v)}
+	case int8:
+		return Field{key: key, kind: KindInt, num: int64(v)}
+	case int16:
+		return Field{key: key, kind: KindInt, num: int64(v)}
+	case int32:
+		return Field{key: key, kind: KindInt, num: int64(v)}
+	case int64:
+		return Field{key: key, kind: KindInt, num: v}
+	case uint:
+		return Field{key: key, kind: KindUint, num: int64(uint64(v))}
+	case uint8:
+		return Field{key: key, kind: KindUint, num: int64(uint64(v))}
+	case uint16:
+		return Field{key: key, kind: KindUint, num: int64(uint64(v))}
+	case uint32:
+		return Field{key: key, kind: KindUint, num: int64(uint64(v))}
+	case uint64:
+		return Field{key: key, kind: KindUint, num: int64(v)}
+	case float32:
+		// kept as its own kind: the wire must render 0.1, not the
+		// widened 0.10000000149011612 (v0 adapter parity)
+		return Field{key: key, kind: KindFloat32, f: float64(v)}
+	case float64:
+		return Field{key: key, kind: KindFloat, f: v}
+	case bool:
+		return Field{key: key, kind: KindBool, b: v}
+	case time.Time:
+		return Field{key: key, kind: KindTime, t: v}
+	case time.Duration:
+		return Field{key: key, kind: KindDuration, num: int64(v)}
+	case error:
+		return Field{key: key, kind: KindErr, val: v}
+	default:
+		return Field{key: key, kind: KindAny, val: v}
+	}
+}
+
+// Typed field constructors for the canonical annotations (no boxing).
+func fieldStr(key, value string) Field     { return Field{key: key, kind: KindString, str: value} }
+func fieldInt64(key string, v int64) Field { return Field{key: key, kind: KindInt, num: v} }
+
+// fieldAny returns a KindAny field (used for the canonical structured
+// error/panic maps).
+func fieldAny(key string, value any) Field {
+	return Field{key: key, kind: KindAny, val: value}
+}
+
+// valueOf converts a Field back to an any, mirroring the v0 map-based
+// values (used by Lookup and the TestSink).
+func valueOf(f Field) any {
+	switch f.kind {
+	case KindString:
+		return f.str
+	case KindInt:
+		return f.num
+	case KindUint:
+		return uint64(f.num)
+	case KindFloat:
+		return f.f
+	case KindFloat32:
+		return float32(f.f)
+	case KindBool:
+		return f.b
+	case KindTime:
+		return f.t
+	case KindDuration:
+		return time.Duration(f.num)
+	case KindErr, KindRaw, KindAny:
+		return f.val
+	default:
+		return nil
+	}
+}

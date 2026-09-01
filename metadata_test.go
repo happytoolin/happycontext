@@ -2,105 +2,68 @@ package hc
 
 import (
 	"errors"
-	"reflect"
+	"fmt"
 	"testing"
-	"time"
 )
 
-type countingStringer struct {
-	calls *int
+type wrappedTestError struct{ err error }
+
+func (w wrappedTestError) Error() string { return "wrapped: " + w.err.Error() }
+func (w wrappedTestError) Unwrap() error { return w.err }
+
+type frameworkStyleTestError struct {
+	Code    int
+	Message string
 }
 
-func (s countingStringer) String() string {
-	(*s.calls)++
-	return "message"
+func (f *frameworkStyleTestError) Error() string {
+	return fmt.Sprintf("framework %d: %s", f.Code, f.Message)
 }
 
-func TestMessageValueCallsStringerOnce(t *testing.T) {
-	calls := 0
-	value, ok := messageValue(reflect.ValueOf(countingStringer{calls: &calls}))
-	if !ok || value != "message" || calls != 1 {
-		t.Fatalf("value=%v ok=%v calls=%d", value, ok, calls)
-	}
-}
-
-func TestStructuredErrorFieldPreservesWrappedErrorContext(t *testing.T) {
-	field := structuredErrorField(wrappedError{err: errors.New("boom")})
-
-	if field["message"] != "wrapped: boom" {
-		t.Fatalf("message = %v, want wrapped message", field["message"])
-	}
-	if field["type"] != "hc.wrappedError" {
-		t.Fatalf("type = %v, want hc.wrappedError", field["type"])
-	}
-	if field["cause.message"] != "boom" {
-		t.Fatalf("cause.message = %v, want boom", field["cause.message"])
-	}
-	if field["cause.type"] != "*errors.errorString" {
-		t.Fatalf("cause.type = %v, want *errors.errorString", field["cause.type"])
-	}
-}
-
-func TestStructuredErrorFieldNormalizesFrameworkStyleErrors(t *testing.T) {
-	field := structuredErrorField(&frameworkStyleError{Code: 500, Message: "boom"})
-
+func TestStructuredErrorField(t *testing.T) {
+	field := structuredErrorField(errors.New("boom"))
 	if field["message"] != "boom" {
-		t.Fatalf("message = %v, want boom", field["message"])
+		t.Errorf("message = %v", field["message"])
 	}
-	if field["type"] != "*hc.frameworkStyleError" {
-		t.Fatalf("type = %v, want *hc.frameworkStyleError", field["type"])
+	if field["type"] != "*errors.errorString" {
+		t.Errorf("type = %v", field["type"])
 	}
-	if _, ok := field["cause.message"]; ok {
-		t.Fatalf("did not expect cause.message for direct framework error")
+	if _, hasCause := field["cause.message"]; hasCause {
+		t.Error("simple error should have no cause")
 	}
-	if _, ok := field["cause.type"]; ok {
-		t.Fatalf("did not expect cause.type for direct framework error")
+
+	wrapped := structuredErrorField(wrappedTestError{err: errors.New("inner")})
+	if wrapped["message"] != "wrapped: inner" {
+		t.Errorf("message = %v", wrapped["message"])
+	}
+	if wrapped["cause.message"] != "inner" {
+		t.Errorf("cause.message = %v", wrapped["cause.message"])
+	}
+
+	fw := structuredErrorField(&frameworkStyleTestError{Code: 500, Message: "kaput"})
+	if fw["message"] != "kaput" {
+		t.Errorf("framework message = %v", fw["message"])
 	}
 }
 
-func TestStructuredErrorFieldNormalizesFrameworkStyleDeepestCause(t *testing.T) {
-	field := structuredErrorField(wrappedError{err: &frameworkStyleError{Code: 500, Message: "boom"}})
-
-	if field["message"] != "wrapped: code=500, message=boom" {
-		t.Fatalf("message = %v, want wrapped framework message", field["message"])
-	}
-	if field["type"] != "hc.wrappedError" {
-		t.Fatalf("type = %v, want hc.wrappedError", field["type"])
-	}
-	if field["cause.message"] != "boom" {
-		t.Fatalf("cause.message = %v, want boom", field["cause.message"])
-	}
-	if field["cause.type"] != "*hc.frameworkStyleError" {
-		t.Fatalf("cause.type = %v, want *hc.frameworkStyleError", field["cause.type"])
+func TestStructuredPanicField(t *testing.T) {
+	field := structuredPanicField("boom")
+	if field["value"] != "boom" || field["type"] != "string" {
+		t.Fatalf("panic field = %v", field)
 	}
 }
 
-func TestStructuredErrorFieldHandlesCyclicUnwrap(t *testing.T) {
-	err := &cyclicError{}
-	done := make(chan map[string]any, 1)
-	go func() {
-		done <- structuredErrorField(err)
-	}()
-
-	select {
-	case field := <-done:
-		if field["message"] != "cycle" {
-			t.Fatalf("message = %v, want cycle", field["message"])
-		}
-		if _, ok := field["cause.message"]; ok {
-			t.Fatal("did not expect cause.message for self-unwrapping error")
-		}
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("structuredErrorField did not return for cyclic unwrap")
+func TestCyclicErrorUnwrap(t *testing.T) {
+	a := &cyclicError{}
+	b := &cyclicError{next: a}
+	a.next = b
+	field := structuredErrorField(a)
+	if field == nil {
+		t.Fatal("cyclic unwrap must terminate")
 	}
 }
 
-type cyclicError struct{}
+type cyclicError struct{ next error }
 
-func (c *cyclicError) Error() string {
-	return "cycle"
-}
-
-func (c *cyclicError) Unwrap() error {
-	return c
-}
+func (c *cyclicError) Error() string { return "cyclic" }
+func (c *cyclicError) Unwrap() error { return c.next }

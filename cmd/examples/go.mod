@@ -71,8 +71,6 @@ require (
 	google.golang.org/protobuf v1.36.9 // indirect
 )
 
-replace github.com/happytoolin/happycontext => ../..
-
 replace github.com/happytoolin/happycontext/adapter/slog => ../../adapter/slog
 
 replace github.com/happytoolin/happycontext/adapter/zap => ../../adapter/zap

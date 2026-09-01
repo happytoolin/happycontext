@@ -7,25 +7,25 @@ retired with the §9 amendment, 2026-08-31 — v2 is the only line.)
 
 ## 1. PR-S1 `feat(core)!: typed WAL record core` (target: v2, stack base)
 
-- [ ] `Field` type: kind discriminator + typed slots; `Kind()`/`Str()`/
+- [x] `Field` type: kind discriminator + typed slots; `Kind()`/`Str()`/
       `Int()`/`Float()`/`Bool()`/`Time()`/`Duration()`/`Err()`/`Raw()`/`Any()`
-- [ ] Event WAL: pooled, request-confined, pure-append `Add`; sealed-flag
+- [x] Event WAL: pooled, request-confined, pure-append `Add`; sealed-flag
       after `End` (straggler writes are no-ops, debug logs dropped keys);
       atomic armed-flag load per append; guarded-mode mutex only when armed
-- [ ] Encode-time last-write-wins dedupe (seen-set allocated only when
+- [x] Encode-time last-write-wins dedupe (seen-set allocated only when
       duplicates exist) — no Add-time scan
-- [ ] `Compile`/`MustCompile` → `*Runtime`; sentinels `ErrInvalidRate`,
+- [x] `Compile`/`MustCompile` → `*Runtime`; sentinels `ErrInvalidRate`,
       `ErrInvalidLevel`, `ErrInvalidOutcome`; `%w` + `"hc: "` prefixes;
       nil sink = documented no-op runtime
-- [ ] `Record`: `Level`/`Message`/`Fields`/`Lookup`/`Encoded` (lazy-once,
+- [x] `Record`: `Level`/`Message`/`Fields`/`Lookup`/`Encoded` (lazy-once,
       atomic publish); completion-time RFC3339 via cached-second formatter
-- [ ] `Level` int type with `String()`; `Add` family returns nothing;
+- [x] `Level` int type with `String()`; `Add` family returns nothing;
       `AddRawJSON`; remove the v0 symbol list (`V2_DESIGN.md` §2)
-- [ ] One-shot `End` (second call no-op returning first result; bool =
+- [x] One-shot `End` (second call no-op returning first result; bool =
       event emitted; pool return wrapped against sink panics)
-- [ ] Root tests: full matrix + `-race`; request-confined contract tests
-- [ ] Benches module: port to new API (incl. go1.27 jsontext comparator)
-- [ ] Verify gates: lifecycle ≤ 250 ns / ≤ 4 allocs; dropped End-path
+- [x] Root tests: full matrix + `-race`; request-confined contract tests
+- [x] Benches module: port to new API (incl. go1.27 jsontext comparator)
+- [x] Verify gates: lifecycle ≤ 250 ns / ≤ 4 allocs; dropped End-path
       ≤ 100 ns; escape 96-char ≤ 26 ns; property + fuzz suites green
 
 ## 2. PR-S2 `feat(lifecycle): single lifecycle + integrations` (stacked on S1)
