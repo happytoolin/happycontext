@@ -22,12 +22,12 @@ Two PRs, then release, on the single v2 release line (§9 amendment,
 - [x] Verify: full module matrix green, `-race` on root, benchstat vs the
       §4 gate (≤ 400 ns / ≤ 2 allocs for 12 fields), property test passing
 
-## 2. PR-B `chore: go 1.25 floor, CI matrix with race and format gates` (target: v2)
+## 2. PR-B `chore: go 1.25 floor, CI matrix with race and format gates` (target: v2, stacked on PR-A)
 
-- [ ] Harmonize all `go.mod` directives to `go 1.25` (fiberv3 already there)
-- [ ] CI: matrix {1.25.x, 1.26.x, 1.27.x}; add `-race` pass and `gofmt -l`
+- [x] Harmonize all `go.mod` directives to `go 1.25` (fiberv3 already there)
+- [x] CI: matrix {1.25.x, 1.26.x, 1.27.x}; add `-race` pass and `gofmt -l`
       gate to the existing all-modules loop
-- [ ] Verify: CI green on all three toolchains
+- [x] Verify: CI green on all three toolchains
 
 ## 3. Release
 
