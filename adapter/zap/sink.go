@@ -101,7 +101,8 @@ func (z *Sink) check(level hc.Level, message string) *zapcore.CheckedEntry {
 // collection for wide ones).
 func lastOccurrences(fields []hc.Field) []int {
 	if len(fields) <= 24 {
-		out := make([]int, 0, len(fields))
+		var stack [24]int // allocation-free narrow path
+		n := 0
 		for i := range fields {
 			last := true
 			for j := i + 1; j < len(fields); j++ {
@@ -111,10 +112,11 @@ func lastOccurrences(fields []hc.Field) []int {
 				}
 			}
 			if last {
-				out = append(out, i)
+				stack[n] = i
+				n++
 			}
 		}
-		return out
+		return stack[:n:n]
 	}
 	seen := make(map[string]struct{}, len(fields)*2)
 	kept := make([]int, 0, len(fields))

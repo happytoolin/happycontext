@@ -95,9 +95,10 @@ func attrOf(f hc.Field) slog.Attr {
 		return slog.Uint64(f.Key(), u)
 	}
 	if fl, ok := f.Float(); ok {
-		if f.Kind() == hc.KindFloat32 {
-			return slog.Any(f.Key(), float32(fl)) // preserves 32-bit JSON rendering
-		}
+		// float32 renders widened through slog on Go >= 1.24 (AnyValue
+		// converts to Float64Value; slog has no Float32 constructor) —
+		// the same shape the v0 adapter produced. The JSON sink and the
+		// zap/zerolog bridges preserve 32-bit precision.
 		return slog.Float64(f.Key(), fl)
 	}
 	if b, ok := f.Bool(); ok {
@@ -119,7 +120,8 @@ func attrOf(f hc.Field) slog.Attr {
 // and last-write-wins holds at every width).
 func lastOccurrences(fields []hc.Field) []int {
 	if len(fields) <= 24 {
-		out := make([]int, 0, len(fields))
+		var stack [24]int // allocation-free narrow path
+		n := 0
 		for i := range fields {
 			last := true
 			for j := i + 1; j < len(fields); j++ {
@@ -129,10 +131,11 @@ func lastOccurrences(fields []hc.Field) []int {
 				}
 			}
 			if last {
-				out = append(out, i)
+				stack[n] = i
+				n++
 			}
 		}
-		return out
+		return stack[:n:n]
 	}
 	seen := make(map[string]struct{}, len(fields)*2)
 	kept := make([]int, 0, len(fields))
