@@ -102,7 +102,7 @@ func runImport(ctx context.Context, rt *hc.Runtime) (err error) {
 	})
 	defer op.End(&err) // captures errors AND panics; re-panics
 
-	hc.Add(ctx, "rows", 42, "source", "queue")
+	hc.Add(op.Context(), "rows", 42, "source", "queue")
 	return doImport(ctx)
 }
 ```
@@ -224,7 +224,7 @@ mw := stdhc.Middleware(hc.MustCompile(hc.Config{
 		hc.KeepPathPrefix("/admin"), // always keep admin paths
 		hc.KeepSlowerThan(500*time.Millisecond),
 	),
-}))
+})))
 ```
 
 Sampler building blocks:
@@ -293,7 +293,7 @@ sink := hc.NewJSONSink(os.Stdout)
 
 The wire format matches `zerolog.New(w).With().Timestamp().Logger()`
 through `adapter/zerolog`, so existing pipelines ingest it unchanged.
-Field order remains unspecified (map-based, same as the adapters).
+Field order is insertion order — deterministic by construction, identical across every sink.
 
 ## More Examples
 
@@ -316,7 +316,7 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	sink := sloghc.New(logger)
-	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
+	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -351,7 +351,7 @@ func main() {
 	sink := sloghc.New(logger)
 
 	r := gin.New()
-	r.Use(ginhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
+	r.Use(ginhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
 	r.GET("/users/:id", func(c *gin.Context) {
 		hc.Add(c.Request.Context(), "router", "gin")
 		c.Status(200)
@@ -384,7 +384,7 @@ func main() {
 	sink := sloghc.New(logger)
 
 	app := fiber.New()
-	app.Use(fiberhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/users/:id", func(c *fiber.Ctx) error {
 		hc.Add(c.UserContext(), "router", "fiber-v2")
 		return c.SendStatus(200)
@@ -417,7 +417,7 @@ func main() {
 	sink := sloghc.New(logger)
 
 	app := fiber.New()
-	app.Use(fiberv3hc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberv3hc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/users/:id", func(c fiber.Ctx) error {
 		hc.Add(c.Context(), "router", "fiber-v3")
 		return c.SendStatus(200)
@@ -450,7 +450,7 @@ func main() {
 	sink := sloghc.New(logger)
 
 	e := echo.New()
-	e.Use(echohc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
+	e.Use(echohc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
 	e.GET("/users/:id", func(c echo.Context) error {
 		hc.Add(c.Request().Context(), "router", "echo")
 		return c.NoContent(200)
@@ -480,7 +480,7 @@ import (
 func main() {
 	logger := zap.NewExample()
 	sink := zaphc.New(logger)
-	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
+	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -513,7 +513,7 @@ import (
 func main() {
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
 	sink := zerologhc.New(&logger)
-	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
+	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

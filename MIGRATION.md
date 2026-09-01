@@ -92,7 +92,7 @@ constructors.
 
 ## Outcome precedence
 
-v0 resolved `explicit outcome > error > panic` in some paths; v1 is
+v0 resolved `explicit outcome > panic > error` in some paths; v1 is
 strictly **panic > error > explicit > 5xx > success**. Errors and
 panics also **bypass sampling structurally** — before any custom
 `Sampler` runs — so `NeverSampler()` can no longer hide failures.
@@ -112,6 +112,10 @@ panics also **bypass sampling structurally** — before any custom
 - **Durations** through bridges render each host's native shape
   (unchanged from v0 adapters); the first-party JSON sink renders float
   milliseconds.
+- **float32 values**: the JSON sink and the zap/zerolog bridges render
+  32-bit precision (`0.1`); the slog host widens on Go ≥ 1.24
+  (`slog.AnyValue` converts to `Float64Value`) — same as the v0
+  adapter.
 - **Failure levels on default policies**: unchanged (INFO success,
   ERROR failures/panics).
 
