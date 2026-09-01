@@ -91,8 +91,11 @@ func TestLifecycleHTTPDefaults(t *testing.T) {
 	if v, _ := ev.Lookup("op.outcome"); v != "success" {
 		t.Errorf("outcome = %v", v)
 	}
-	if v, _ := ev.Lookup("op.code"); v != int64(204) {
-		t.Errorf("op.code = %v", v)
+	if _, hasOpCode := ev.Lookup("op.code"); hasOpCode {
+		t.Error("op.code must not be emitted for HTTP operations (http.status carries it)")
+	}
+	if v, _ := ev.Lookup("http.status"); v != int64(204) {
+		t.Errorf("http.status = %v", v)
 	}
 	if ev.Level() != LevelInfo {
 		t.Errorf("level = %v", ev.Level())
@@ -274,6 +277,46 @@ func TestSampleInputLookupAndFields(t *testing.T) {
 	}
 	if len(ts.Events()) != 1 {
 		t.Fatal("success event dropped by its own sampler")
+	}
+}
+
+// TestNonHTTPOpCode pins the canonical-field rule: op.code is non-HTTP
+// only, surfaced from the explicit op.code field the caller wrote.
+func TestNonHTTPOpCode(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "import"})
+	Add(op.Context(), "op.code", 42)
+	op.End(nil)
+	ev := ts.Events()[0]
+	if v, _ := ev.Lookup("op.code"); v != int64(42) {
+		t.Fatalf("op.code = %v, want 42", v)
+	}
+
+	// absent when not set
+	op2 := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "x"})
+	op2.End(nil)
+	if _, has := ts.Events()[1].Lookup("op.code"); has {
+		t.Fatal("op.code emitted without an explicit field")
+	}
+}
+
+// TestExplicitOpCodeOnHTTPIsUserData pins the boundary: the core never
+// SYNTHESIZES op.code for HTTP operations, but an explicit user write
+// is their data and survives.
+func TestExplicitOpCodeOnHTTPIsUserData(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "GET /x"})
+	Add(op.Context(), "http.status", 200)
+	op.End(nil)
+	if _, has := ts.Events()[0].Lookup("op.code"); has {
+		t.Fatal("core synthesized op.code for an HTTP operation")
+	}
+
+	op2 := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "GET /x"})
+	Add(op2.Context(), "http.status", 200, "op.code", 777)
+	op2.End(nil)
+	if v, has := ts.Events()[1].Lookup("op.code"); !has || v != int64(777) {
+		t.Fatalf("explicit user op.code dropped: %v %v", v, has)
 	}
 }
 

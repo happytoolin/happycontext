@@ -102,7 +102,7 @@ func (op *Operation) End(errp *error) (emitted bool) {
 	scan := scanWAL(ev)
 	code = scan.code
 	outcome = resolveOutcomeV2(err, recovered, code, scan.outcome)
-	annotatePostSeal(ev, &op.ref, duration, code, outcome)
+	annotatePostSeal(ev, &op.ref, duration, normalizeDomain(start.Domain) == DomainHTTP, scan, outcome)
 
 	emitted = op.commit(ev, rt, start, outcome, code, duration, now, err, recovered != nil, scan)
 	op.emitted = emitted
@@ -119,8 +119,10 @@ func (op *Operation) End(errp *error) (emitted bool) {
 type walScan struct {
 	outcome    Outcome
 	hasOutcome bool
-	code       int
+	code       int // resolved http.status (outcome + sampling input)
 	hasCode    bool
+	opCode     int // explicit op.code field (non-HTTP operations)
+	hasOpCode  bool
 	method     string
 	path       string
 }
@@ -141,6 +143,11 @@ func scanWAL(ev *event) walScan {
 			if !s.hasCode && f.kind == KindInt {
 				s.code = int(f.num)
 				s.hasCode = true
+			}
+		case "op.code":
+			if !s.hasOpCode && f.kind == KindInt {
+				s.opCode = int(f.num)
+				s.hasOpCode = true
 			}
 		case "http.method":
 			if s.method == "" && f.kind == KindString {
@@ -232,11 +239,15 @@ func annotateOperationFailures(ev *event, ref *walRef, err error, recovered any)
 // annotatePostSeal appends the completion fields after sealing. The
 // writes belong to the owner (the request goroutine) and cannot race
 // stragglers: everything else is already sealed off.
-func annotatePostSeal(ev *event, ref *walRef, duration time.Duration, code int, outcome Outcome) {
+//
+// Canonical fields: HTTP operations carry http.status (op.code is
+// non-HTTP only, from the explicit op.code field); non-HTTP operations
+// surface their explicit op.code here (ledger: canonical fields).
+func annotatePostSeal(ev *event, ref *walRef, duration time.Duration, isHTTP bool, scan walScan, outcome Outcome) {
 	gen := ref.gen
 	ev.appendSealed(gen, fieldInt64("duration_ms", duration.Milliseconds()))
-	if code != 0 {
-		ev.appendSealed(gen, fieldInt64("op.code", int64(code)))
+	if !isHTTP && scan.hasOpCode {
+		ev.appendSealed(gen, fieldInt64("op.code", int64(scan.opCode)))
 	}
 	ev.appendSealed(gen, fieldStr("op.outcome", string(outcome)))
 }

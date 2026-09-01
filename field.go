@@ -122,8 +122,8 @@ func (f Field) Raw() (raw []byte, ok bool) {
 	return nil, false
 }
 
-// Any returns the value for any-kinds (and the underlying error/raw
-// payload for those kinds). It never boxes: typed kinds return nil.
+// Any returns the value for any-kinds. It never boxes: typed kinds
+// (including error and raw) return nil — use Err() and Raw().
 func (f Field) Any() any {
 	if f.kind == KindAny {
 		return f.val

@@ -1,109 +1,123 @@
 package zerologadapter
 
 import (
+	"context"
 	"time"
 
 	"github.com/happytoolin/happycontext"
 	"github.com/rs/zerolog"
 )
 
-// SinkOptions controls zerolog adapter behavior.
-//
-// It is currently empty and reserved for future options. The previous
-// DeterministicOrder option was removed: adapters no longer sort fields,
-// because the map-based sink contract cannot carry insertion order and
-// sorting on top of it only masked that. Deterministic field order
-// arrives structurally with the v2 record core.
-type SinkOptions struct{}
-
-// Sink writes happycontext events to zerolog.
+// Sink writes happycontext records to zerolog.
 type Sink struct {
 	logger *zerolog.Logger
 }
 
 // New creates a zerolog-backed sink.
 func New(l *zerolog.Logger) *Sink {
-	return NewWithOptions(l, SinkOptions{})
-}
-
-// NewWithOptions creates a zerolog-backed sink with options.
-func NewWithOptions(l *zerolog.Logger, opts SinkOptions) *Sink {
 	return &Sink{logger: l}
 }
 
-// Write implements hc.Sink.
-func (z *Sink) Write(level hc.Level, message string, fields map[string]any) {
-	if z == nil || z.logger == nil {
+// Write implements hc.Sink: the record's fields are appended in
+// insertion order (last-write-wins duplicates resolved) through
+// zerolog's typed constructors — the same field shapes the v0 adapter
+// produced. Pre-encoded raw JSON is appended verbatim (RawJSON).
+func (z *Sink) Write(ctx context.Context, rec *hc.Record) {
+	if z == nil || z.logger == nil || rec == nil {
 		return
 	}
 
-	var event *zerolog.Event
-	switch level {
-	case hc.LevelDebug:
-		event = z.logger.Debug()
-	case hc.LevelWarn:
-		event = z.logger.Warn()
-	case hc.LevelError:
-		event = z.logger.Error()
-	default:
-		event = z.logger.Info()
-	}
+	event := z.eventFor(rec.Level())
 	if !event.Enabled() {
 		return
 	}
-	if message == "" {
-		message = hc.DefaultMessage
-	}
-	if len(fields) == 0 {
-		event.Msg(message)
-		return
-	}
 
-	for k, v := range fields {
-		event = appendField(event, k, v)
+	var seen map[string]struct{}
+	if len(rec.Fields()) > 24 {
+		seen = make(map[string]struct{}, len(rec.Fields())*2)
 	}
-	event.Msg(message)
+	fields := rec.Fields()
+	for i := range fields {
+		f := fields[i]
+		if !lastOccurrence(fields, i, seen) {
+			continue
+		}
+		if seen != nil {
+			seen[f.Key()] = struct{}{}
+		}
+		event = appendField(event, f)
+	}
+	event.Time("time", time.Now())
+	event.Msg(rec.Message())
 }
 
-func appendField(event *zerolog.Event, key string, value any) *zerolog.Event {
-	switch val := value.(type) {
-	case string:
-		return event.Str(key, val)
-	case int:
-		return event.Int(key, val)
-	case int8:
-		return event.Int8(key, val)
-	case int16:
-		return event.Int16(key, val)
-	case int32:
-		return event.Int32(key, val)
-	case int64:
-		return event.Int64(key, val)
-	case uint:
-		return event.Uint(key, val)
-	case uint8:
-		return event.Uint8(key, val)
-	case uint16:
-		return event.Uint16(key, val)
-	case uint32:
-		return event.Uint32(key, val)
-	case uint64:
-		return event.Uint64(key, val)
-	case float32:
-		return event.Float32(key, val)
-	case float64:
-		return event.Float64(key, val)
-	case bool:
-		return event.Bool(key, val)
-	case time.Time:
-		return event.Time(key, val)
-	case time.Duration:
-		return event.Dur(key, val)
-	case error:
-		return event.Str(key, val.Error())
+func (z *Sink) eventFor(level hc.Level) *zerolog.Event {
+	switch level {
+	case hc.LevelDebug:
+		return z.logger.Debug()
+	case hc.LevelWarn:
+		return z.logger.Warn()
+	case hc.LevelError:
+		return z.logger.Error()
 	default:
-		return event.Interface(key, value)
+		return z.logger.Info()
 	}
+}
+
+// appendField maps a typed record field to zerolog's constructor — the
+// identical mapping the v0 adapter used (error → message string,
+// duration → float milliseconds via zerolog defaults, time → RFC3339
+// string), with RawJSON appending pre-encoded bytes verbatim.
+func appendField(event *zerolog.Event, f hc.Field) *zerolog.Event {
+	key := f.Key()
+	if str, ok := f.Str(); ok {
+		return event.Str(key, str)
+	}
+	if i, ok := f.Int(); ok {
+		return event.Int64(key, i)
+	}
+	if u, ok := f.Uint(); ok {
+		return event.Uint64(key, u)
+	}
+	if fl, ok := f.Float(); ok {
+		if f.Kind() == hc.KindFloat32 {
+			return event.Float32(key, float32(fl))
+		}
+		return event.Float64(key, fl)
+	}
+	if b, ok := f.Bool(); ok {
+		return event.Bool(key, b)
+	}
+	if tm, ok := f.Time(); ok {
+		return event.Time(key, tm)
+	}
+	if d, ok := f.Duration(); ok {
+		return event.Dur(key, d)
+	}
+	if err, ok := f.Err(); ok {
+		return event.Str(key, err.Error())
+	}
+	if raw, ok := f.Raw(); ok {
+		return event.RawJSON(key, raw)
+	}
+	return event.Interface(key, f.Any())
+}
+
+// lastOccurrence reports whether index i holds the field's last write
+// (the encode-side duplicate resolution, mirrored from the core: linear
+// scan for narrow events, seen-set for wide ones so the 128-field
+// matrix point stays linear).
+func lastOccurrence(fields []hc.Field, i int, seen map[string]struct{}) bool {
+	if seen != nil {
+		_, dup := seen[fields[i].Key()]
+		return !dup
+	}
+	for j := i + 1; j < len(fields); j++ {
+		if fields[j].Key() == fields[i].Key() {
+			return false
+		}
+	}
+	return true
 }
 
 var _ hc.Sink = (*Sink)(nil)

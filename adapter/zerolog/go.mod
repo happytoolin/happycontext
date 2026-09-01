@@ -12,3 +12,5 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 )
+
+replace github.com/happytoolin/happycontext => ../..

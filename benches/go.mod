@@ -7,6 +7,9 @@ require (
 	github.com/gofiber/fiber/v2 v2.52.15
 	github.com/gofiber/fiber/v3 v3.5.0
 	github.com/happytoolin/happycontext v0.5.0
+	github.com/happytoolin/happycontext/adapter/slog v0.0.0-00010101000000-000000000000
+	github.com/happytoolin/happycontext/adapter/zap v0.0.0-00010101000000-000000000000
+	github.com/happytoolin/happycontext/adapter/zerolog v0.0.0-00010101000000-000000000000
 	github.com/happytoolin/happycontext/integration/echo v0.0.0-00010101000000-000000000000
 	github.com/happytoolin/happycontext/integration/fiber v0.0.0-00010101000000-000000000000
 	github.com/happytoolin/happycontext/integration/fiberv3 v0.0.0-00010101000000-000000000000
@@ -23,7 +26,6 @@ require (
 	github.com/bytedance/sonic v1.15.0 // indirect
 	github.com/bytedance/sonic/loader v0.5.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
-	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
@@ -76,3 +78,9 @@ replace github.com/happytoolin/happycontext/integration/echo => ../integration/e
 replace github.com/happytoolin/happycontext/integration/fiber => ../integration/fiber
 
 replace github.com/happytoolin/happycontext/integration/fiberv3 => ../integration/fiberv3
+
+replace github.com/happytoolin/happycontext/adapter/slog => ../adapter/slog
+
+replace github.com/happytoolin/happycontext/adapter/zap => ../adapter/zap
+
+replace github.com/happytoolin/happycontext/adapter/zerolog => ../adapter/zerolog

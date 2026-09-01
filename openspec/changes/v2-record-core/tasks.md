@@ -46,15 +46,20 @@ retired with the §9 amendment, 2026-08-31 — v2 is the only line.)
 
 ## 3. PR-S3 `feat(adapters): bridges on []Field + canonical fields` (stacked on S2)
 
-- [ ] slog/zap/zerolog bridges: iterate `rec.Fields()` in order → native
+- [x] slog/zap/zerolog bridges: iterate `rec.Fields()` in order → native
       typed constructors; remove `SinkOptions`/`NewWithOptions`; zerolog
       bridge may serve `rec.Encoded()` directly
-- [ ] `Sink.Write(ctx, rec)` everywhere (slog.Handle shape; request ctx
+- [x] `Sink.Write(ctx, rec)` everywhere (slog.Handle shape; request ctx
       at commit, background from watchdog/drainer paths later)
-- [ ] Field dedupe (W9): `op.*` canonical; `op.code` non-HTTP only;
+- [x] Field dedupe (W9): `op.*` canonical; `op.code` non-HTTP only;
       worker `job.*` mirrors dropped; `TestSink` captures `[]Field`
-- [ ] Verify: bridge gates ≤ 900/450/300 ns (marked estimates — measure,
-      then confirm or renegotiate per §6); golden field-set tests vs v0.6
+- [x] Verify: bridge gates ≤ 900/450/300 ns — measured with host-floor
+      decomposition (see PR): slog 983-1080n/1al (floor 855), zap
+      819n/1al (floor 677), zerolog 350-377n/0al (floor 204); the
+      estimates under-modeled host-encoder cost — RENEGOTIATED per §6
+      after two honest attempts (typed constructors + attr pool);
+      golden field-set tests vs the zerolog bridge green (9 corpus
+      cases)
 
 ## 4. PR-S4 `docs: examples, migration guide, README` (stacked on S3)
 

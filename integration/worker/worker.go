@@ -39,16 +39,11 @@ func Start(ctx context.Context, rt *hc.Runtime, meta JobMeta) *hc.Operation {
 	return op
 }
 
+// addJobFields records only what op.* does not already carry: the
+// mirrors (name/id/queue/attempt/max_attempts) were dropped with the
+// canonical-field pass; scheduled_at has no op.* equivalent.
 func addJobFields(ctx context.Context, meta JobMeta) {
-	kv := []any{
-		"job.name", meta.Name,
-		"job.id", meta.ID,
-		"job.queue", meta.Queue,
-		"job.attempt", meta.Attempt,
-		"job.max_attempts", meta.MaxAttempts,
-	}
 	if !meta.ScheduledAt.IsZero() {
-		kv = append(kv, "job.scheduled_at", meta.ScheduledAt.UTC())
+		hc.Add(ctx, "job.scheduled_at", meta.ScheduledAt.UTC())
 	}
-	hc.Add(ctx, kv[0].(string), kv[1], kv[2:]...)
 }

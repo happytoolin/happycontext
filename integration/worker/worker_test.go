@@ -49,11 +49,13 @@ func TestStartAddsWorkerFields(t *testing.T) {
 	if fields["op.name"] != "cleanup" {
 		t.Fatalf("op.name = %v", fields["op.name"])
 	}
-	if fields["job.name"] != "cleanup" {
-		t.Fatalf("job.name = %v", fields["job.name"])
+	// job.* mirrors dropped with the canonical-field pass: op.name and
+	// op.source (queue) carry them
+	if fields["op.source"] != "nightly" {
+		t.Fatalf("op.source = %v", fields["op.source"])
 	}
-	if fields["job.queue"] != "nightly" {
-		t.Fatalf("job.queue = %v", fields["job.queue"])
+	if _, hasMirror := fields["job.name"]; hasMirror {
+		t.Fatal("job.name mirror still emitted")
 	}
 	if got, ok := fields["job.scheduled_at"].(time.Time); !ok || !got.Equal(scheduledAt) {
 		t.Fatalf("job.scheduled_at = %v", fields["job.scheduled_at"])

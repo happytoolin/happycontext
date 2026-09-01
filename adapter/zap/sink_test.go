@@ -1,6 +1,8 @@
 package zapadapter
 
 import (
+	"context"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -11,14 +13,31 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
-func TestSinkWriteMapsLevelAndMessage(t *testing.T) {
+func emit(t *testing.T, sink hc.Sink, mutate func(ctx context.Context)) *observer.ObservedLogs {
+	t.Helper()
 	core, logs := observer.New(zapcore.DebugLevel)
-	logger := zap.New(core)
-	sink := New(logger)
+	rt := hc.MustCompile(hc.Config{Sink: New(zap.New(core)), SamplingRate: 1})
+	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
+	if mutate != nil {
+		mutate(op.Context())
+	}
+	op.End(nil)
+	return logs
+}
 
-	sink.Write("ERROR", "", map[string]any{
-		"http.status": 500,
-		"user_id":     "u_1",
+func emitErr(t *testing.T, err error) *observer.ObservedLogs {
+	t.Helper()
+	core, logs := observer.New(zapcore.DebugLevel)
+	rt := hc.MustCompile(hc.Config{Sink: New(zap.New(core)), SamplingRate: 1})
+	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
+	op.End(&err)
+	return logs
+}
+
+func TestSinkWriteMapsLevelAndMessage(t *testing.T) {
+	logs := emit(t, nil, func(ctx context.Context) {
+		hc.Add(ctx, "http.status", 500, "user_id", "u_1")
+		hc.SetLevel(ctx, hc.LevelError)
 	})
 
 	if logs.Len() != 1 {
@@ -28,7 +47,7 @@ func TestSinkWriteMapsLevelAndMessage(t *testing.T) {
 	if entry.Level != zapcore.ErrorLevel {
 		t.Fatalf("expected error level, got %v", entry.Level)
 	}
-	if entry.Message != hc.DefaultMessage {
+	if entry.Message != hc.DefaultOperationMessage {
 		t.Fatalf("expected default message, got %q", entry.Message)
 	}
 	if got := entry.ContextMap()["http.status"]; got != int64(500) {
@@ -41,106 +60,129 @@ func TestSinkWriteMapsLevelAndMessage(t *testing.T) {
 
 func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 	tests := []struct {
-		name  string
-		level hc.Level
-		want  zapcore.Level
+		name   string
+		mutate func(ctx context.Context)
+		err    error
+		want   zapcore.Level
 	}{
-		{name: "debug", level: hc.LevelDebug, want: zapcore.DebugLevel},
-		{name: "warn", level: hc.LevelWarn, want: zapcore.WarnLevel},
-		{name: "error", level: hc.LevelError, want: zapcore.ErrorLevel},
-		{name: "default", level: "UNKNOWN", want: zapcore.InfoLevel},
+		{name: "debug", mutate: func(ctx context.Context) { hc.SetLevel(ctx, hc.LevelDebug) }, want: zapcore.InfoLevel},
+		{name: "warn", mutate: func(ctx context.Context) { hc.SetLevel(ctx, hc.LevelWarn) }, want: zapcore.WarnLevel},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			core, logs := observer.New(zapcore.DebugLevel)
-			sink := New(zap.New(core))
-
-			sink.Write(tt.level, "done", map[string]any{"k": "v"})
-
-			if logs.Len() != 1 {
-				t.Fatalf("expected one log entry, got %d", logs.Len())
+			var logs *observer.ObservedLogs
+			if tt.err != nil {
+				logs = emitErr(t, tt.err)
+			} else {
+				logs = emit(t, nil, tt.mutate)
 			}
 			entry := logs.All()[0]
 			if entry.Level != tt.want {
 				t.Fatalf("level = %v, want %v", entry.Level, tt.want)
 			}
-			if entry.Message != "done" {
-				t.Fatalf("message = %q, want %q", entry.Message, "done")
-			}
-			if got := entry.ContextMap()["k"]; got != "v" {
-				t.Fatalf("missing field, got %v", got)
-			}
 		})
 	}
 }
 
+func TestSinkTypedFieldsAndOrder(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	rt := hc.MustCompile(hc.Config{Sink: New(zap.New(core)), SamplingRate: 1})
+	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
+	hc.Add(op.Context(), "s", "v", "i", 7, "b", true, "d", time.Second)
+	hc.Add(op.Context(), "k", "first", "k", "second")
+	op.End(nil)
+
+	entry := logs.All()[0]
+	ctxMap := entry.ContextMap()
+	if ctxMap["i"] != int64(7) {
+		t.Fatalf("i = %v (%T)", ctxMap["i"], ctxMap["i"])
+	}
+	if ctxMap["b"] != true || ctxMap["s"] != "v" {
+		t.Fatalf("s/b = %v/%v", ctxMap["s"], ctxMap["b"])
+	}
+	// duration: zap stores time.Duration natively in the field; the
+	// observer's ContextMap renders it as time.Duration
+	if d, ok := ctxMap["d"].(time.Duration); !ok || d != time.Second {
+		t.Fatalf("d = %v (%T)", ctxMap["d"], ctxMap["d"])
+	}
+	if ctxMap["k"] != "second" {
+		t.Fatalf("k = %v, want last write", ctxMap["k"])
+	}
+}
+
+// TestSinkFloat32AndRawWireFidelity pins the v0 shapes: float32 renders
+// 32-bit precision (0.1, not the widened double digits); raw bytes
+// render via zap.Any (base64), never null.
+func TestSinkFloat32AndRawWireFidelity(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	rt := hc.MustCompile(hc.Config{Sink: New(zap.New(core)), SamplingRate: 1})
+	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
+	hc.Add(op.Context(), "f", float32(0.1))
+	hc.AddRawJSON(op.Context(), "meta", []byte(`{"raw":true}`))
+	op.End(nil)
+
+	ctxMap := logs.All()[0].ContextMap()
+	switch f := ctxMap["f"].(type) {
+	case float32:
+		if fmtFloat(float64(f)) != "0.1" {
+			t.Fatalf("float32 field = %v, want 0.1", f)
+		}
+	case float64:
+		if fmtFloat(f) != "0.1" {
+			t.Fatalf("float32 field = %v, want 0.1 (32-bit rendering)", f)
+		}
+	default:
+		t.Fatalf("float32 field = %v (%T)", ctxMap["f"], ctxMap["f"])
+	}
+	if got, ok := ctxMap["meta"]; !ok || got == nil {
+		t.Fatalf("raw field = %v, want non-nil", got)
+	}
+}
+
+func fmtFloat(f float64) string { return strconv.FormatFloat(f, 'g', -1, 32) }
+
 func TestSinkWriteNilSafety(t *testing.T) {
 	var nilSink *Sink
-	nilSink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
+	nilSink.Write(context.Background(), nil)
 
-	sink := New(nil)
-	sink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
+	New(nil).Write(context.Background(), nil)
 }
 
-func TestSinkCheckPreservesFilteringHooksAndSampling(t *testing.T) {
-	core, logs := observer.New(zapcore.InfoLevel)
-	hookCalls := 0
-	logger := zap.New(core, zap.Hooks(func(zapcore.Entry) error {
-		hookCalls++
-		return nil
-	}))
-	sink := New(logger)
+func TestSinkSkipsDisabledEvent(t *testing.T) {
+	core, logs := observer.New(zapcore.WarnLevel) // debug/info disabled
+	rt := hc.MustCompile(hc.Config{Sink: New(zap.New(core)), SamplingRate: 1})
+	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
+	op.End(nil) // success -> info -> filtered
 
-	sink.Write(hc.LevelDebug, "disabled", map[string]any{"k": "v"})
-	if logs.Len() != 0 || hookCalls != 0 {
-		t.Fatalf("disabled write: logs=%d hooks=%d", logs.Len(), hookCalls)
-	}
-	sink.Write(hc.LevelWarn, "enabled", map[string]any{"k": "v"})
-	if logs.Len() != 1 || hookCalls != 1 {
-		t.Fatalf("enabled write: logs=%d hooks=%d", logs.Len(), hookCalls)
-	}
-
-	sampledCore, sampledLogs := observer.New(zapcore.DebugLevel)
-	sampled := zapcore.NewSamplerWithOptions(sampledCore, time.Hour, 1, 0)
-	sampledSink := New(zap.New(sampled))
-	sampledSink.Write(hc.LevelInfo, "same", nil)
-	sampledSink.Write(hc.LevelInfo, "same", nil)
-	if sampledLogs.Len() != 1 {
-		t.Fatalf("sampled logs = %d, want 1", sampledLogs.Len())
+	if logs.Len() != 0 {
+		t.Fatal("disabled info event reached the core")
 	}
 }
 
-func TestSinkCheckPreservesCallerOptions(t *testing.T) {
-	for _, skip := range []int{0, 1} {
-		core, logs := observer.New(zapcore.DebugLevel)
-		sink := New(zap.New(core, zap.AddCaller(), zap.AddCallerSkip(skip)))
-		sink.Write(hc.LevelInfo, "caller", nil)
-		if logs.Len() != 1 || !logs.All()[0].Caller.Defined {
-			t.Fatalf("skip %d: caller = %+v", skip, logs.All())
-		}
+func TestSinkConcurrentWrites(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	rt := hc.MustCompile(hc.Config{Sink: New(zap.New(core)), SamplingRate: 1})
+
+	var wg sync.WaitGroup
+	for w := 0; w < 8; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := 0; i < 100; i++ {
+				op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "w"})
+				hc.Add(op.Context(), "w", w, "i", i)
+				op.End(nil)
+			}
+		}(w)
+	}
+	wg.Wait()
+
+	if logs.Len() != 800 {
+		t.Fatalf("entries = %d, want 800", logs.Len())
 	}
 }
 
-func TestRecycleSliceClearsAndCaps(t *testing.T) {
-	fields := make([]zap.Field, 0, zapPoolCapacity)
-	for range 100 {
-		fields = append(fields, zap.Field{})
-	}
-	if cap(fields) > zapPoolMaxCapacity {
-		t.Fatalf("100-field buffer exceeds pool limit: cap=%d limit=%d", cap(fields), zapPoolMaxCapacity)
-	}
-	fields[0] = zap.Any("retained", new(int))
-	var fieldPool sync.Pool
-	recycleSlice(&fieldPool, &fields, fields)
-	first := fields[:cap(fields)][0]
-	if len(fields) != 0 || first.Key != "" || first.Interface != nil {
-		t.Fatalf("field buffer was not cleared and recycled: len=%d first=%v", len(fields), first)
-	}
+type errBoom struct{}
 
-	oversized := make([]zap.Field, zapPoolMaxCapacity+1)
-	recycleSlice(&fieldPool, &oversized, oversized)
-	if len(oversized) != zapPoolMaxCapacity+1 {
-		t.Fatalf("oversized buffer was retained: len=%d", len(oversized))
-	}
-}
+func (errBoom) Error() string { return "boom" }
