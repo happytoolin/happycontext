@@ -43,7 +43,7 @@ jobs:
             if go test . -run '^$' -fuzz "^$target$" -fuzztime 10m; then
               echo "PASS $target"
             else
-              echo "FAIL $target"
+              echo "FAIL $target" | tee -a /tmp/fuzz/encoder-failures
               echo "  - $target" >> /tmp/fuzz/core-failures
             fi
           done
