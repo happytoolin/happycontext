@@ -282,7 +282,9 @@ constructors.
 `hc.NewJSONSink(w io.Writer)` emits the same canonical event shape as the
 zerolog adapter — lowercase `level`, RFC3339 `time`, your fields, `message`
 last — as one JSON line per event, with zero dependencies beyond the
-standard library:
+standard library (the module's only non-stdlib require is
+go.uber.org/goleak — a test-only dependency used by the package's
+goroutine-leak check, never linked into consumers):
 
 ```go
 sink := hc.NewJSONSink(os.Stdout)

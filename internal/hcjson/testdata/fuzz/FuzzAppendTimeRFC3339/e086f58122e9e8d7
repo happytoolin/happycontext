@@ -1,0 +1,4 @@
+go test fuzz v1
+int64(1788344916)
+int32(741950823)
+byte('\x1f')

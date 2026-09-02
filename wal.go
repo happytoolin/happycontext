@@ -198,29 +198,57 @@ func (e *event) setRaw(ref *walRef, key string, raw []byte) {
 	e.append(ref.gen, Field{key: key, kind: KindRaw, val: raw})
 }
 
+// setError records the structured error field and latches hasErr.
+// Armed events serialize the append + latch under mu so a concurrent
+// seal cannot split them (the P5 matrix pins the discipline).
 func (e *event) setError(ref *walRef, err error) {
 	if err == nil {
 		return
 	}
-	e.appendAny(ref.gen, "error", structuredErrorField(err))
-	if live(e, ref.gen) { // hasErr only when the write belonged to this generation
+	s := e.state.Load()
+	if s>>walStateBits != ref.gen {
+		return
+	}
+	switch walState(s & walStateMask) {
+	case walArmed:
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		if cur := e.state.Load(); cur>>walStateBits == ref.gen && walState(cur&walStateMask) == walArmed {
+			e.fields = append(e.fields, Field{key: "error", kind: KindAny, val: structuredErrorField(err)})
+			e.hasErr = true // only when the write belonged to this generation
+		}
+	case walLive:
+		e.fields = append(e.fields, Field{key: "error", kind: KindAny, val: structuredErrorField(err)})
 		e.hasErr = true
 	}
 }
 
-// live reports whether the event is still mutable for gen (one atomic
-// load, same word the appends check).
-func live(e *event, gen uint64) bool {
-	s := e.state.Load()
-	return s>>walStateBits == gen && walState(s&walStateMask) != walSealed
-}
-
+// setMessage overrides the event message. Only walLive and walArmed
+// are mutable: walSealedArmed is sealed — the owner's post-seal writes
+// go through appendSealed under mu, never through the setter family —
+// so a setter landing on a sealedArmed event would be a post-seal
+// straggler write (the P5 matrix pins this). Armed events write under
+// mu.
 func (e *event) setMessage(ref *walRef, msg string) {
-	if msg == "" || !live(e, ref.gen) {
+	if msg == "" {
 		return
 	}
-	e.msg = msg
-	e.hasMsg = true
+	s := e.state.Load()
+	if s>>walStateBits != ref.gen {
+		return
+	}
+	switch walState(s & walStateMask) {
+	case walArmed:
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		if cur := e.state.Load(); cur>>walStateBits == ref.gen && walState(cur&walStateMask) == walArmed {
+			e.msg = msg
+			e.hasMsg = true
+		}
+	case walLive:
+		e.msg = msg
+		e.hasMsg = true
+	}
 }
 
 func (e *event) setRoute(ref *walRef, route string) {
@@ -230,12 +258,28 @@ func (e *event) setRoute(ref *walRef, route string) {
 	e.appendStr(ref.gen, "http.route", route)
 }
 
+// setLevel records the requested level floor. Same liveness rules and
+// armed-mu discipline as setMessage.
 func (e *event) setLevel(ref *walRef, level Level) {
-	if !IsValidLevel(level) || !live(e, ref.gen) {
+	if !IsValidLevel(level) {
 		return
 	}
-	e.requestedLevel = level
-	e.hasRequestedLvl = true
+	s := e.state.Load()
+	if s>>walStateBits != ref.gen {
+		return
+	}
+	switch walState(s & walStateMask) {
+	case walArmed:
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		if cur := e.state.Load(); cur>>walStateBits == ref.gen && walState(cur&walStateMask) == walArmed {
+			e.requestedLevel = level
+			e.hasRequestedLvl = true
+		}
+	case walLive:
+		e.requestedLevel = level
+		e.hasRequestedLvl = true
+	}
 }
 
 // snapshotFields returns a copy of the current WAL tail for an armed

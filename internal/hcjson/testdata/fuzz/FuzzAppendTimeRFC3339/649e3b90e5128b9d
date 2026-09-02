@@ -1,0 +1,4 @@
+go test fuzz v1
+int64(80)
+int32(-64)
+byte('#')

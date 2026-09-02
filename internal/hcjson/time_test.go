@@ -2,6 +2,7 @@ package hcjson
 
 import (
 	"bytes"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
@@ -98,4 +99,82 @@ func TestAppendTimeRFC3339CachedConcurrent(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// FuzzAppendTimeRFC3339 checks the cached formatter continuously
+// (dst-research §6.4): for times expressed in the process's local zone
+// — the documented cache contract — the output must equal
+// time.Format(time.RFC3339) exactly, whatever the second, and must
+// parse back to the same wall-clock second. Times from other zones go
+// through the documented-caveat path (the cache may reuse the local
+// rendering), so for those the oracle is parse-back-to-the-same-second
+// only, which is the guarantee downstream parsers rely on.
+func FuzzAppendTimeRFC3339(f *testing.F) {
+	seeds := []time.Time{
+		time.Unix(0, 0),
+		time.Unix(-1, 0),
+		time.Date(1, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC),
+		time.Date(2026, 9, 1, 10, 0, 0, 999999999, time.UTC),
+		time.Date(2026, 9, 1, 10, 0, 0, 1, time.FixedZone("+14", 14*3600)),
+		time.Date(2026, 9, 1, 10, 0, 0, 0, time.FixedZone("-12", -12*3600)),
+		time.Now(),
+	}
+	for _, s := range seeds {
+		f.Add(s.Unix(), int32(s.Nanosecond()), uint8(0))
+	}
+	f.Fuzz(func(t *testing.T, sec int64, nsec int32, zoneChoice uint8) {
+		// keep years within RFC3339's four-digit range so the parse-back
+		// oracle is well-defined for every generated instant — including
+		// after conversion to the +14:00 extreme zone (16h headroom)
+		const year9999 = 253402300799 // 9999-12-31T23:59:59Z
+		if sec < 0 || sec > year9999-16*3600 {
+			sec = sec % (year9999 - 16*3600 + 1)
+			if sec < 0 {
+				sec += year9999 - 16*3600 + 1
+			}
+		}
+		if nsec < 0 {
+			nsec = -nsec
+		}
+		inst := time.Unix(sec, int64(nsec))
+		if zoneChoice&1 == 0 {
+			local := inst.In(time.Local)
+			// the cache is shared process-wide and keyed by Unix second, so a
+			// prior iteration in another zone could pollute this second (the
+			// documented limitation); force a miss to test the fresh-format
+			// path, then call again to pin the cached-hit path.
+			rfc3339Cache.Store(&rfc3339Second{sec: -1 << 62})
+			got := string(AppendTimeRFC3339(nil, local))
+			want := `"` + local.Format(time.RFC3339) + `"`
+			if got != want {
+				t.Fatalf("local-zone render %s != Format %s (t=%v)", got, want, local)
+			}
+			if hit := string(AppendTimeRFC3339(nil, local)); hit != want {
+				t.Fatalf("cached render %s != Format %s (t=%v)", hit, want, local)
+			}
+		} else {
+			zones := []*time.Location{
+				time.UTC,
+				time.FixedZone("+14", 14*3600),
+				time.FixedZone("-12", -12*3600),
+				time.FixedZone("+05:30", 5*3600+1800),
+			}
+			other := inst.In(zones[int(zoneChoice)%len(zones)])
+			got := string(AppendTimeRFC3339(nil, other))
+			var s string
+			if err := json.Unmarshal([]byte(got), &s); err != nil {
+				t.Fatalf("not a valid JSON string: %v (%q)", err, got)
+			}
+			parsed, err := time.Parse(time.RFC3339, s)
+			if err != nil {
+				t.Fatalf("rendering %q is not RFC3339: %v", s, err)
+			}
+			// second precision: whatever rendering the cache served, the
+			// parsed instant must be the same second (sub-second dropped)
+			if parsed.Unix() != other.Unix() {
+				t.Fatalf("parsed second %d != %d (rendering %q)", parsed.Unix(), other.Unix(), s)
+			}
+		}
+	})
 }
