@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
+	"sync/atomic"
 	"time"
 )
 
@@ -17,13 +19,22 @@ type OperationStart struct {
 // Operation is the request lifecycle handle. Exactly one goroutine — the
 // request's — drives it; End is one-shot.
 type Operation struct {
-	ctx     context.Context
-	rt      *Runtime
-	start   OperationStart
-	ref     walRef // embedded-by-value: the ctx points here, no extra alloc
-	ev      *event
-	done    bool
-	emitted bool
+	ctx   context.Context
+	rt    *Runtime
+	start OperationStart
+	ref   walRef // embedded-by-value: the ctx points here, no extra alloc
+	ev    *event
+
+	// endState is the one-shot claim word: 0 open, 1 claimed by the
+	// winning End caller, 2 published (emitted is valid). End is
+	// documented request-confined, but concurrent misuse must still be
+	// safe: exactly one caller CASes 0→1 and commits; the others wait
+	// for publication (characterized by
+	// TestConcurrentEndCharacterization). emitted stays a plain bool —
+	// it is only read after observing endState == 2, which happens-
+	// after the winner's store of 2, so the read is race-free.
+	endState atomic.Uint32
+	emitted  bool
 }
 
 // Start attaches a new request WAL to ctx and returns the operation
@@ -68,13 +79,27 @@ func (op *Operation) Context() context.Context {
 // silently disables panic capture. Note also that a sink which panics
 // during Write replaces an in-flight original panic.
 func (op *Operation) End(errp *error) (emitted bool) {
-	if op == nil || op.done {
-		if op == nil {
-			return false
-		}
-		return op.emitted
+	if op == nil {
+		return false
 	}
-	op.done = true
+	// Claim the one-shot. A published state returns the cached result;
+	// a claimed state means another caller is committing — wait for it.
+	for {
+		switch op.endState.Load() {
+		case 2:
+			return op.emitted // published: the read is race-free (see above)
+		case 0:
+			if op.endState.CompareAndSwap(0, 1) {
+				goto claimed
+			}
+		}
+		runtime.Gosched()
+	}
+claimed:
+	// Publish on every exit path, including panics (a panicking sink
+	// or the re-panic below), so waiting callers can never spin on a
+	// winner that died mid-commit.
+	defer func() { op.endState.Store(2) }()
 	defer func() { op.ev.release() }()
 
 	var err error

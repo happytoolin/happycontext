@@ -1,0 +1,4 @@
+go test fuzz v1
+int64(1788300045)
+int32(-52)
+byte('7')
