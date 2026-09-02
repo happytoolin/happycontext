@@ -216,6 +216,47 @@ func TestOutcomePrecedence(t *testing.T) {
 	}
 }
 
+// TestPanicBeatsErrorWhenCoDelivered pins the panic > error precedence
+// for the shape the table test cannot reach: the error pointer is
+// already set when End runs AND a panic is in flight (defer op.End(&err)
+// with err non-nil, then panic). resolveOutcomeV2 must still resolve
+// OutcomePanic — a swap to error-first precedence silently turns the
+// event into OutcomeFailure. Found as a gap by mutation testing (M7):
+// every panic test deferred op.End(nil), so the error was never
+// co-delivered and the precedence row in TestOutcomePrecedence carried
+// an err it never passed to End.
+func TestPanicBeatsErrorWhenCoDelivered(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "both"})
+
+	err := errors.New("original error")
+	func() {
+		defer func() { recover() }() // swallow End's re-panic
+		defer op.End(&err)           // direct defer: observes the panic
+		panic("panic value")
+	}()
+
+	events := ts.Events()
+	if len(events) != 1 {
+		t.Fatalf("captured %d events, want 1", len(events))
+	}
+	ev := events[0]
+
+	if v, _ := ev.Lookup("op.outcome"); v != string(OutcomePanic) {
+		t.Fatalf("op.outcome = %v, want %q — panic must beat the co-delivered error", v, OutcomePanic)
+	}
+	if p, ok := ev.Lookup("panic"); !ok {
+		t.Fatal("missing panic field")
+	} else if pm, ok := p.(map[string]any); !ok || pm["value"] != "panic value" {
+		t.Fatalf("panic field = %v, want value %q", p, "panic value")
+	}
+	if e, ok := ev.Lookup("error"); !ok {
+		t.Fatal("missing error field")
+	} else if em, ok := e.(map[string]any); !ok || em["message"] != "original error" {
+		t.Fatalf("error.message = %v, want %q — the real error must survive, not the synthetic \"panic: …\" error", em["message"], "original error")
+	}
+}
+
 // TestErrorsBypassSampling is amendment 4: failures are never sampled
 // away, structurally, before any custom sampler runs.
 func TestErrorsBypassSampling(t *testing.T) {

@@ -189,3 +189,58 @@ func TestWALStartedAt(t *testing.T) {
 		t.Fatalf("startedAt = %v, outside window", ev.startedAt)
 	}
 }
+
+// TestWALAppendSealedStaleGeneration pins the appendSealed generation
+// check — the owner's post-seal write path must reject a stale
+// generation exactly like append does. The state word alone is not
+// enough: a post-seal write against an event a newer request already
+// reset belongs to that request. Found as a gap by mutation testing
+// (M3): removing the check passed the whole suite because no test
+// drove appendSealed with a stale generation.
+//
+// Recycle is simulated in place with seal()+reset() — exactly the
+// release-then-newEvent sequence — rather than through the pool: the
+// race runtime drops a share of sync.Pool Puts (zap internal/pool
+// note; TestPoolReuseCanary retries around it), which would make a
+// pool round-trip nondeterministic here. reset() is the operation
+// that must invalidate the old generation.
+func TestWALAppendSealedStaleGeneration(t *testing.T) {
+	ev := newEvent()
+	staleGen := ev.state.Load() >> walStateBits
+	ev.append(staleGen, fieldStr("own", "first"))
+	ev.seal()  // End's terminal step (release() seals before pooling)
+	ev.reset() // the next request's newEvent() after the pool hands it out
+
+	currentGen := ev.state.Load() >> walStateBits
+	if currentGen == staleGen {
+		t.Fatal("reset did not advance the generation")
+	}
+
+	// The stale owner-style post-seal write must no-op: the event now
+	// belongs to another request.
+	ev.appendSealed(staleGen, fieldStr("stale", "x"))
+	for _, f := range ev.fields {
+		if f.key == "stale" {
+			t.Fatalf("appendSealed with stale generation %d landed on the recycled event", staleGen)
+		}
+	}
+
+	// Positive controls: the current generation writes through the same
+	// path both before sealing and after it (the real annotatePostSeal
+	// shape runs post-seal under the sealed state).
+	ev.appendSealed(currentGen, fieldStr("live", "1"))
+	ev.seal()
+	ev.appendSealed(currentGen, fieldStr("sealed", "2"))
+	keys := map[string]bool{}
+	for _, f := range ev.fields {
+		keys[f.key] = true
+	}
+	for _, want := range []string{"live", "sealed"} {
+		if !keys[want] {
+			t.Fatalf("current-generation appendSealed lost %q", want)
+		}
+	}
+	if keys["stale"] {
+		t.Fatal("stale write landed next to the current-generation fields")
+	}
+}
