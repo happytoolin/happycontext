@@ -7,13 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 )
 
-// --- from runtime_test.go ---
 func TestCompileValid(t *testing.T) {
 	rate := 0.25
 	rt, err := Compile(Config{
@@ -33,6 +30,60 @@ func TestCompileValid(t *testing.T) {
 	}
 	if rt.message != "done" {
 		t.Errorf("message = %q", rt.message)
+	}
+}
+
+// TestPolicyAliasPrecedence pins the deterministic winner: an explicit
+// "operation" key beats the "" alias when both are present.
+func TestPolicyAliasPrecedence(t *testing.T) {
+	rt := MustCompile(Config{
+		SamplingRate: 1,
+		OperationPolicies: map[Domain]OperationPolicy{
+			"":          {SuccessLevel: LevelWarn},
+			"operation": {SuccessLevel: LevelDebug},
+		},
+	})
+	if p := rt.policyFor(Domain("")); p.SuccessLevel != LevelDebug {
+		t.Fatalf("alias won over explicit key: %+v", p)
+	}
+}
+
+// TestCompileRuntimeImmutable pins the deep copy: mutating the caller's
+// Config (and its nested maps) after Compile cannot affect the runtime.
+func TestCompileRuntimeImmutable(t *testing.T) {
+	rate := 0.5
+	cfg := Config{
+		Sink:         NewTestSink(),
+		SamplingRate: 1,
+		OperationPolicies: map[Domain]OperationPolicy{
+			DomainJob: {
+				SuccessLevel:  LevelInfo,
+				OutcomeLevels: map[Outcome]Level{OutcomeRetry: LevelWarn},
+				SamplingRate:  &rate,
+			},
+		},
+		LevelSamplingRates: map[Level]float64{LevelWarn: 1},
+	}
+	rt, err := Compile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutated := cfg.OperationPolicies[DomainJob]
+	mutated.SuccessLevel = LevelError
+	mutated.OutcomeLevels[OutcomeRetry] = LevelDebug
+	*mutated.SamplingRate = 0
+	cfg.LevelSamplingRates[LevelWarn] = 0
+	cfg.Message = "mutated"
+
+	if p := rt.policyFor(DomainJob); p.SuccessLevel != LevelInfo {
+		t.Fatalf("policy level mutated: %v", p.SuccessLevel)
+	} else if p.OutcomeLevels[OutcomeRetry] != LevelWarn {
+		t.Fatalf("outcome level mutated: %v", p.OutcomeLevels[OutcomeRetry])
+	} else if *p.SamplingRate != 0.5 {
+		t.Fatalf("sampling rate mutated: %v", *p.SamplingRate)
+	}
+	if rt.levelRates[LevelWarn] != 1 || rt.message != "" {
+		t.Fatal("level rates or message mutated")
 	}
 }
 
@@ -177,7 +228,6 @@ func TestPolicyForDomain(t *testing.T) {
 	}
 }
 
-// --- from metadata_test.go ---
 type wrappedTestError struct{ err error }
 
 func (w wrappedTestError) Error() string { return "wrapped: " + w.err.Error() }
@@ -240,7 +290,6 @@ type cyclicError struct{ next error }
 func (c *cyclicError) Error() string { return "cyclic" }
 func (c *cyclicError) Unwrap() error { return c.next }
 
-// --- from sampling_test.go ---
 func sampleIn(path string, hasError bool) SampleInput {
 	return SampleInput{
 		Domain:     DomainHTTP,
@@ -322,7 +371,48 @@ func TestSampleInputSyntheticLookup(t *testing.T) {
 	}
 }
 
-// --- from fanout_test.go ---
+// TestSampleInputView pins the sampler's view of the in-flight WAL
+// (amendment 8): Lookup resolves the last value under a key, Fields()
+// iterates the insertion-ordered fields with typed accessors, and the
+// sampler's decision governs emission. (Merged from the former
+// TestSampleInputLookupAndFields and TestSampleInputFieldsAssertion.)
+func TestSampleInputView(t *testing.T) {
+	var seenTier any
+	var fieldCount, sawCounter int
+	rt, ts := testRT(t, func(c *Config) {
+		c.Sampler = func(in SampleInput) bool {
+			if v, ok := in.Lookup("user_tier"); ok {
+				seenTier = v
+			}
+			fieldCount = len(in.Fields())
+			for _, f := range in.Fields() {
+				if f.Key() == "counter" {
+					if v, ok := f.Int(); ok {
+						sawCounter = int(v)
+					}
+				}
+			}
+			return in.Outcome == OutcomeSuccess || in.HasError
+		}
+	})
+	op := Start(context.Background(), rt, OperationStart{})
+	Add(op.Context(), "user_tier", "enterprise", "counter", 41, "other", "x")
+	op.End(nil)
+
+	if seenTier != "enterprise" {
+		t.Fatalf("Lookup(user_tier) = %v", seenTier)
+	}
+	if sawCounter != 41 {
+		t.Fatalf("typed Int() view of counter = %d", sawCounter)
+	}
+	if fieldCount < 3 { // user fields + the canonical op.* pair
+		t.Fatalf("Fields() view has %d fields, want >= 3", fieldCount)
+	}
+	if len(ts.Events()) != 1 {
+		t.Fatal("success event dropped by its own sampler")
+	}
+}
+
 // FanoutSink writes every record to each member sink in order. If a
 // member panics, the remaining members still receive the record and
 // the panic propagates to the caller (who decides what to do with it).
@@ -362,36 +452,6 @@ var _ Sink = (*FanoutSink)(nil)
 
 // captureSink records every record it receives (deep copy via the
 // shared TestSink machinery).
-type fanCaptureSink struct {
-	mu     sync.Mutex
-	events []CapturedEvent
-}
-
-func (s *fanCaptureSink) Write(_ context.Context, rec *Record) {
-	if rec == nil {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.events = append(s.events, CapturedEvent{
-		level:   rec.Level(),
-		message: rec.Message(),
-		fields:  copyFields(rec.Fields()),
-	})
-}
-
-func (s *fanCaptureSink) count() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.events)
-}
-
-func (s *fanCaptureSink) last() CapturedEvent {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.events[len(s.events)-1]
-}
-
 // panicSink panics on Write.
 type panicSink struct{}
 
@@ -403,10 +463,10 @@ func TestFanoutSinkPanicIsolation(t *testing.T) {
 	for _, n := range []int{2, 4, 8} {
 		for _, panicIdx := range []int{0, n / 2, n - 1} {
 			t.Run(fmt.Sprintf("n=%d panic=%d", n, panicIdx), func(t *testing.T) {
-				captures := make([]*fanCaptureSink, n)
+				captures := make([]*TestSink, n)
 				sinks := make([]Sink, n)
 				for i := range sinks {
-					captures[i] = &fanCaptureSink{}
+					captures[i] = NewTestSink()
 					sinks[i] = captures[i]
 				}
 				sinks[panicIdx] = panicSink{}
@@ -428,20 +488,21 @@ func TestFanoutSinkPanicIsolation(t *testing.T) {
 					if i == panicIdx {
 						continue // this slot holds the panicking sink
 					}
-					if c.count() != 1 {
-						t.Fatalf("sink %d captured %d events", i, c.count())
+					events := c.Events()
+					if len(events) != 1 {
+						t.Fatalf("sink %d captured %d events", i, len(events))
 					}
-					if v, _ := c.last().Lookup("k"); v != "v" {
+					if v, _ := events[0].Lookup("k"); v != "v" {
 						t.Fatalf("sink %d event corrupted", i)
 					}
 				}
 				// pool clean after the panic
-				ok := &fanCaptureSink{}
+				ok := NewTestSink()
 				rt2 := MustCompile(Config{Sink: ok, SamplingRate: 1})
 				op2 := Start(context.Background(), rt2, OperationStart{Domain: DomainJob, Name: "after"})
 				Add(op2.Context(), "clean", true)
 				op2.End(nil)
-				if ok.count() != 1 {
+				if len(ok.Events()) != 1 {
 					t.Fatal("pool corrupted after the panicking fan-out")
 				}
 			})
@@ -469,11 +530,11 @@ func TestFanoutAllPanicking(t *testing.T) {
 			t.Fatalf("escaped %v", escaped)
 		}
 		// pool clean: the next request works
-		ok := &fanCaptureSink{}
+		ok := NewTestSink()
 		rt2 := MustCompile(Config{Sink: ok, SamplingRate: 1})
 		op2 := Start(context.Background(), rt2, OperationStart{Domain: DomainJob, Name: "after"})
 		op2.End(nil)
-		if ok.count() != 1 {
+		if len(ok.Events()) != 1 {
 			t.Fatal("pool corrupted after all-panic fan-out")
 		}
 	}
@@ -484,17 +545,21 @@ func TestFanoutAllPanicking(t *testing.T) {
 // recycled memory, which the pool-safety tests pin elsewhere; here we
 // pin that the fan-out passes the SAME record view to every member.
 func TestFanoutSinkOrder(t *testing.T) {
-	a, b := &fanCaptureSink{}, &fanCaptureSink{}
+	a, b := NewTestSink(), NewTestSink()
 	rt := MustCompile(Config{Sink: NewFanoutSink(a, b), SamplingRate: 1})
 	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "order"})
 	Add(op.Context(), "k", "v")
 	op.End(nil)
-	la, lb := a.last(), b.last()
+	ea, eb := a.Events(), b.Events()
+	if len(ea) != 1 || len(eb) != 1 {
+		t.Fatalf("members captured %d/%d events", len(ea), len(eb))
+	}
+	la, lb := ea[0], eb[0]
 	if la.Message() != lb.Message() || la.Level() != lb.Level() {
 		t.Fatalf("members disagree: %+v vs %+v", la, lb)
 	}
-	if !strings.Contains(fmt.Sprint(la.Lookup("k")), "v") {
-		t.Fatalf("first member lost the field")
+	if v, _ := la.Lookup("k"); v != "v" {
+		t.Fatalf("first member lost the field: %v", v)
 	}
 	if _, ok := lb.Lookup("k"); !ok {
 		t.Fatal("second member lost the field")

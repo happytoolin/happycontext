@@ -4,19 +4,15 @@ package hc
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-// --- from wal_test.go ---
 func TestWALAppendOrder(t *testing.T) {
 	ev := newEvent()
 	ref := &walRef{ev: ev, gen: ev.state.Load() >> walStateBits}
@@ -262,6 +258,9 @@ func TestWALAppendSealedStaleGeneration(t *testing.T) {
 // sentinel oracle only observes field-key landings (the "!BUG" Add),
 // never msg/requestedLevel mutations, which are invisible on the wire
 // until a later request reuses the event.
+// (Black-box counterpart: TestStragglerSettersAfterRecycle drives the
+// same invariant through the public API and asserts the emitted
+// event; this white-box test pins the internal latches.)
 func TestWALStaleSettersAfterReset(t *testing.T) {
 	ev := newEvent()
 	gen := ev.state.Load() >> walStateBits
@@ -323,7 +322,6 @@ func TestWALStaleSettersAfterReset(t *testing.T) {
 	}
 }
 
-// --- from review_fixes_test.go ---
 // TestStragglerCannotRaceSinkRead pins the F1 fix (seal before commit):
 // writes attempted from inside a sink's Write land on a sealed WAL and
 // must be no-ops — the record handed to sinks is immutable.
@@ -367,6 +365,9 @@ func TestStragglerCannotRaceSinkRead(t *testing.T) {
 // TestStragglerSettersAfterRecycle pins the setter generation checks:
 // SetMessage/SetLevel/Error through a stale context must not corrupt
 // the next request that reuses the pooled event.
+// (White-box counterpart: TestWALStaleSettersAfterReset pins the same
+// invariant at the internal-latch level; this test drives the public
+// API and asserts the emitted events.)
 func TestStragglerSettersAfterRecycle(t *testing.T) {
 	ts := NewTestSink()
 	rt := MustCompile(Config{Sink: ts, SamplingRate: 1})
@@ -399,30 +400,6 @@ func TestStragglerSettersAfterRecycle(t *testing.T) {
 	}
 }
 
-// TestDedupeCrossover pins the 24/25-field boundary between the
-// allocation-free scan and the slot-array path.
-func TestDedupeCrossover(t *testing.T) {
-	for _, n := range []int{23, 24, 25, 26, 33, 40} {
-		fields := make([]Field, 0, n)
-		for i := 0; i < n-1; i++ {
-			fields = append(fields, fieldStr(strings.Repeat("k", i+2), "v"))
-		}
-		fields = append(fields, fieldStr("kk", "last")) // dup of the first key
-		r := recOf(LevelInfo, "m", fields...)
-		line := string(r.Encoded())
-		if strings.Count(line, `"kk":`) != 1 {
-			t.Fatalf("n=%d: dup emitted more than once", n)
-		}
-		var payload map[string]any
-		if err := json.Unmarshal([]byte(line), &payload); err != nil {
-			t.Fatalf("n=%d: %v", n, err)
-		}
-		if payload["kk"] != "last" {
-			t.Fatalf("n=%d: last write lost: %v", n, payload["kk"])
-		}
-	}
-}
-
 // TestSealDuringArmedAppend pins the armed-path seal protocol: an armed
 // append in flight while End seals either lands before the seal or is
 // dropped — never a torn or recycled-buffer write.
@@ -445,108 +422,6 @@ func TestSealDuringArmedAppend(t *testing.T) {
 	}
 }
 
-// TestFloat32WireParity pins the float32 kind: 0.1 must render as 0.1,
-// not the widened double digits the v0 adapter never emitted.
-func TestFloat32WireParity(t *testing.T) {
-	r := recOf(LevelInfo, "m", fieldOf("f32", float32(0.1)), fieldOf("f64", 0.1))
-	line := string(r.Encoded())
-	if !strings.Contains(line, `"f32":0.1`) {
-		t.Fatalf("float32 widened on the wire: %s", line)
-	}
-	if !strings.Contains(line, `"f64":0.1`) {
-		t.Fatalf("float64 broken: %s", line)
-	}
-	// round-trip through the typed getter
-	f := r.Fields()[0]
-	if v, ok := f.Float(); !ok || math.Abs(v-0.1) > 1e-7 { // float64 getter: float32 epsilon
-		t.Fatalf("Float() = %v %v", v, ok)
-	}
-	if _, isF32 := valueOf(f).(float32); !isF32 {
-		t.Fatalf("valueOf lost float32-ness: %T", valueOf(f))
-	}
-}
-
-// TestCompileRuntimeImmutable pins the deep copy: mutating the caller's
-// Config (and its nested maps) after Compile cannot affect the runtime.
-func TestCompileRuntimeImmutable(t *testing.T) {
-	rate := 0.5
-	cfg := Config{
-		Sink:         NewTestSink(),
-		SamplingRate: 1,
-		OperationPolicies: map[Domain]OperationPolicy{
-			DomainJob: {
-				SuccessLevel:  LevelInfo,
-				OutcomeLevels: map[Outcome]Level{OutcomeRetry: LevelWarn},
-				SamplingRate:  &rate,
-			},
-		},
-		LevelSamplingRates: map[Level]float64{LevelWarn: 1},
-	}
-	rt, err := Compile(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mutated := cfg.OperationPolicies[DomainJob]
-	mutated.SuccessLevel = LevelError
-	mutated.OutcomeLevels[OutcomeRetry] = LevelDebug
-	*mutated.SamplingRate = 0
-	cfg.LevelSamplingRates[LevelWarn] = 0
-	cfg.Message = "mutated"
-
-	if p := rt.policyFor(DomainJob); p.SuccessLevel != LevelInfo {
-		t.Fatalf("policy level mutated: %v", p.SuccessLevel)
-	} else if p.OutcomeLevels[OutcomeRetry] != LevelWarn {
-		t.Fatalf("outcome level mutated: %v", p.OutcomeLevels[OutcomeRetry])
-	} else if *p.SamplingRate != 0.5 {
-		t.Fatalf("sampling rate mutated: %v", *p.SamplingRate)
-	}
-	if rt.levelRates[LevelWarn] != 1 || rt.message != "" {
-		t.Fatal("level rates or message mutated")
-	}
-}
-
-// TestPolicyAliasPrecedence pins the deterministic winner: an explicit
-// "operation" key beats the "" alias when both are present.
-func TestPolicyAliasPrecedence(t *testing.T) {
-	rt := MustCompile(Config{
-		SamplingRate: 1,
-		OperationPolicies: map[Domain]OperationPolicy{
-			"":          {SuccessLevel: LevelWarn},
-			"operation": {SuccessLevel: LevelDebug},
-		},
-	})
-	if p := rt.policyFor(Domain("")); p.SuccessLevel != LevelDebug {
-		t.Fatalf("alias won over explicit key: %+v", p)
-	}
-}
-
-// TestSampleInputFieldsAssertion pins amendment 8 with a real assertion
-// (Fields() iteration sees the request's fields during sampling).
-func TestSampleInputFieldsAssertion(t *testing.T) {
-	var fieldCount, sawCounter int
-	rt := MustCompile(Config{
-		Sink:         NewTestSink(),
-		SamplingRate: 1,
-		Sampler: func(in SampleInput) bool {
-			fieldCount = len(in.Fields())
-			for _, f := range in.Fields() {
-				if f.Key() == "counter" {
-					if v, ok := f.Int(); ok {
-						sawCounter = int(v)
-					}
-				}
-			}
-			return true
-		},
-	})
-	op := Start(context.Background(), rt, OperationStart{})
-	Add(op.Context(), "counter", 41, "other", "x")
-	op.End(nil)
-	if sawCounter != 41 || fieldCount < 2 {
-		t.Fatalf("Fields() view: counter=%d fields=%d", sawCounter, fieldCount)
-	}
-}
-
 // TestArmingStaleGeneration pins both recycle directions: stale (past)
 // and future generations are rejected.
 func TestArmingStaleGeneration(t *testing.T) {
@@ -562,7 +437,6 @@ func TestArmingStaleGeneration(t *testing.T) {
 	}
 }
 
-// --- from straggler_start_line_test.go ---
 // TestStragglerStartLine stresses the straggler-vs-recycle window with
 // logrus's start-line technique (logrus_test.go,
 // TestLoggingRaceWithHooksOnEntry — sync.NewCond + Broadcast): every
@@ -697,7 +571,6 @@ func TestStragglerStartLine(t *testing.T) {
 	}
 }
 
-// --- from pool_reuse_canary_test.go ---
 // TestPoolReuseCanary pins the WAL pool-recycle contract with the
 // sentinel technique from log/slog's TestAliasingAndClone
 // (record_test.go): slog inserts a "!BUG" attr wherever an unsafe

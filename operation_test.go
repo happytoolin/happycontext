@@ -14,7 +14,6 @@ import (
 	"time"
 )
 
-// --- from operation_test.go ---
 func testRT(t *testing.T, mut func(*Config)) (*Runtime, *TestSink) {
 	t.Helper()
 	cfg := Config{Sink: NewTestSink(), SamplingRate: 1}
@@ -299,35 +298,6 @@ func TestErrorsBypassSampling(t *testing.T) {
 	}
 }
 
-func TestSampleInputLookupAndFields(t *testing.T) {
-	var seenTier any
-	var seenCount int
-	rt, ts := testRT(t, func(c *Config) {
-		c.Sampler = func(in SampleInput) bool {
-			seenCount++
-			if v, ok := in.Lookup("user_tier"); ok {
-				seenTier = v
-			}
-			for _, f := range in.Fields() {
-				if f.Key() == "counter" {
-					seenCount += 0
-				}
-			}
-			return in.Outcome == OutcomeSuccess || in.HasError
-		}
-	})
-	op := Start(context.Background(), rt, OperationStart{})
-	Add(op.Context(), "user_tier", "enterprise")
-	op.End(nil)
-
-	if seenTier != "enterprise" {
-		t.Fatalf("Lookup(user_tier) = %v", seenTier)
-	}
-	if len(ts.Events()) != 1 {
-		t.Fatal("success event dropped by its own sampler")
-	}
-}
-
 // TestNonHTTPOpCode pins the canonical-field rule: op.code is non-HTTP
 // only, surfaced from the explicit op.code field the caller wrote.
 func TestNonHTTPOpCode(t *testing.T) {
@@ -550,7 +520,6 @@ func TestConcurrentRequests(t *testing.T) {
 	}
 }
 
-// --- from end_concurrency_test.go ---
 // concurrentEnd races n goroutines over one End on a fresh runtime and
 // returns their results plus the emitted event count.
 func concurrentEnd(t *testing.T, rate float64, n int) ([]bool, int) {
@@ -716,7 +685,6 @@ func TestConcurrentEndErrorPointer(t *testing.T) {
 	}
 }
 
-// --- from panic_permutations_test.go ---
 // panicPayload is one panic value shape.
 type panicPayload struct {
 	name  string

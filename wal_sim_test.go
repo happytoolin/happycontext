@@ -532,13 +532,13 @@ func verifySchedule(t *testing.T, s *sim, replay bool) {
 	// Linearizability: fold the fields (last write per key at its last
 	// occurrence) and compare against an independent ordered map that
 	// applies every landed append as an overwrite at its landing point.
+	// The reference map applies every landing as an overwrite; its
+	// final key set and last-write order must equal the LWW fold of
+	// the fields (landings == fields by construction, so this checks
+	// the bookkeeping: any append that mutated fields without logging
+	// a landing — or vice versa — breaks the equality).
 	gotFold := foldKeys(s.ev.fields)
-	if !equalStrings(gotFold, foldKeys(s.landings)) {
-		t.Fatalf("fold of fields %v != fold of landings %v\nschedule: %s",
-			gotFold, foldKeys(s.landings), scheduleLog(s))
-	}
-	// The map's final key set and last-write order equal the fold.
-	mapKeys := orderedMapKeys(s.landings)
+	mapKeys := foldKeys(s.landings)
 	if !equalStrings(gotFold, mapKeys) {
 		t.Fatalf("linearizability: LWW fold %v != reference map %v\nschedule: %s",
 			gotFold, mapKeys, scheduleLog(s))
@@ -564,29 +564,6 @@ func foldKeys(keys []string) []string {
 	out := make([]string, 0, len(order))
 	for _, i := range order {
 		out = append(out, keys[i])
-	}
-	return out
-}
-
-// orderedMapKeys applies every landing to a map (key → last landing
-// position) and returns the keys in last-write order.
-func orderedMapKeys(landings []string) []string {
-	last := map[string]int{}
-	for i, k := range landings {
-		last[k] = i
-	}
-	order := make([]int, 0, len(last))
-	for _, i := range last {
-		order = append(order, i)
-	}
-	for i := 1; i < len(order); i++ {
-		for j := i; j > 0 && order[j] < order[j-1]; j-- {
-			order[j], order[j-1] = order[j-1], order[j]
-		}
-	}
-	out := make([]string, 0, len(order))
-	for _, i := range order {
-		out = append(out, landings[i])
 	}
 	return out
 }

@@ -18,7 +18,6 @@ import (
 	"unicode/utf8"
 )
 
-// --- from property_roundtrip_test.go ---
 // rtFieldValue generates one typed value for a kind. The value space
 // per kind includes hostile edges (int64 extremes, float subnormals,
 // invalid UTF-8, exotic zones).
@@ -296,7 +295,6 @@ func TestRecordEncodeDeterminismProperty(t *testing.T) {
 	}
 }
 
-// --- from record_roundtrip_test.go ---
 // This file implements the record-level round-trip properties from the
 // DST/fuzzing research (§7.1 field round-trip per kind, §7.2 encode
 // determinism, §6.2 dedupe fuzz with an independent reference fold):
@@ -522,20 +520,6 @@ func TestEncodedRoundTripProperty(t *testing.T) {
 	}
 }
 
-// TestEncodedDeterminism: two records built from equal inputs encode to
-// equal bytes — encoding is a pure function of (level, msg, fields,
-// completedAt) (dst-research §7.2).
-func TestEncodedDeterminism(t *testing.T) {
-	build := func() *Record {
-		return recOf(LevelWarn, "same",
-			fieldOf("a", 1), fieldOf("b", "two"), fieldOf("a", 3),
-			fieldOf("f", 0.1), fieldOf("d", time.Second))
-	}
-	if !bytes.Equal(build().Encoded(), build().Encoded()) {
-		t.Fatal("two equal records encoded differently")
-	}
-}
-
 // FuzzRecordEncodedDedupe is the dedupe-boundary fuzz target
 // (dst-research §6.2): generated field sequences with dense duplicates
 // and canonical-key collisions must produce a line where every user key
@@ -680,7 +664,6 @@ func FuzzRecordEncodedDedupe(f *testing.F) {
 	})
 }
 
-// --- from property_sampling_test.go ---
 // TestSamplingErrorBypassProperty drives generated failure and healthy
 // programs through a drop-everything runtime (NeverSampler at rate 0):
 // failures must still emit — the amendment-4 structural bypass — while
@@ -849,7 +832,6 @@ func TestChainSamplerProperty(t *testing.T) {
 	}
 }
 
-// --- from property_pool_safety_test.go ---
 // poolState snapshots everything a straggler write could mutate on a
 // sealed event: the WAL, the message, the requested level, and the
 // error latch.

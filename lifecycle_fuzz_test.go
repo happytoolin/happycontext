@@ -820,6 +820,9 @@ func checkFieldWire(f Field, raw []byte) error {
 
 // jsonSemanticEqual compares two decoded JSON values, treating
 // json.Number and float64 as equal when the numeric value matches.
+// The hcjson package mirrors this as jsonDecodedEqual (plain
+// json.Unmarshal domain, float64 only) in fuzz_interface_test.go; the
+// helpers cannot be shared because test-only code is package-private.
 func jsonSemanticEqual(a, b any) bool {
 	num := func(v any) (float64, bool) {
 		switch n := v.(type) {
@@ -1002,10 +1005,10 @@ func memberFields(fields []Field) []string {
 // Seed corpus and fuzz target
 
 // seedPrograms are the curated corpus streams from action plan P1,
-// committed under testdata/fuzz/FuzzEndLifecycle/ (as encoded bytes)
-// so plain `go test` replays them as regression seeds and future
-// -fuzz runs start from them. Every seed must round-trip through
-// encodeProgram losslessly (asserted by TestLifecycleSeedPrograms).
+// registered as f.Add() seeds in FuzzEndLifecycle so plain `go test`
+// replays them as regression seeds and -fuzz runs start from them.
+// Every seed must round-trip through encodeProgram losslessly
+// (asserted by TestLifecycleSeedPrograms).
 type seedProg struct {
 	name string
 	prog lifeProgram
@@ -1140,8 +1143,8 @@ func FuzzEndLifecycle(f *testing.F) {
 
 // TestLifecycleSeedPrograms replays the curated corpus as regression
 // tests and asserts the corpus materialization round-trips: the
-// encoded bytes must decode back to the same program, so the committed
-// testdata/fuzz files exercise exactly these scenarios.
+// encoded bytes must decode back to the same program, so the f.Add()
+// seeds exercise exactly these scenarios.
 func TestLifecycleSeedPrograms(t *testing.T) {
 	for _, s := range seedPrograms() {
 		t.Run(s.name, func(t *testing.T) {

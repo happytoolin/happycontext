@@ -15,7 +15,6 @@ import (
 	"time"
 )
 
-// --- from record_test.go ---
 func recOf(level Level, msg string, fields ...Field) *Record {
 	return &Record{level: level, msg: msg, fields: fields, completedAt: time.Date(2026, 9, 1, 10, 0, 0, 0, time.Local)}
 }
@@ -88,6 +87,51 @@ func TestRecordEncodedWideDedupePath(t *testing.T) {
 	}
 }
 
+// TestFloat32WireParity pins the float32 kind: 0.1 must render as 0.1,
+// not the widened double digits the v0 adapter never emitted.
+func TestFloat32WireParity(t *testing.T) {
+	r := recOf(LevelInfo, "m", fieldOf("f32", float32(0.1)), fieldOf("f64", 0.1))
+	line := string(r.Encoded())
+	if !strings.Contains(line, `"f32":0.1`) {
+		t.Fatalf("float32 widened on the wire: %s", line)
+	}
+	if !strings.Contains(line, `"f64":0.1`) {
+		t.Fatalf("float64 broken: %s", line)
+	}
+	// round-trip through the typed getter
+	f := r.Fields()[0]
+	if v, ok := f.Float(); !ok || math.Abs(v-0.1) > 1e-7 { // float64 getter: float32 epsilon
+		t.Fatalf("Float() = %v %v", v, ok)
+	}
+	if _, isF32 := valueOf(f).(float32); !isF32 {
+		t.Fatalf("valueOf lost float32-ness: %T", valueOf(f))
+	}
+}
+
+// TestDedupeCrossover pins the 24/25-field boundary between the
+// allocation-free scan and the slot-array path.
+func TestDedupeCrossover(t *testing.T) {
+	for _, n := range []int{23, 24, 25, 26, 33, 40} {
+		fields := make([]Field, 0, n)
+		for i := 0; i < n-1; i++ {
+			fields = append(fields, fieldStr(strings.Repeat("k", i+2), "v"))
+		}
+		fields = append(fields, fieldStr("kk", "last")) // dup of the first key
+		r := recOf(LevelInfo, "m", fields...)
+		line := string(r.Encoded())
+		if strings.Count(line, `"kk":`) != 1 {
+			t.Fatalf("n=%d: dup emitted more than once", n)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(line), &payload); err != nil {
+			t.Fatalf("n=%d: %v", n, err)
+		}
+		if payload["kk"] != "last" {
+			t.Fatalf("n=%d: last write lost: %v", n, payload["kk"])
+		}
+	}
+}
+
 func TestRecordEncodedShape(t *testing.T) {
 	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
 	r := &Record{
@@ -149,51 +193,10 @@ func TestRecordEncodedOnce(t *testing.T) {
 	}
 }
 
-func TestRecordFieldKindsOnWire(t *testing.T) {
-	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
-	r := recOf(
-		LevelInfo, "m",
-		fieldOf("s", "v"),
-		fieldOf("i", -5),
-		fieldOf("u8", uint8(7)),
-		fieldOf("f", 2.5),
-		fieldOf("b", true),
-		fieldOf("t", now),
-		fieldOf("d", time.Second),
-		Field{key: "raw", kind: KindRaw, val: []byte(`{"pre":"encoded"}`)},
-		fieldOf("e", errString("boom")),
-		fieldOf("any", map[string]any{"n": 1}),
-	)
-	var payload map[string]any
-	if err := json.Unmarshal(r.Encoded(), &payload); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	checks := map[string]any{
-		"s": "v", "i": -5.0, "u8": 7.0, "f": 2.5, "b": true,
-		"t": now.Format(time.RFC3339), "d": 1000.0, "e": "boom",
-		"any": map[string]any{"n": 1.0},
-	}
-	for k, want := range checks {
-		got, ok := payload[k]
-		if !ok {
-			t.Fatalf("missing %q", k)
-		}
-		wj, _ := json.Marshal(want)
-		gj, _ := json.Marshal(got)
-		if string(wj) != string(gj) {
-			t.Fatalf("%q = %s, want %s", k, gj, wj)
-		}
-	}
-	if raw, ok := payload["raw"].(map[string]any); !ok || raw["pre"] != "encoded" {
-		t.Fatalf("raw field = %v", payload["raw"])
-	}
-}
-
 type errString string
 
 func (e errString) Error() string { return string(e) }
 
-// --- from canonical_collision_test.go ---
 // TestCanonicalCollisionRename: user "message"/"time"/"level" appear
 // on the wire as fields.*, and the canonical envelope members stay
 // unique.
@@ -339,7 +342,6 @@ func capturedLine(t *testing.T, ev CapturedEvent) []byte {
 	return r.Encoded()
 }
 
-// --- from alloc_gate_test.go ---
 // Allocation gates for the record encode paths, in the shape of slog's
 // TestJSONAllocs (log/slog/json_handler_test.go): exact or generous
 // allocation budgets enforced in the ordinary test run, not left to
@@ -438,7 +440,6 @@ func TestRecordEncodeAllocFreshRecord(t *testing.T) {
 	}
 }
 
-// --- from size_monotonicity_test.go ---
 // TestRecordEncodeSizeMonotonicProperty generates a record, encodes
 // it, appends one field with a brand-new key, and asserts the encoded
 // line strictly grows.

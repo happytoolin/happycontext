@@ -48,16 +48,19 @@ func FuzzAppendInterface(f *testing.F) {
 		if err := json.Unmarshal(want, &wantV); err != nil {
 			t.Fatalf("oracle unparseable: %v", err)
 		}
-		if !jsonSemanticEqual(gotV, wantV) {
+		if !jsonDecodedEqual(gotV, wantV) {
 			t.Fatalf("AppendInterface(%v) = %s, parses to %v; json.Marshal parses to %v", v, got, gotV, wantV)
 		}
 	})
 }
 
-// jsonSemanticEqual compares two json.Unmarshal results, normalizing
-// float64/int distinctions the parser erases (all numbers become
-// float64) and comparing float64s bitwise.
-func jsonSemanticEqual(a, b any) bool {
+// jsonDecodedEqual compares two json.Unmarshal results (plain float64
+// numbers — the parser erases int/float distinctions) and compares
+// float64s bitwise. The hc package mirrors this in
+// lifecycle_fuzz_test.go's jsonSemanticEqual, which additionally
+// accepts json.Number from UseNumber decoders; the helpers cannot be
+// shared because test-only code is package-private.
+func jsonDecodedEqual(a, b any) bool {
 	switch av := a.(type) {
 	case float64:
 		bv, ok := b.(float64)
@@ -68,7 +71,7 @@ func jsonSemanticEqual(a, b any) bool {
 			return false
 		}
 		for i := range av {
-			if !jsonSemanticEqual(av[i], bv[i]) {
+			if !jsonDecodedEqual(av[i], bv[i]) {
 				return false
 			}
 		}
@@ -80,7 +83,7 @@ func jsonSemanticEqual(a, b any) bool {
 		}
 		for k, v := range av {
 			bvv, ok := bv[k]
-			if !ok || !jsonSemanticEqual(v, bvv) {
+			if !ok || !jsonDecodedEqual(v, bvv) {
 				return false
 			}
 		}
