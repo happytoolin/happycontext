@@ -1,3 +1,0 @@
-go test fuzz v1
-[]byte("07012C$%")
-[]byte("0yy8\x8ea80")

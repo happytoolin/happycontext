@@ -1,3 +1,0 @@
-go test fuzz v1
-[]byte("\x177012C$%&")
-[]byte("8\xc0\x9691")

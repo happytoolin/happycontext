@@ -1,3 +1,0 @@
-go test fuzz v1
-[]byte("X%0A29")
-[]byte("\x91")

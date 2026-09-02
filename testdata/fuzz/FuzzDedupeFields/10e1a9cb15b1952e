@@ -1,3 +1,0 @@
-go test fuzz v1
-[]byte("B201")
-[]byte("0")

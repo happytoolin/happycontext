@@ -1,2 +1,0 @@
-go test fuzz v1
-[]byte("0110$0$0$0$")

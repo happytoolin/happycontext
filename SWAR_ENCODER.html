@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SWAR in the JSON encoder — internal/hcjson deep dive</title>
+<style>
+  :root {
+    --bg: #0b0e14; --panel: #121722; --panel2: #0e1320; --line: #232b3b;
+    --text: #e8ecf4; --muted: #939cb0; --faint: #6b7488;
+    --amber: #f5b132; --amber-dim: #f5b1321f;
+    --green: #4cd88a; --green-dim: #4cd88a14;
+    --red: #f2635f; --red-dim: #f2635f18;
+    --blue: #5aa2f0; --blue-dim: #5aa2f014;
+    --violet: #b48cf2; --violet-dim: #b48cf214;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px 110px; }
+
+  header { padding: 64px 0 36px; border-bottom: 1px solid var(--line); position: relative; overflow: hidden; }
+  header::before {
+    content: ""; position: absolute; inset: -200px -200px auto -200px; height: 420px;
+    background: radial-gradient(ellipse at 30% 0%, #5aa2f01a 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .kicker { font: 600 12px/1 var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--blue); }
+  h1 { font-size: clamp(30px, 4.4vw, 46px); font-weight: 800; letter-spacing: -0.02em; margin: 14px 0 12px; line-height: 1.12; }
+  h1 .dim { color: var(--faint); font-weight: 300; }
+  .sub { font-size: 18px; color: var(--muted); max-width: 780px; }
+  .sub strong { color: var(--text); font-weight: 600; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+  .chip {
+    font: 500 12.5px var(--mono); color: var(--muted); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px;
+  }
+  .chip b { color: var(--text); font-weight: 600; }
+
+  section { padding: 44px 0 6px; border-bottom: 1px solid var(--line); }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 18px; }
+  .sec-num {
+    font: 700 13px var(--mono); color: var(--bg); background: var(--amber);
+    border-radius: 7px; padding: 3px 8px 2px; flex: none;
+  }
+  h2 { font-size: 25px; font-weight: 750; letter-spacing: -0.01em; }
+  p { margin: 0 0 14px; color: var(--muted); }
+  p strong { color: var(--text); font-weight: 600; }
+  ul, ol { margin: 0 0 14px 22px; color: var(--muted); }
+  li { margin-bottom: 7px; }
+  li strong { color: var(--text); font-weight: 600; }
+  code {
+    font: 13.5px/1.5 var(--mono); background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 5px; padding: 1px 5px; color: #f0d9a0; white-space: nowrap;
+  }
+  code.pill { color: var(--green); }
+  pre {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; overflow-x: auto; margin: 12px 0 18px;
+  }
+  pre code { background: none; border: none; padding: 0; white-space: pre; color: #d5dbe8; font-size: 13.5px; line-height: 1.6; }
+  .cm { color: var(--faint); font-style: italic; }
+  .hl { color: #f0d9a0; }
+  .grn { color: var(--green); } .amb { color: var(--amber); } .red { color: var(--red); } .blu { color: var(--blue); } .vio { color: var(--violet); }
+
+  .callout { border-radius: 10px; padding: 14px 18px; margin: 4px 0 18px; border: 1px solid; font-size: 15px; }
+  .callout p { margin: 0 0 8px; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .t { font: 700 12px var(--mono); letter-spacing: .12em; text-transform: uppercase; display: block; margin-bottom: 6px; }
+  .callout.ok { background: var(--green-dim); border-color: #4cd88a44; color: #c9ecd9; }
+  .callout.ok .t { color: var(--green); }
+  .callout.warn { background: var(--amber-dim); border-color: #f5b13244; color: #eeddbb; }
+  .callout.warn .t { color: var(--amber); }
+  .callout.bad { background: var(--red-dim); border-color: #f2635f44; color: #f2cfcd; }
+  .callout.bad .t { color: var(--red); }
+  .callout.info { background: var(--blue-dim); border-color: #5aa2f044; color: #cfe0f5; }
+  .callout.info .t { color: var(--blue); }
+
+  /* byte-lane diagram */
+  .lane { display: grid; grid-template-columns: minmax(64px,auto) repeat(8, 1fr); gap: 4px; margin: 8px 0 16px; }
+  .lane .lbl {
+    font: 600 11px var(--mono); color: var(--faint); display: flex; align-items: center;
+    letter-spacing: .06em; text-transform: uppercase; padding-right: 8px;
+  }
+  .lane .cell {
+    font: 12.5px var(--mono); background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 2px; text-align: center; color: #c8d0e0;
+  }
+  .lane .cell .v { display: block; font-size: 12.5px; }
+  .lane .cell .n { display: block; font-size: 10px; color: var(--faint); }
+  .lane .cell.dirty { border-color: var(--red); background: var(--red-dim); }
+  .lane .cell.dirty .v { color: var(--red); }
+  .lane .cell.fp { border-color: var(--amber); background: var(--amber-dim); }
+  .lane .cell.fp .v { color: var(--amber); }
+  .lane .cell.flag { border-color: var(--violet); }
+  .lane .cell.flag .v { color: var(--violet); }
+  .lane .cell.okc { border-color: #4cd88a55; }
+  .caption { font: 12.5px var(--mono); color: var(--faint); margin: -10px 0 16px; }
+
+  .tblwrap { overflow-x: auto; margin: 12px 0 18px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th {
+    font: 600 12px var(--mono); text-align: left; color: var(--faint); letter-spacing: .06em;
+    text-transform: uppercase; padding: 8px 12px; border-bottom: 1px solid var(--line);
+  }
+  td { padding: 8px 12px; border-bottom: 1px solid #1a2130; color: var(--muted); vertical-align: top; }
+  td.num { font: 13px var(--mono); color: var(--text); text-align: right; white-space: nowrap; }
+  td.file { font: 12.5px var(--mono); color: var(--faint); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  .up { color: var(--green); font-weight: 600; }
+  .dn { color: var(--red); font-weight: 600; }
+
+  /* dispatch diagram */
+  .flow { display: flex; flex-direction: column; align-items: stretch; gap: 0; margin: 14px 0 20px; }
+  .fnode {
+    border: 1px solid var(--line); background: var(--panel); border-radius: 10px;
+    padding: 10px 16px; text-align: center; font: 13.5px var(--mono); margin: 0 auto; min-width: 320px;
+  }
+  .fnode.d { border-style: dashed; color: var(--muted); background: var(--panel2); }
+  .fnode.out { border-color: #4cd88a55; background: var(--green-dim); color: #c9ecd9; }
+  .fedge { text-align: center; color: var(--faint); font: 600 12px var(--mono); line-height: 1; padding: 3px 0; }
+  .fedge .t { display: inline-block; background: var(--bg); padding: 0 8px; border-radius: 4px; }
+  .frow { display: flex; justify-content: center; gap: 22px; }
+  .fcol { flex: 1; max-width: 340px; }
+  .fnote { text-align: center; font: 12px var(--mono); color: var(--faint); margin-top: 4px; }
+
+  .filemap { font: 13px/1.9 var(--mono); color: var(--muted); }
+  .filemap .fp { color: var(--text); }
+  .refs { font-size: 14px; }
+  footer { padding: 34px 0 0; color: var(--faint); font-size: 13.5px; }
+  footer .mono { font-family: var(--mono); }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ::selection { background: #5aa2f033; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">internal/hcjson · encoder deep dive</div>
+  <h1>How the encoder uses <span class="dim">SWAR</span></h1>
+  <p class="sub">SIMD-Within-A-Register is the trick that lets the JSON string-escape scanner inspect
+  <strong>8 input bytes per iteration</strong> in pure Go — no assembly, no architecture tags — and it is used as a
+  <strong>classifier, not an encoder</strong>: it never produces output bytes, it only decides when the byte loop can be skipped.</p>
+  <div class="meta-row">
+    <span class="chip">repo <b>happycontext</b></span>
+    <span class="chip">package <b>internal/hcjson</b></span>
+    <span class="chip">origin <b>zerolog v1.34.0 internal/json</b></span>
+    <span class="chip">files <b>string.go · bytes.go</b></span>
+    <span class="chip">measured on <b>Apple M4 · Go 1.27.0</b></span>
+  </div>
+</header>
+
+<!-- ============ 1 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">01</span><h2>The one-paragraph answer</h2></div>
+  <p>Every string that happycontext logs — record messages, field keys, string values — is encoded by
+  <code>hcjson.Encoder.AppendString</code> / <code>AppendBytes</code>, a fork of zerolog's append-only JSON encoder. The dominant cost in that
+  encoder is the <em>escape scan</em>: walking the string byte by byte and looking each byte up in a 256-entry table to decide whether JSON
+  escaping is needed. The SWAR upgrade replaces that walk with a filter: strings of 16+ bytes are sliced into 8-byte words, each word is
+  loaded into a <code>uint64</code>, and three bit-parallel predicates decide, in one pass over the register, whether all 8 bytes are
+  "clean printable ASCII" (0x20–0x7e, except <code>"</code> and <code>\</code>). A clean string is appended in bulk between two quotes —
+  <strong>zero per-byte work</strong>. Anything shorter or any word that trips a predicate falls back to the vendored zerolog table path,
+  unchanged, so the emitted bytes are <strong>identical to the reference for every input</strong> (enforced by a 200k-case property test and CI fuzz).</p>
+  <div class="callout info">
+    <span class="t">Wait — isn't SWAR SIMD?</span>
+    <p>Yes: SWAR stands for <strong>SIMD Within A Register</strong>. It is the SIMD <em>model</em> — one operation applied to many
+    independent data lanes — executed in an ordinary 64-bit register with scalar integer math, instead of on wide vector registers with
+    dedicated instructions. Real SIMD (SSE/AVX/NEON) checks 16–64 bytes per instruction but needs assembly and per-architecture code;
+    SWAR packs 8 bytes into one <code>uint64</code> and reads each lane's verdict out of that lane's high bit (0x80) after broadcast
+    subtractions. All lanes are processed in parallel in the sense that one word-level operation updates all of them — no vector
+    registers, no assembly, portable pure Go. V2_PLAN §3b draws the same line, listing "True SIMD escaping (AVX2/NEON assembly)" as a
+    separate, rejected option next to the adopted "pure-Go SWAR". Honest caveat: SWAR's ~4–6 register ops per 8 bytes are a small
+    sequence of scalar instructions, not one SIMD instruction — the win comes from replacing ~8 table lookups + branches with a few
+    register ops.</p>
+  </div>
+  <div class="callout info">
+    <span class="t">Where it is used — the callers</span>
+    <p><code>record.go</code> routes everything string-shaped through the SWAR-capable appends: the message
+    (<code>record.go:75</code>), string-kind fields (<code>record.go:153</code>), and error text (<code>record.go:169</code>) via
+    the shared <code>jsonEnc = hcjson.Encoder{}</code> (<code>record.go:177</code>). Field keys go through
+    <code>AppendKey</code> (<code>hcjson.go</code>), which calls <code>AppendString</code> itself. The JSON sink writes each record's
+    <code>Encoded()</code> form in one <code>Write</code> (<code>json_sink.go:32</code>). The encoder is a stateless value type, so the SWAR
+    path is exercised on every log line, by every goroutine, with zero shared state.</p>
+  </div>
+</section>
+
+<!-- ============ 2 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">02</span><h2>The problem: escaping is a scan</h2></div>
+  <p>JSON strings need escaping for a small set of bytes. The fork's <code>noEscapeTable</code> (<code>string.go</code>, vendored verbatim)
+  classifies every byte:</p>
+  <div class="tblwrap"><table>
+    <tr><th>Byte class</th><th>Range</th><th>JSON output</th><th>Table path handling</th></tr>
+    <tr><td><code>0x20 – 0x7e</code>, not <code>"</code> <code>\</code></td><td>printable ASCII</td><td>as-is</td><td>one table lookup, pass</td></tr>
+    <tr><td><code>0x22</code> <code>0x5c</code></td><td><code>"</code> <code>\</code></td><td><code>\"</code> <code>\\</code></td><td>backslash prefix, complex path</td></tr>
+    <tr><td><code>\b \f \n \r \t</code></td><td>whitespace controls</td><td><code>\b \f \n \r \t</code></td><td>short escape, complex path</td></tr>
+    <tr><td><code>0x00 – 0x1f</code>, other; <code>0x7f</code></td><td>control bytes, DEL</td><td><code>\u00xx</code></td><td>hex escape, complex path</td></tr>
+    <tr><td><code>0x80 – 0xff</code></td><td>non-ASCII / UTF-8</td><td>valid runes raw, invalid <code>\ufffd</code></td><td>rune decode, complex path</td></tr>
+  </table></div>
+  <p>Note the trap: <code>0x7f</code> (DEL) is <strong>not</strong> clean — zerolog's table escapes it — even though it sits inside the ASCII
+  printable range. Any SWAR scan that naively accepts <code>&lt;= 0x7e</code> "plus 0x7f" is wrong; the range predicate below is built
+  specifically so that ≥ 0x7f trips a subtraction underflow. <em>(V2_PLAN lists this as a hard-won correctness note.)</em></p>
+  <p>The reference implementation (<code>appendStringTable</code>, vendored verbatim from zerolog) pays <strong>one table lookup plus a
+  branch per byte</strong>; when it hits a byte that needs escaping it hands off to <code>appendStringComplex</code> for the rest. For log
+  payloads — URLs, paths, messages — the overwhelmingly common case is a string where <em>every</em> byte is clean, so the encoder burns a
+  lookup per byte purely to discover "nothing to do". At 96 chars that measured ~31 ns (zerolog table, M4). The SWAR work exists to make
+  that discovery ~8× cheaper per byte: ~25 ns, ≈ −18% (V2_PLAN §3b table, reproduced in §9).</p>
+</section>
+
+<!-- ============ 3 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">03</span><h2>The hybrid: SWAR as a filter in front of the table</h2></div>
+  <p>SWAR is used <strong>only as a pre-filter</strong>. The real encoder — escaping rules, <code>\u</code> hex, UTF-8 rune handling,
+  <code>\ufffd</code> replacement — is the untouched zerolog table path, which doubles as the correctness oracle. The SWAR code can only
+  answer one question: <em>"is this string clean enough to append verbatim?"</em> Its answer is a boolean; if <code>true</code>, the string
+  is quoted and bulk-appended in three appends:</p>
+<pre><code><span class="cm">// internal/hcjson/string.go — the whole fast path</span>
+<span class="hl">func</span> (e Encoder) AppendString(dst []byte, s string) []byte {
+    <span class="hl">if</span> len(s) &gt;= swarMinLen &amp;&amp; isCleanASCII(s) {       <span class="cm">// gate: 16+ bytes, SWAR scan</span>
+        <span class="hl">return</span> append(append(append(dst, '"'), s...), '"')  <span class="cm">// quoted bulk append</span>
+    }
+    <span class="hl">return</span> appendStringTable(dst, s)                    <span class="cm">// oracle / fallback</span>
+}</code></pre>
+  <div class="flow">
+    <div class="fnode">AppendString(s) — every key, message, string field</div>
+    <div class="fedge"><span class="t">▼</span></div>
+    <div class="fnode d">len(s) &gt;= 16 ? (the <span class="blu">swarMinLen gate</span>)</div>
+    <div class="frow">
+      <div class="fcol"><div class="fedge" style="padding:8px 0 3px"><span class="t">no — short strings</span></div>
+        <div class="fnode d">table path — byte loop + complex escape handling</div>
+        <div class="fnote">below 16 bytes the table wins; the SWAR setup cost is not worth it</div></div>
+      <div class="fcol"><div class="fedge" style="padding:8px 0 3px"><span class="t">yes</span></div>
+        <div class="fnode d">isCleanASCII — SWAR scan, 8 bytes per word</div>
+        <div class="fedge" style="padding:8px 0 3px"><span class="t">▼</span></div>
+        <div class="fnode d">every 8-byte chunk clean, tail clean ?</div>
+        <div class="frow" style="gap:10px">
+          <div class="fcol"><div class="fedge" style="padding:8px 0 3px"><span class="t">all clean</span></div>
+            <div class="fnode out">append " + s + "</div>
+            <div class="fnote">zero per-byte work — the SWAR payoff</div></div>
+          <div class="fcol"><div class="fedge" style="padding:8px 0 3px"><span class="t">any doubt</span></div>
+            <div class="fnode d">table path (oracle)</div>
+            <div class="fnote">conservative by design — a false alarm only costs speed, never bytes</div></div>
+        </div></div>
+    </div>
+  </div>
+  <p>Two properties make this division of labor safe:</p>
+  <ul>
+    <li><strong>The SWAR path emits no escape logic of its own.</strong> Its only output action is <code>append(s...)</code> between quotes,
+    so the moment it is wrong, output differs from the table path — which is exactly what the property and fuzz tests compare
+    (byte-identical, 200k generated strings + CI fuzz, §10).</li>
+    <li><strong>The filter is conservative.</strong> A false "dirty" verdict sends the string to the table path, which re-scans it and
+    produces correct output. Only a false "clean" verdict (a miss) could corrupt output — and the predicates are engineered so a miss is
+    impossible (§5–§8).</li>
+  </ul>
+  <div class="callout warn">
+    <span class="t">Why hybrid and not pure SWAR</span>
+    <p>If the scan were forced on every string, dirty strings would pay <em>twice</em>: a doomed SWAR scan followed by the full table
+    re-scan. The prototype measured exactly that loss — escape-heavy strings went 22.2 → 25.4 ns — while short keys (7 chars) also got
+    slower (4.8 → 5.2 ns) because scan setup outweighed the 7 lookups it saves. Hence the two gates: <code>len &gt;= 16</code> for the
+    scan at all, and scan-then-bulk-append only when the scan says clean. Clean ASCII is the dominant log shape, so the hybrid keeps the
+    −11…−18% win where it pays and never taxes the minorities.</p>
+  </div>
+  <p>The length gate is pinned by a test: <code>TestAppendStringSWARBoundary</code> verifies that a 15-byte string with a NUL goes through
+  the table path and a 16-byte one engages the scan (its escape is caught by the SWAR predicates instead).</p>
+</section>
+
+<!-- ============ 4 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">04</span><h2>Chunking: eight bytes, one register</h2></div>
+  <p>The scanner (<code>isCleanASCII</code> in <code>string.go</code>; the <code>[]byte</code> twin <code>isCleanASCIIBytes</code> in
+  <code>bytes.go</code>) consumes the input 8 bytes at a time. Each chunk is loaded as one little-endian <code>uint64</code> and handed to
+  <code>chunkIsClean</code>; whatever tail remains after the loop is checked byte-by-byte against the same <code>noEscapeTable</code> the
+  table path uses:</p>
+<pre><code><span class="hl">func</span> isCleanASCII(s string) <span class="hl">bool</span> {
+    <span class="hl">for</span> len(s) &gt;= 8 {
+        <span class="hl">if</span> !chunkIsClean(binary.LittleEndian.Uint64([]byte(s[:8]))) {
+            <span class="hl">return</span> <span class="hl">false</span>                    <span class="cm">// one word in, verdict out</span>
+        }
+        s = s[8:]
+    }
+    <span class="hl">for</span> i := <span class="hl">0</span>; i &lt; len(s); i++ {           <span class="cm">// tail: fewer than 8 bytes left</span>
+        <span class="hl">if</span> !noEscapeTable[s[i]] { <span class="hl">return</span> <span class="hl">false</span> }
+    }
+    <span class="hl">return</span> <span class="hl">true</span>
+}</code></pre>
+  <div class="lane">
+    <div class="lbl">offset</div>
+    <div class="cell okc"><span class="v">0</span><span class="n">lo · byte 0</span></div>
+    <div class="cell okc"><span class="v">1</span><span class="n"></span></div>
+    <div class="cell okc"><span class="v">2</span><span class="n"></span></div>
+    <div class="cell okc"><span class="v">3</span><span class="n"></span></div>
+    <div class="cell okc"><span class="v">4</span><span class="n"></span></div>
+    <div class="cell okc"><span class="v">5</span><span class="n"></span></div>
+    <div class="cell okc"><span class="v">6</span><span class="n"></span></div>
+    <div class="cell okc"><span class="v">7</span><span class="n">hi · byte 7</span></div>
+  </div>
+  <p class="caption">One chunk = one uint64; byte 0 lands in the least-significant lane. The predicates treat every lane identically and
+  independently, so lane order only matters for borrow propagation (§5), never for which bytes get checked.</p>
+  <p>Because each 8-byte window is judged <em>on its own word</em>, a special byte straddling a chunk boundary is simply the first lane of
+  the next chunk — chunk-local predicates can't lose it. Tests pin specials at positions 6, 7, 8, 9, 14–17 and 22–23 to prove boundary
+  safety. Unaligned <code>uint64</code> loads are fine on every platform Go targets (amd64/arm64 allow them), and the whole scan is
+  allocation-free — the benchmark shows <code>0 B/op, 0 allocs/op</code>.</p>
+  <p>Byte-slice input mirrors this exactly: <code>AppendBytes</code> gates on the same <code>swarMinLen</code> and shares
+  <code>chunkIsClean</code>, so both entry points get the same fast path from one implementation.</p>
+</section>
+
+<!-- ============ 5 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">05</span><h2>Predicate 1 — "printable ASCII": the range trick</h2></div>
+  <p><code>chunkIsClean</code> (string.go) first asks whether all 8 bytes are in [0x20, 0x7e]. The one-liner does it with two broadcast
+  subtractions and an OR:</p>
+<pre><code><span class="cm">// ((x - 0x2020202020202020) | (0x7e7e7e7e7e7e7e7e - x)) &amp; 0x8080808080808080</span>
+<span class="hl">if</span> ((x-<span class="grn">0x2020202020202020</span>) | (<span class="grn">0x7e7e7e7e7e7e7e7e</span>-x)) &amp; <span class="grn">swarHighs</span> != <span class="hl">0</span> {
+    <span class="hl">return</span> <span class="hl">false</span> <span class="cm">// control (&lt;0x20), DEL (0x7f), or non-ASCII (&gt;=0x80)</span>
+}</code></pre>
+  <p>The mechanism, lane by lane. A lane's high bit (0x80) is the "flag" the final mask reads. Subtract a broadcast constant from the
+  whole word: in each lane, <strong>an underflow sets the high bit of the result</strong>, because e.g. <code>0x09 − 0x20 = −0x17</code>
+  wraps to <code>0xe9</code>. So:</p>
+  <ul>
+    <li><strong>Term 1, <code>x − 0x2020…</code>:</strong> a byte below 0x20 (control character) underflows and flags its own lane —
+    and then <em>borrows</em> into the next-higher lane, which is exactly how arithmetic lets a dirty byte disturb its neighbors
+    (§8 explains why that is safe).</li>
+    <li><strong>Term 2, <code>0x7e7e… − x</code>:</strong> a byte above 0x7e — DEL 0x7f and everything non-ASCII — underflows the
+    mirrored subtraction and flags its lane. This is what keeps <code>0x7f</code> out of the clean set.</li>
+    <li><strong>The OR + mask</strong> merges both verdicts; any flagged lane anywhere rejects the chunk.</li>
+  </ul>
+  <div class="lane">
+    <div class="lbl">example</div>
+    <div class="cell okc"><span class="v">'G'</span><span class="n">0x47</span></div>
+    <div class="cell okc"><span class="v">'E'</span><span class="n">0x45</span></div>
+    <div class="cell okc"><span class="v">'T'</span><span class="n">0x54</span></div>
+    <div class="cell dirty"><span class="v">\t</span><span class="n">0x09</span></div>
+    <div class="cell fp"><span class="v">' '</span><span class="n">0x20</span></div>
+    <div class="cell okc"><span class="v">'/'</span><span class="n">0x2f</span></div>
+    <div class="cell okc"><span class="v">'a'</span><span class="n">0x61</span></div>
+    <div class="cell okc"><span class="v">'p'</span><span class="n">0x70</span></div>
+  </div>
+  <div class="lane">
+    <div class="lbl">term 1</div>
+    <div class="cell okc"><span class="v">0x27</span><span class="n"></span></div>
+    <div class="cell okc"><span class="v">0x25</span><span class="n"></span></div>
+    <div class="cell okc"><span class="v">0x34</span><span class="n"></span></div>
+    <div class="cell flag"><span class="v">0xe9</span><span class="n">underflow ✦</span></div>
+    <div class="cell fp"><span class="v">0xff</span><span class="n">borrow FP ✦</span></div>
+    <div class="cell okc"><span class="v">0x0e</span><span class="n"></span></div>
+    <div class="cell okc"><span class="v">0x40</span><span class="n"></span></div>
+    <div class="cell okc"><span class="v">0x4f</span><span class="n"></span></div>
+  </div>
+  <p class="caption">"GET\t/api" as one word: the tab underflows term 1 and flags its own lane; the space in lane 4 inherits a borrow and
+  gets a <em>false</em> flag (0xff). The verdict is already "dirty" — the FP changes nothing.</p>
+  <p>Why the double subtraction can never <em>miss</em>: every out-of-range value leaves a high bit in at least one term. The interesting
+  edge is what a borrow can destroy — a borrow into a lane can strip the high bit <strong>only when the no-borrow result is exactly
+  0x80</strong>. Term 1's no-borrow result is 0x80 only for byte 0xa0 (whose mirror term underflows hard), and term 2's is 0x80 only for
+  byte 0xfe (whose forward term lands at 0xde, high bit set); even 0xff, whose mirror term alone lands at 0x7f and never flags, is caught
+  by term 1 at 0xdf. No byte value puts both terms at exactly 0x80, so at least one term keeps its flag for every byte outside the range —
+  controls, DEL, and all non-ASCII.</p>
+</section>
+
+<!-- ============ 6 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">06</span><h2>Predicate 2 — "no zero bytes": the load-bearing canonical form</h2></div>
+  <p>Both remaining dirty bytes — <code>"</code> and <code>\</code> — are checked with an exact per-value search: XOR the word with a
+  broadcast copy of the byte, then ask whether any lane became zero. That reduces "find a quote" to "find a zero byte", and the
+  zero-byte detector is the sharpest edge in the whole file:</p>
+<pre><code><span class="cm">// hasZero64 — this MUST stay in the canonical SWAR form.</span>
+<span class="hl">func</span> hasZero64(x uint64) <span class="hl">bool</span> {
+    <span class="hl">return</span> (x-<span class="grn">swarOnes</span>)&amp;^x&amp;<span class="grn">swarHighs</span> != <span class="hl">0</span>   <span class="cm">// (x - 0x0101…) &amp;^ x &amp; 0x8080…</span>
+}</code></pre>
+  <p>Subtract 1 from every lane at once (<code>0x0101…</code>). A zero byte underflows and flags its lane, and the borrow propagates up
+  through a run of zeros, flagging each. Three variants matter, and only the canonical one is correct:</p>
+  <div class="tblwrap"><table>
+    <tr><th>Variant</th><th>Behavior</th><th>Verdict</th></tr>
+    <tr><td><code>(x − ones) &amp; ~x &amp; highs</code></td><td>flags every zero lane; the <code>&amp;~x</code> clears the <em>spurious</em>
+      flags that bytes ≥ 0x81 raise (see below). Residual false positives exist but only sit directly above a true zero (§7).</td>
+      <td class="up">canonical — this is what runs</td></tr>
+    <tr><td><code>(x − ones) &amp; highs</code></td><td>"simplified" by dropping <code>&amp;~x</code> — still never misses a zero, but now
+      <em>every byte ≥ 0x81</em> also flags, because e.g. <code>0xf0 − 1 = 0xef</code> keeps its high bit without any underflow.
+      In this encoder's context every such chunk is already dirty (non-ASCII), so it is merely slow and noisy.</td>
+      <td class="dn">wrong — FP storm on UTF-8</td></tr>
+    <tr><td><code>(x − ones) &amp; x &amp; highs</code></td><td>"simplified" by swapping <code>&amp;^</code> for <code>&amp;</code> — the
+      fatal one. A zero byte has no high bit in <code>x</code> for the AND to preserve, so the mask wipes out exactly the lanes that
+      matter: <strong>it never detects a zero</strong>. Real quotes and backslashes sail through as "clean", escaping is silently skipped,
+      and the output is corrupt JSON.</td>
+      <td class="dn">fatal — detects nothing</td></tr>
+  </table></div>
+  <div class="callout bad">
+    <span class="t">The incident that made this a gate (V2_PLAN §05 / §3b)</span>
+    <p>The first SWAR prototype benchmarked <strong>3× faster than everything</strong> — because a subtly wrong zero-byte detector (the
+    <code>&amp;</code> variant above) meant it never flagged anything and skipped escaping entirely. Benchmarks smiled; output was corrupt.
+    Only the 200k-case property test against the vendored table path caught it, which is why equivalence + fuzz tests are hard gates for
+    W1, not nice-to-haves — and why the code comment and test suite both treat the canonical shape as load-bearing. The property test
+    fails any regression that reintroduces the bug.</p>
+  </div>
+  <p>The <code>&amp;~x</code> term's true job, demonstrated by the "dropped" row: subtracting 1 from a byte ≥ 0x81 leaves the high bit set
+  <em>without any underflow</em> — a machine-level false positive that has nothing to do with zeros. Those bytes are exactly the ones
+  whose own high bit is set in <code>x</code>, and <code>&amp;~x</code> removes precisely them. Exhaustive and random checks confirm the
+  canonical form flags: every true zero lane, plus benign borrow artifacts whose chain always starts at a true zero.</p>
+</section>
+
+<!-- ============ 7 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">07</span><h2>Predicate 3 — exact search for <code>"</code> and <code>\</code></h2></div>
+  <p>With a zero detector in hand, finding a specific byte value is an XOR away (<code>hasValue64</code>):</p>
+<pre><code><span class="cm">// hasValue64 reports whether any byte of x equals the broadcast byte c,</span>
+<span class="cm">// via the canonical zero detector on the XOR mask.</span>
+<span class="hl">func</span> hasValue64(x, c uint64) <span class="hl">bool</span> { <span class="hl">return</span> hasZero64(x ^ c) }
+
+<span class="cm">// in chunkIsClean:</span>
+<span class="hl">return</span> !hasValue64(x, swarQuote) &amp;&amp; !hasValue64(x, swarSlash)  <span class="cm">// 0x22…, 0x5c…</span></code></pre>
+  <p>A byte equal to the target becomes XOR-zero and is caught exactly. The comment in the source flags one tempting but unsound merge:
+  <em>AND-ing the two XOR masks</em> — <code>hasZero64((x^quote) &amp; (x^slash))</code> — looks like one pass but is wrong, because an
+  ordinary byte whose quote-XOR and slash-XOR have disjoint high-bit patterns can AND to zero and masquerade as "no match". The two
+  searches stay separate. (Why the AND fails: each zero detector reports via the <em>high</em> bits of its subtraction, and the two
+  subtractions place their evidence in different bit positions; the intersection can be empty even when a match exists.)</p>
+  <p>Borrow-chain false positives carry over from §6: a byte whose XOR-lane is <code>0x01</code> sitting directly above a real match
+  lane is flagged too. For the quote search that byte is <code>0x22 ^ 0x01 = '#'</code>; for the slash search, <code>0x5c ^ 0x01 = ']'</code>.
+  In the composed scanner these FPs are inert: they occur only in a chunk that already contains the real match, so the chunk is rejected
+  anyway — and the FP never flips a clean chunk to dirty (§8).</p>
+  <div class="lane">
+    <div class="lbl">example</div>
+    <div class="cell dirty"><span class="v">'"'</span><span class="n">0x22</span></div>
+    <div class="cell fp"><span class="v">'#'</span><span class="n">0x23</span></div>
+    <div class="cell okc"><span class="v">'a'</span><span class="n">0x61</span></div>
+    <div class="cell okc"><span class="v">'a'</span><span class="n">0x61</span></div>
+    <div class="cell okc"><span class="v">'a'</span><span class="n">0x61</span></div>
+    <div class="cell okc"><span class="v">'a'</span><span class="n">0x61</span></div>
+    <div class="cell okc"><span class="v">'a'</span><span class="n">0x61</span></div>
+    <div class="cell okc"><span class="v">'a'</span><span class="n">0x61</span></div>
+  </div>
+  <div class="lane">
+    <div class="lbl">x ^ 0x22…</div>
+    <div class="cell flag"><span class="v">0x00</span><span class="n">real match ✦</span></div>
+    <div class="cell flag"><span class="v">0x01</span><span class="n">borrow FP ✦</span></div>
+    <div class="cell okc"><span class="v">0x43</span><span class="n"></span></div>
+    <div class="cell okc"><span class="v">0x43</span><span class="n"></span></div>
+    <div class="cell okc"><span class="v">0x43</span><span class="n"></span></div>
+    <div class="cell okc"><span class="v">0x43</span><span class="n"></span></div>
+    <div class="cell okc"><span class="v">0x43</span><span class="n"></span></div>
+    <div class="cell okc"><span class="v">0x43</span><span class="n"></span></div>
+  </div>
+  <p class="caption">'"#' as the first two lanes: the XOR makes the quote a true zero (flagged), and the '#' becomes 0x01, which inherits
+  the borrow and is flagged too. Verdict "dirty" — correct, and correct whether or not the FP fires.</p>
+</section>
+
+<!-- ============ 8 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">08</span><h2>Composition: why the chunk verdict is trustworthy</h2></div>
+  <p><code>chunkIsClean</code> chains the three predicates in a fixed order — range first, then quote, then slash. The order matters:
+  the quote/slash searches only ever run on words already proven printable, which caps their XOR-lanes at ≤ 0x5c and keeps the §6
+  <code>&amp;~x</code> analysis airtight. The verdict composes to a strong property:</p>
+  <div class="callout ok">
+    <span class="t">Verified: no misses, and no false positives on clean chunks</span>
+    <p>For this write-up the predicates were checked directly against a byte-exact oracle:
+    <strong>0 misses and 0 false positives</strong> across (a) all 16.7M possible 3-lane patterns embedded in an otherwise-clean word
+    — 1.9M of them fully clean — (b) 5M random full-width words drawn only from the 93 clean byte values, (c) 400k random words, and
+    (d) 200k words with dirty bytes planted at every lane position. The scanner behaves as an <em>exact</em> filter on 8-byte chunks:
+    reject ⟺ the chunk contains a byte needing escape.</p>
+  </div>
+  <p>The mechanism behind the exactness, lane by lane: the only lanes a predicate can flag falsely are those <em>above a borrow
+  chain</em>, and every borrow chain starts at a lane that genuinely underflows — a byte &lt; 0x20 in term 1, ≥ 0x7f in term 2, or an
+  XOR-zero (a real quote or slash). Chain starters always flag their own lane, so a chunk with any dirty byte is rejected at that byte;
+  lanes above it may add false flags that change nothing. Conversely, a chunk with no dirty byte has no chain starter anywhere, so
+  nothing flags: <strong>FP requires dirt, and dirt always flags</strong>. Misses would need a dirty byte whose every term keeps its
+  high bit clear — ruled out by the "exactly 0x80" argument in §5 and the underflow-always-flags argument in §6.</p>
+  <p>The source comments are deliberately more cautious than this — "conservative: any suspicious chunk returns false", "false positives
+  only send the string to the table path" — because the predicates <em>in isolation</em> (especially <code>hasZero64</code> as a
+  standalone detector, exercised directly by tests) do have the borrow FPs; only their composition on full words makes them inert. That
+  caution is the correct engineering posture: the cost of a theoretical FP is a slower fallback, the cost of a miss is corrupt JSON, so
+  every comment and test tilts toward "when in doubt, table".</p>
+</section>
+
+<!-- ============ 9 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">09</span><h2>What it buys: measured effect</h2></div>
+  <p>The prototype table from V2_PLAN §3b (M4, Go 1.27.0, property-tested on 200k random strings), which motivated the hybrid:</p>
+  <div class="tblwrap"><table>
+    <tr><th>Payload (shape)</th><th class="num">zerolog table</th><th class="num">hybrid SWAR</th><th class="num">jsontext (stdlib)</th><th>Path taken</th></tr>
+    <tr><td>7-char key <code>user_id</code></td><td class="num">4.8 ns</td><td class="num">5.2 ns</td><td class="num">7.1 ns</td><td>below gate → table</td></tr>
+    <tr><td>22-char path</td><td class="num">9.2 ns</td><td class="num">8.2 ns</td><td class="num">12.6 ns</td><td class="up">SWAR fast path</td></tr>
+    <tr><td>96-char URL (gate payload)</td><td class="num">30.9 ns</td><td class="num">25.4 ns</td><td class="num">~50 ns</td><td class="up">SWAR fast path · −18%</td></tr>
+    <tr><td>escape-heavy (2 quotes in 37 chars)</td><td class="num">22.2 ns</td><td class="num">25.4 ns</td><td class="num">22.3 ns</td><td>SWAR scan → table (pays twice)</td></tr>
+    <tr><td>unicode (multi-byte)</td><td class="num">25.3 ns</td><td class="num">25.7 ns</td><td class="num">21.6 ns</td><td>SWAR scan → table</td></tr>
+  </table></div>
+  <p>A spot-check on this machine today (Go 1.27.0, darwin/arm64, M4; same payloads as <code>string_bench_test.go</code>, 0 B/op,
+  0 allocs/op everywhere):</p>
+  <div class="tblwrap"><table>
+    <tr><th>Benchmark</th><th class="num">ns/op (this run)</th><th>Note</th></tr>
+    <tr><td><code>BenchmarkAppendString96CharURL</code></td><td class="num">50.6</td><td class="up">SWAR fast path</td></tr>
+    <tr><td><code>BenchmarkAppendStringTable96CharURL</code> (vendored reference)</td><td class="num">61.8</td><td>table path on the same 96-char URL</td></tr>
+    <tr><td><code>BenchmarkAppendStringEscapeHeavy</code></td><td class="num">87.8</td><td>scan → table fallback (dirty string)</td></tr>
+    <tr><td><code>BenchmarkAppendString7CharKey</code></td><td class="num">13.8</td><td>below gate → table</td></tr>
+  </table></div>
+  <p>Ratio on the gate payload: 61.8 / 50.6 ≈ <strong>−18%</strong>, matching the documented prototype number, and the v2 gate
+  ("escape, 96-char clean ASCII ≤ 26 ns", V2_DESIGN §4) was met during W1. Absolute ns vary run to run; the ~18% table-vs-SWAR gap is
+  stable.</p>
+  <p>The design deliberately stops at pure-Go SWAR: true SIMD escaping needs per-architecture assembly (AVX2/NEON, as in goccy or
+  sonic), splits the codebase by build tag, and only touches the slice of escape cost that remains after SWAR already captured the
+  11–18%. V2_PLAN §3b's verdict: revisit only if post-v2 profiles show the escape scan above ~5% of lifecycle time. Sonic/goccy were
+  also rejected as dependencies on measurement — the fork's typed append loop beats them by ~140× on the only payload where a marshaler
+  could appear, so the SWAR-in-pure-Go hybrid owns the hot path with zero dependencies and zero assembly.</p>
+  <div class="callout warn">
+    <span class="t">Reading the numbers honestly</span>
+    <p>SWAR wins only on clean ASCII ≥ 16 bytes, and it wins by <em>skipping work</em>, not by doing it faster — a clean 96-char string
+    costs roughly one scan (≈8 word-checks of ~4 ops each) plus a bulk append, against 96 table lookups. Dirty strings pay the scan plus
+    the table re-scan, which is why escape-heavy payloads show a small loss and the gate length is 16. Log payloads are dominated by the
+    clean shape, and the two benchmark guards (<code>TestGatePayloadsTakeFastPath</code>) exist precisely so the headline benchmark can
+    never silently drift onto the table path and keep claiming a SWAR win.</p>
+  </div>
+</section>
+
+<!-- ============ 10 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">10</span><h2>The safety net — tests that pin every claim</h2></div>
+  <ul>
+    <li><strong>Property gate — 200,000 generated strings</strong> (<code>TestAppendStringProperty</code>): random bytes, clean ASCII with
+    injected specials at random positions, multi-byte UTF-8, and systematic adversarial placements must encode <em>byte-identically</em>
+    through the hybrid SWAR path and the vendored zerolog table reference. The header comment is blunt: "No benchmark result counts until
+    this passes (V2_PLAN §05)."</li>
+    <li><strong>CI fuzz — 60 s per target</strong> (<code>fuzz_test.go</code>): the differential oracle plus a second, semantic one —
+    output must always be valid JSON and must round-trip to the input when the input is valid UTF-8. The round-trip closes the class a
+    differential-only oracle cannot see: a byte class both paths mishandled identically. Seeds include the SWAR boundaries (15 vs 16
+    bytes, 23 + NUL, 31 + quote/slash) and the gate URL.</li>
+    <li><strong>Predicate unit tests</strong> (<code>TestChunkDetector</code>): every special byte value planted at every one of the 8 lane
+    positions; the canonical zero detector never misses and never invents zeros on clean words; and a carry-chain regression set — long
+    0xff/0xfe runs, boundary bytes 0xa0/0x80 — "found by the fuzz corpus", covering the borrow shapes §5–§7 reason about.</li>
+    <li><strong>Boundary pins</strong>: <code>TestAppendStringSWARBoundary</code> (15/16 gate), specials straddling chunk edges at
+    positions 6–9, 14–17, 22–23, and <code>TestGatePayloadsTakeFastPath</code> — the benchmark payloads must actually take the path they
+    claim to benchmark (96-char URL SWAR-clean; the escape-heavy payload must not be).</li>
+    <li><strong>Fuzz corpus as regression memory</strong>: the carry-chain chunks in <code>TestChunkDetector</code> are quoted as "found by
+    the fuzz corpus" — inputs that once confused naive <code>(x+ones)</code>-style checks live on as permanent unit tests.</li>
+  </ul>
+</section>
+
+<!-- ============ 11 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-num">11</span><h2>Reading map</h2></div>
+  <div class="filemap">
+    <span class="fp">internal/hcjson/string.go</span> — gate const <code>swarMinLen</code> (:21) · hybrid dispatch
+    <code>AppendString</code> (:26) · oracle <code>appendStringTable</code> (:40) + <code>appendStringComplex</code> (:63) ·
+    chunk loop <code>isCleanASCII</code> (:114) · <code>chunkIsClean</code> (:126) · broadcast constants (:169) ·
+    canonical <code>hasZero64</code> (:176) · <code>hasValue64</code> (:192)<br>
+    <span class="fp">internal/hcjson/bytes.go</span> — the []byte mirror: <code>AppendBytes</code> (:8), <code>isCleanASCIIBytes</code> (:100);
+    shares <code>chunkIsClean</code><br>
+    <span class="fp">internal/hcjson/hcjson.go</span> — package rationale; <code>AppendKey</code> routes keys through <code>AppendString</code><br>
+    <span class="fp">record.go</span> — the hot callers: message (:75), string fields (:153), error text (:169), shared <code>jsonEnc</code> (:177)<br>
+    <span class="fp">string_test.go / string_bench_test.go / fuzz_test.go</span> — property, boundary, detector, and fuzz gates (§10)<br>
+    <span class="fp">V2_PLAN §3b, V2_PLAN.html §05, V2_DESIGN §4, W1</span> — prototype numbers, the incident, the ≤ 26 ns gate<br>
+    <span class="fp">openspec/changes/add-first-party-json-sink/specs/json-encoder</span> — delta spec for the change
+  </div>
+  <p style="margin-top:14px">One route through it all: read <code>AppendString</code> (three lines, the hybrid), then
+  <code>isCleanASCII</code> (the loop shape), then <code>chunkIsClean</code> (the three predicates), then the predicates' helpers in
+  reverse file order — <code>hasValue64</code>, <code>hasZero64</code> with its warning comment, and the constants. Everything below
+  <code>chunkIsClean</code> exists only to make the one boolean in <code>AppendString</code> trustworthy.</p>
+</section>
+
+<footer>
+  <p class="mono">SWAR_ENCODER.html · written against internal/hcjson @ main · claims cross-checked against source, tests, and
+  V2_PLAN/V2_DESIGN; predicates re-verified exhaustively for this write-up (§8) · measured: Apple M4, Go 1.27.0</p>
+</footer>
+
+</div>
+</body>
+</html>

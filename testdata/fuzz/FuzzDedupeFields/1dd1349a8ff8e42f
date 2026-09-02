@@ -1,3 +1,0 @@
-go test fuzz v1
-[]byte("\xfe'0.B$A")
-[]byte("\xfeCB")

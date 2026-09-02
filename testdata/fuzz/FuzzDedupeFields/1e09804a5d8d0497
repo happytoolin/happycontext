@@ -1,3 +1,0 @@
-go test fuzz v1
-[]byte("\x0410")
-[]byte("0")

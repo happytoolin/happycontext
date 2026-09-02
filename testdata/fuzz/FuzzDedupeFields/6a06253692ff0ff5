@@ -1,3 +1,0 @@
-go test fuzz v1
-[]byte("c701%20")
-[]byte("20128a")

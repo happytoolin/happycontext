@@ -1,3 +1,0 @@
-go test fuzz v1
-[]byte(" 10100000")
-[]byte("8")

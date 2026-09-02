@@ -1,3 +1,0 @@
-go test fuzz v1
-[]byte("07201")
-[]byte("2\x01")

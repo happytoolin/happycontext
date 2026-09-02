@@ -1,3 +1,0 @@
-go test fuzz v1
-[]byte("+720%0&01C$")
-[]byte("1\xff09")

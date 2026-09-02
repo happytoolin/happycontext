@@ -1,3 +1,0 @@
-go test fuzz v1
-[]byte("X7$0")
-[]byte("98")

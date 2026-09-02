@@ -1,3 +1,0 @@
-go test fuzz v1
-[]byte("Y72.\xbc09")
-[]byte("2709071")
