@@ -43,8 +43,7 @@ jobs:
             if go test . -run '^$' -fuzz "^$target$" -fuzztime 10m; then
               echo "PASS $target"
             else
-              echo "FAIL $target" | tee -a /tmp/fuzz/encoder-failures
-              echo "  - $target" >> /tmp/fuzz/core-failures
+              echo "FAIL $target" | tee -a /tmp/fuzz/core-failures
             fi
           done
 
@@ -108,8 +107,7 @@ jobs:
             if go test ./internal/hcjson -run '^$' -fuzz "^$target$" -fuzztime 10m; then
               echo "PASS $target"
             else
-              echo "FAIL $target"
-              echo "  - $target" >> /tmp/fuzz/encoder-failures
+              echo "FAIL $target" | tee -a /tmp/fuzz/encoder-failures
             fi
           done
 
