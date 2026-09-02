@@ -115,3 +115,11 @@ jobs:
         run: |
           set -euo pipefail
           go test . -run '^$' -fuzz '^FuzzRecordEncodedDedupe$' -fuzztime 60s
+
+      - name: Fuzz core lifecycle, dedupe and config paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test . -run '^$' -fuzz '^FuzzEndLifecycle$' -fuzztime 60s
+          go test . -run '^$' -fuzz '^FuzzDedupeFields$' -fuzztime 60s
+          go test . -run '^$' -fuzz '^FuzzCompileConfig$' -fuzztime 60s

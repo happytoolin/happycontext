@@ -139,10 +139,11 @@ func configIsValid(cfg Config) bool {
 }
 
 // driveOneRequest runs one full request through rt, asserting nothing
-// panics and that emission is consistent with the sink (sampling may
-// drop healthy events, so no count is asserted). Returns the event's
-// message when one was emitted, for the immutability probe.
-func driveOneRequest(t *testing.T, rt *Runtime, name string) (msg string, emitted bool) {
+// panics and that emission is consistent with the sink. withErr makes
+// the event an error (amendment-4 bypass): its emission is then
+// deterministic — immune to every rate and sampler in the config.
+// Returns the captured level, message, and emission for the probes.
+func driveOneRequest(t *testing.T, rt *Runtime, name string, withErr bool) (level Level, msg string, emitted bool) {
 	t.Helper()
 	ts, _ := rt.sink.(*TestSink)
 	if ts != nil {
@@ -150,19 +151,24 @@ func driveOneRequest(t *testing.T, rt *Runtime, name string) (msg string, emitte
 	}
 	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: name})
 	Add(op.Context(), "k", "v")
-	emitted = op.End(nil)
+	if withErr {
+		err := errors.New("probe-error")
+		emitted = op.End(&err)
+	} else {
+		emitted = op.End(nil)
+	}
 	if ts != nil {
 		events := ts.Events()
 		if emitted != (len(events) == 1) {
 			t.Fatalf("emitted=%v but captured %d events", emitted, len(events))
 		}
 		if emitted {
-			return events[0].Message(), true
+			return events[0].Level(), events[0].Message(), true
 		}
 	} else if emitted {
 		t.Fatal("runtime with a nil sink reported emission")
 	}
-	return "", emitted
+	return 0, "", emitted
 }
 
 func FuzzCompileConfig(f *testing.F) {
@@ -199,46 +205,76 @@ func FuzzCompileConfig(f *testing.F) {
 			t.Fatalf("Compile accepted an invalid config: rate=%v levels=%v policies=%v",
 				cfg.SamplingRate, cfg.LevelSamplingRates, cfg.OperationPolicies)
 		}
-		preMsg, preEmitted := driveOneRequest(t, rt, "pre-mutation")
 
-		// Immutability probe: mutate every field of the caller's config
-		// and verify the runtime behaves identically.
-		cfg.SamplingRate = flipRate(cfg.SamplingRate)
-		cfg.Message = "mutated-message"
-		if cfg.LevelSamplingRates != nil {
-			for level := range cfg.LevelSamplingRates {
-				delete(cfg.LevelSamplingRates, level)
-			}
-			cfg.LevelSamplingRates[LevelError] = 1
+		// Probe 1 — the compiled runtime is usable end to end. An error
+		// event emits deterministically (the amendment-4 bypass makes
+		// emission immune to every rate and sampler in the config).
+		if _, _, emitted := driveOneRequest(t, rt, "error-drive", true); !emitted {
+			t.Fatal("valid runtime dropped an error event")
 		}
-		if cfg.OperationPolicies != nil {
-			for domain, policy := range cfg.OperationPolicies {
-				policy.SuccessLevel = LevelError
-				policy.FailureLevel = LevelDebug
-				if policy.OutcomeLevels != nil {
-					policy.OutcomeLevels[OutcomeRetry] = LevelWarn
-				}
-				if policy.SamplingRate != nil {
-					r := 0.0
-					policy.SamplingRate = &r
-				}
-				cfg.OperationPolicies[domain] = policy
+
+		// Probe 2 — immutability under deterministic rates. Healthy
+		// emission must be decided by rate 1 (keep), never by a coin
+		// flip: the pre/post comparison below then catches ANY aliasing
+		// of the caller's config — a leaked map or *float64 flips
+		// emission, level, or message between the two drives (review
+		// findings GLM-2 / DS-9). The hostile cfg itself was validated
+		// by the Compile above; the probe clone only makes the rates
+		// deterministic.
+		probeCfg := cfg
+		probeCfg.SamplingRate = 1
+		for level := range probeCfg.LevelSamplingRates {
+			probeCfg.LevelSamplingRates[level] = 1
+		}
+		for domain, policy := range probeCfg.OperationPolicies {
+			if policy.SamplingRate != nil {
+				one := 1.0
+				policy.SamplingRate = &one
+				probeCfg.OperationPolicies[domain] = policy
 			}
 		}
-		postMsg, postEmitted := driveOneRequest(t, rt, "post-mutation")
-		if postEmitted && preEmitted && postMsg != preMsg {
-			t.Fatalf("runtime message changed after config mutation: %q -> %q",
-				preMsg, postMsg)
+		rt2, err := Compile(probeCfg)
+		if err != nil {
+			t.Fatalf("deterministic probe config rejected: %v", err)
+		}
+		preLevel, preMsg, preEmitted := driveOneRequest(t, rt2, "pre-mutation", false)
+
+		// Mutate every mutable field of the caller's config.
+		probeCfg.SamplingRate = 0 // was 1: a leaked rate drops the healthy event
+		probeCfg.Message = "mutated-message"
+		for level := range probeCfg.LevelSamplingRates {
+			probeCfg.LevelSamplingRates[level] = 0 // leaked map drops the healthy event
+		}
+		for domain, policy := range probeCfg.OperationPolicies {
+			policy.SuccessLevel = LevelError // leaked policy raises the level
+			policy.FailureLevel = LevelDebug
+			if policy.OutcomeLevels != nil {
+				policy.OutcomeLevels[OutcomeRetry] = LevelWarn
+			}
+			if policy.SamplingRate != nil {
+				zero := 0.0
+				policy.SamplingRate = &zero // leaked rate pointer drops the event
+			}
+			probeCfg.OperationPolicies[domain] = policy
+		}
+		postLevel, postMsg, postEmitted := driveOneRequest(t, rt2, "post-mutation", false)
+
+		// The compiled runtime must behave identically: emission first
+		// (unconditional — a leaked rate would flip it), then level and
+		// message when the healthy event was emitted at all.
+		if postEmitted != preEmitted {
+			t.Fatalf("config mutation flipped emission: pre=%v post=%v — "+
+				"the runtime aliases the caller's config", preEmitted, postEmitted)
+		}
+		if preEmitted {
+			if postMsg != preMsg {
+				t.Fatalf("runtime message changed after config mutation: %q -> %q", preMsg, postMsg)
+			}
+			if postLevel != preLevel {
+				t.Fatalf("runtime level changed after config mutation: %v -> %v", preLevel, postLevel)
+			}
 		}
 	})
-}
-
-// flipRate moves an accepted rate to a rejected one (or vice versa).
-func flipRate(r float64) float64 {
-	if r < 0.5 {
-		return 1.5
-	}
-	return -1.5
 }
 
 // TestCompileConfigPropertyRandom drives the same oracle over
@@ -265,6 +301,6 @@ func TestCompileConfigPropertyRandom(t *testing.T) {
 		if !configIsValid(cfg) {
 			t.Fatalf("iter %d: Compile accepted invalid config", i)
 		}
-		driveOneRequest(t, rt, fmt.Sprintf("iter-%d", i))
+		driveOneRequest(t, rt, fmt.Sprintf("iter-%d", i), true) // error drive: deterministic
 	}
 }

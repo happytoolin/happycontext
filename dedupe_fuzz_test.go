@@ -35,12 +35,16 @@ func FuzzDedupeFields(f *testing.F) {
 	// Width boundary seeds: 0, 1, 23/24/25/26 (the crossover), 31/32/33
 	// (the seenArr→map handoff), 40, 64, 80, with dense duplicates.
 	for _, w := range []int{0, 1, 23, 24, 25, 26, 31, 32, 33, 40, 64, 80} {
-		// byte 0 carries the width; the rest cycle four keys densely.
+		// byte 0 carries the width; byte 1 picks a 4-key alphabet
+		// (size = 1 + keyBytes[1]), and keys cycle k0-k3 densely.
 		keys := make([]byte, w+1)
 		vals := make([]byte, w+1)
 		keys[0] = byte(w)
-		for i := 1; i <= w; i++ {
-			keys[i] = byte(i % 4)
+		if w >= 1 {
+			keys[1] = 3 // 4-key alphabet for non-empty streams
+		}
+		for i := 2; i <= w; i++ {
+			keys[i] = byte((i - 2) % 4)
 			vals[i] = byte(i)
 		}
 		f.Add(keys, vals)
@@ -52,7 +56,7 @@ func FuzzDedupeFields(f *testing.F) {
 	f.Add([]byte{3, 6, 6, 6}, []byte{0, 1, 2, 3})                                 // width 3, all "level"
 	f.Add([]byte{6, 0, 0, 1, 2, 3, 0}, []byte{0, 1, 9, 9, 9, 9, 2})               // width 6, dup at first+last
 	f.Add([]byte{}, []byte{})                                                     // empty program
-	f.Add([]byte{7, 0, 1, 2, 3, 4, 5, 6}, []byte{10, 10, 10, 10, 10, 10, 10, 10}) // width 7, unique keys
+	f.Add([]byte{7, 7, 1, 2, 3, 4, 5, 6}, []byte{10, 10, 10, 10, 10, 10, 10, 10}) // width 7, seven unique keys (8-key alphabet)
 
 	f.Fuzz(func(t *testing.T, keyBytes []byte, valBytes []byte) {
 		fields := dedupeFieldsFromBytes(keyBytes, valBytes)
@@ -166,8 +170,9 @@ func verifyDedupeFields(t *testing.T, fields []Field) {
 }
 
 // TestDedupeFieldsProperty runs the same oracle over PCG-generated
-// field lists — seed-only coverage without the fuzzer, including the
-// width × density matrix.
+// field lists — seed-only coverage without the fuzzer. Total: the
+// full width × density matrix (81 widths 0-80 × 4 alphabet sizes =
+// 324 combos) plus 500 random extra sweeps = 824 checks.
 func TestDedupeFieldsProperty(t *testing.T) {
 	rng := rand.New(rand.NewPCG(0xDEDE5eed, 0xF1E1D5E))
 	check := func(width int, size int) {

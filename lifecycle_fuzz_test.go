@@ -1059,9 +1059,13 @@ func seedPrograms() []seedProg {
 	// wrong-kind canonical writes are ignored by the scan.
 	add("outcome-wrong-kind", p(modeRate1, DomainJob,
 		intOp("op.outcome", 7), strOp("http.status", "500"), endErr(nil)))
-	// level permutations: requested floor × failure outcome.
-	for _, lvl := range []Level{LevelDebug, LevelInfo, LevelWarn, LevelError, Level(99)} {
-		add("level-"+lvl.String(), p(modeRate1, DomainJob,
+	// level permutations: requested floor × failure outcome. Level(99)
+	// is invalid and must be a no-op; its label is distinct from
+	// LevelInfo because Level(99).String() falls back to "INFO" (a
+	// collision that would silently drop a corpus file).
+	levelNames := []string{"DEBUG", "INFO", "WARN", "ERROR", "INVALID"}
+	for i, lvl := range []Level{LevelDebug, LevelInfo, LevelWarn, LevelError, Level(99)} {
+		add("level-"+levelNames[i], p(modeRate1, DomainJob,
 			lifeOp{kind: opSetLevel, val: lvl}, endErr(errors.New("e"))))
 	}
 	// malformed kv tails through the public variadic Add.
