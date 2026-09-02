@@ -16,17 +16,29 @@ import (
 // json.Marshal would emit \u003c for <, which parses equal but differs
 // on the wire). A variable keeps the vendored seam (JSONMarshalFunc)
 // swappable in tests.
-var jsonMarshal = func(v any) ([]byte, error) {
+//
+// Panic policy (slog precedent, log/slog handler.go appendJSONMarshal):
+// a user MarshalJSON panic must not unwind End — encoding/json lets it
+// propagate (both the classic implementation and the go1.27 json/v2
+// default), so it is recovered here into the documented fallback string.
+// This pins the wire behavior identically across the Go 1.25–1.27
+// matrix; the error-return path keeps the vendored zerolog shape.
+var jsonMarshal = func(v any) (b []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			b, err = nil, fmt.Errorf("%v", r)
+		}
+	}()
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
 	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(v); err != nil {
+	if err = encoder.Encode(v); err != nil {
 		return nil, err
 	}
-	b := buf.Bytes()
+	b = buf.Bytes()
 	if len(b) > 0 {
 		// Remove the trailing \n added by Encode.
-		return b[:len(b)-1], nil
+		b = b[:len(b)-1]
 	}
 	return b, nil
 }
