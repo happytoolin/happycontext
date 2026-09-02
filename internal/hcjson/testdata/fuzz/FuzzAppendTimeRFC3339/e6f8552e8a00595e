@@ -1,4 +1,0 @@
-go test fuzz v1
-int64(1788376250)
-int32(160455928)
-byte('\a')

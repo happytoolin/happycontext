@@ -1,2 +1,0 @@
-go test fuzz v1
-float64(81.7283950617284)
