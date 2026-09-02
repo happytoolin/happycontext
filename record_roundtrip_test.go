@@ -258,11 +258,13 @@ func TestEncodedDeterminism(t *testing.T) {
 // checked against an independent reference fold, not the encoder's own
 // dedupe code.
 //
-// Canonical-key collision is PINNED as documented behavior (G2, user
-// error): user fields named "level"/"time"/"message" do NOT shadow or
-// rename — the canonical envelope keys are appended after the fields,
-// so the wire carries both and a last-wins parser sees the canonical
-// value.
+// Canonical-key collision follows the logrus rename policy (record.go
+// aliasKey, T5 decision): user fields named "level"/"time"/"message"
+// are emitted as "fields.level"/"fields.time"/"fields.message", so the
+// envelope keys — member 0 level, last two members time and message —
+// stay unique on the wire. The reference fold aliases the keys the
+// same way (a user "message" and a user "fields.message" fold into one
+// member).
 func FuzzRecordEncodedDedupe(f *testing.F) {
 	f.Add(uint8(0), []byte{0, 1, 2, 0, 1}, []byte{7, 7, 7})
 	f.Add(uint8(24), []byte{0, 1, 2, 3, 0, 1, 2, 3}, []byte{1, 2})
@@ -299,7 +301,7 @@ func FuzzRecordEncodedDedupe(f *testing.F) {
 		}
 		lww := map[string]lastWrite{}
 		for i, fl := range fields {
-			lww[fl.key] = lastWrite{fl.num, i}
+			lww[aliasedFieldKey(fl.key)] = lastWrite{fl.num, i}
 		}
 		var wantOrder []string
 		{
@@ -322,11 +324,13 @@ func FuzzRecordEncodedDedupe(f *testing.F) {
 			}
 		}
 
-		// 1. every non-canonical user key exactly once on the wire
-		// (keys colliding with level/time/message are pinned by check 3)
+		// 1. every aliased user key exactly once on the wire. The
+		// envelope keys (level/time/message) never appear among the user
+		// members — collisions were renamed to fields.* — so every fold
+		// key must be a user member.
 		for k := range lww {
 			if k == "level" || k == "time" || k == "message" {
-				continue
+				continue // envelope members, checked by check 3
 			}
 			n := 0
 			for _, m := range ordered {
@@ -340,6 +344,21 @@ func FuzzRecordEncodedDedupe(f *testing.F) {
 			var v int64
 			if err := json.Unmarshal(got[k], &v); err != nil || v != lww[k].val {
 				t.Fatalf("key %q = %s, want last value %d", k, got[k], lww[k].val)
+			}
+		}
+
+		// 1b. colliding user keys never appear under their raw names in
+		// the user span, and their fields.* copies are covered by the
+		// fold loop above.
+		for _, m := range ordered {
+			switch m.key {
+			case "level", "time", "message":
+				// envelope members only — the user span excludes them
+				// by construction (check 3)
+			default:
+				if _, user := lww[m.key]; !user {
+					t.Fatalf("wire member %q is not a fold key (line %s)", m.key, r.Encoded())
+				}
 			}
 		}
 
@@ -358,10 +377,9 @@ func FuzzRecordEncodedDedupe(f *testing.F) {
 			}
 		}
 
-		// 3. canonical collision pin: level/time/message appear exactly
-		// once as envelope keys regardless of user fields with the same
-		// name (the user copy is the duplicate; last-wins parsers see the
-		// canonical value)
+		// 3. canonical envelope pin: level/time/message appear exactly
+		// once each as envelope members regardless of colliding user
+		// fields — the rename guarantees the wire is duplicate-free.
 		for _, canon := range []string{"level", "time", "message"} {
 			n := 0
 			for _, m := range ordered {
@@ -369,16 +387,9 @@ func FuzzRecordEncodedDedupe(f *testing.F) {
 					n++
 				}
 			}
-			userHas := false
-			if _, ok := lww[canon]; ok {
-				userHas = true
-			}
-			wantN := 1
-			if userHas {
-				wantN = 2
-			}
-			if n != wantN {
-				t.Fatalf("canonical key %q appears %d times, want %d (collision pin)", canon, n, wantN)
+			if n != 1 {
+				t.Fatalf("canonical key %q appears %d times, want exactly 1 "+
+					"(rename policy; line %s)", canon, n, r.Encoded())
 			}
 		}
 	})

@@ -68,13 +68,65 @@ func (r *Record) Encoded() []byte {
 func (r *Record) encode() []byte {
 	b := make([]byte, 0, 64+len(r.fields)*24)
 	b = append(b, jsonLevelPrefix(r.level)...)
-	b = appendDedupedFields(b, r.fields)
+	fields := r.fields
+	if needsFieldAliasing(fields) {
+		fields = aliasFields(fields)
+	}
+	b = appendDedupedFields(b, fields)
 	b = jsonEnc.AppendKey(b, "time")
 	b = hcjson.AppendTimeRFC3339(b, r.completedAt)
 	b = jsonEnc.AppendKey(b, "message")
 	b = jsonEnc.AppendString(b, r.msg)
 	b = append(b, '}', '\n')
 	return b
+}
+
+// Canonical-key collision policy (the logrus precedent, §5 of the T5
+// plan): a user field named "message", "time", or "level" would collide
+// with the canonical envelope members the encoder appends around the
+// fields, producing duplicate JSON keys that parsers disagree on. The
+// colliding user keys are therefore RENAMED to "fields.message",
+// "fields.time", and "fields.level" on the wire — the logrus
+// Fields.*-prefix convention. The rename happens after the event is
+// sealed, on the encoded line only: Record.Fields() and Lookup keep
+// returning the user's original key. The dedupe runs over the aliased
+// keys, so a user "message" and a user "fields.message" resolve as one
+// last-write-wins member, and the canonical envelope stays unique.
+
+var aliasKey = map[string]string{
+	"message": "fields.message",
+	"time":    "fields.time",
+	"level":   "fields.level",
+}
+
+func aliasedFieldKey(key string) string {
+	if aliased, ok := aliasKey[key]; ok {
+		return aliased
+	}
+	return key
+}
+
+// needsFieldAliasing reports whether any field key collides with the
+// envelope (cheap scan on the sealed WAL).
+func needsFieldAliasing(fields []Field) bool {
+	for _, f := range fields {
+		if _, ok := aliasKey[f.key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// aliasFields returns a copy of the field list with colliding keys
+// renamed. Only called when a collision exists, so the common path
+// stays allocation-free.
+func aliasFields(fields []Field) []Field {
+	out := make([]Field, len(fields))
+	for i, f := range fields {
+		out[i] = f
+		out[i].key = aliasedFieldKey(f.key)
+	}
+	return out
 }
 
 // dedupeScanLimit sets the crossover between the allocation-free

@@ -8,12 +8,14 @@ package hc
 // (map + last-occurrence ordering), never appendDedupedFields itself.
 //
 // Canonical-key collisions (user fields named "message"/"time"/"level")
-// are PINNED as documented behavior (G2, user error): the envelope
-// keys occupy fixed slots — level is member 0, time and message are
-// the last two members — so a colliding user field yields duplicate
-// JSON keys and a last-wins parser sees the canonical value. The
-// assertions here compare the user span strictly between the envelope
-// slots, so collisions cannot break the oracle.
+// follow the logrus rename policy (record.go aliasKey): colliding user
+// keys are emitted as "fields.message"/"fields.time"/"fields.level" so
+// the wire never carries duplicate envelope keys. The envelope keys
+// occupy fixed slots — level is member 0, time and message are the
+// last two members — and the user span sits strictly between them. The
+// oracle folds over the ALIASED keys (a user "message" and a user
+// "fields.message" resolve as one last-write-wins member), matching
+// the encoder's dedupe.
 
 import (
 	"encoding/json"
@@ -134,14 +136,18 @@ func verifyDedupeFields(t *testing.T, fields []Field) {
 	}
 	userSpan := members[1 : len(members)-2]
 
-	// Reference fold: each key's last write, in last-occurrence order.
+	// Reference fold over the ALIASED keys: each aliased key's last
+	// write, in last-occurrence order (record.go aliases colliding user
+	// keys to fields.* before deduping, so the fold keyspace is the
+	// aliased one).
 	type lw struct {
 		field Field
 		pos   int
 	}
 	lastWrite := map[string]lw{}
 	for i, f := range fields {
-		lastWrite[f.key] = lw{f, i}
+		key := aliasedFieldKey(f.key)
+		lastWrite[key] = lw{f, i}
 	}
 	order := make([]int, 0, len(lastWrite))
 	for _, v := range lastWrite {
@@ -158,10 +164,10 @@ func verifyDedupeFields(t *testing.T, fields []Field) {
 			len(userSpan), len(order), line)
 	}
 	for i, pos := range order {
-		want := lastWrite[fields[pos].key].field
+		want := lastWrite[aliasedFieldKey(fields[pos].key)].field
 		got := userSpan[i]
-		if got.key != want.key {
-			t.Fatalf("user member %d = %q, want %q (last-occurrence order)", i, got.key, want.key)
+		if got.key != aliasedFieldKey(want.key) {
+			t.Fatalf("user member %d = %q, want %q (last-occurrence order)", i, got.key, aliasedFieldKey(want.key))
 		}
 		if err := checkFieldWire(want, got.val); err != nil {
 			t.Fatalf("user member %d: %v", i, err)

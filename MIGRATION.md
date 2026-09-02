@@ -109,6 +109,15 @@ panics also **bypass sampling structurally** — before any custom
   `job.scheduled_at` remains.
 - **Duplicate keys**: last write wins (v0 maps did the same); encoding
   emits each key once.
+- **Canonical-key collisions** (the logrus precedent): user fields
+  named `message`, `time`, or `level` collide with the canonical
+  envelope members, which used to produce duplicate JSON keys on the
+  line. They are now renamed to `fields.message`, `fields.time`,
+  `fields.level` on the wire (dedupe runs over the renamed keys, so a
+  user `message` and a user `fields.message` fold into one last-write-
+  wins member). The rename is wire-only: `Record.Fields()`/`Lookup`
+  keep the original keys; adapters that consume `Fields()` still see
+  them unrenamed.
 - **Durations** through bridges render each host's native shape
   (unchanged from v0 adapters); the first-party JSON sink renders float
   milliseconds.
