@@ -14,11 +14,13 @@ import (
 // (~1M+ execs); the 1M-exec clean gate is a release requirement
 // (openspec json-encoder delta).
 //
-// The body carries a second, semantic oracle (dst-research §6.6): the
-// output must always be a valid JSON string, and for valid-UTF-8 input
-// it must unescape back to the input exactly. A differential-only
-// oracle could not catch a byte class both paths mishandle identically
-// — the round-trip property closes that class.
+// The body carries a second, semantic oracle (the zap adoption —
+// FuzzSafeAppendStringLike + roundTripsCorrectly*, zapcore/
+// json_encoder_impl_test.go; see also dst-research §6.6): the output
+// must always be a valid JSON string, and for valid-UTF-8 input it
+// must unescape back to the input exactly. A differential-only oracle
+// could not catch a byte class both paths mishandle identically — the
+// round-trip property closes that class.
 func FuzzAppendString(f *testing.F) {
 	seeds := []string{
 		"",

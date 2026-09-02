@@ -17,12 +17,14 @@ import (
 // on the wire). A variable keeps the vendored seam (JSONMarshalFunc)
 // swappable in tests.
 //
-// Panic policy (slog precedent, log/slog handler.go appendJSONMarshal):
-// a user MarshalJSON panic must not unwind End — encoding/json lets it
-// propagate (both the classic implementation and the go1.27 json/v2
-// default), so it is recovered here into the documented fallback string.
-// This pins the wire behavior identically across the Go 1.25–1.27
-// matrix; the error-return path keeps the vendored zerolog shape.
+// Panic policy (slog precedent: log/slog handler.go appendValue — the
+// recover at handler.go:586 catches panics escaping appendJSONMarshal's
+// json.Marshal): a user MarshalJSON panic must not unwind End —
+// encoding/json lets it propagate (both the classic implementation and
+// the go1.27 json/v2 default), so it is recovered here into the
+// documented fallback string. This pins the wire behavior identically
+// across the Go 1.25–1.27 matrix; the error-return path keeps the
+// vendored zerolog shape.
 var jsonMarshal = func(v any) (b []byte, err error) {
 	defer func() {
 		if r := recover(); r != nil {

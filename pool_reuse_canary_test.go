@@ -69,15 +69,27 @@ func TestPoolReuseCanary(t *testing.T) {
 	canaryWrite(ctx2) // last request's context is stale after its End as well
 
 	// The oracle: no captured event — not request 1's, not any recycled
-	// request's — may ever contain the sentinel. The assertion message
-	// names the contract so a regression report points at the fix, in
-	// slog's "!BUG" spirit.
+	// request's — may ever carry the sentinel, whether as a field key
+	// (the Add shape) or as a msg/level mutation (SetMessage/SetLevel
+	// write no field — without these checks those landings would be
+	// invisible to a key scan; review finding GLM-1). The assertion
+	// message names the contract so a regression report points at the
+	// fix, in slog's "!BUG" spirit.
 	for i, ev := range ts.Events() {
 		if v, ok := ev.Lookup("!BUG"); ok {
 			t.Fatalf("event %d: use-after-recycle — a write through a stale "+
 				"context landed on a pooled event (slog !BUG canary): %v; "+
 				"the generation check in append/setMessage/setLevel "+
 				"(wal.go amendments 1/20) must reject post-End writes", i, v)
+		}
+		if msg := ev.Message(); msg == "!BUG stale message" {
+			t.Fatalf("event %d: stale SetMessage landed on a pooled event "+
+				"(message %q); the live() generation check in setMessage must "+
+				"reject post-End writes", i, msg)
+		}
+		if ev.Level() == LevelError {
+			t.Fatalf("event %d: stale SetLevel(Error) landed on a pooled event; "+
+				"the live() generation check in setLevel must reject post-End writes", i)
 		}
 	}
 	events := ts.Events()

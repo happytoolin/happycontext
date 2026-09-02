@@ -244,3 +244,72 @@ func TestWALAppendSealedStaleGeneration(t *testing.T) {
 		t.Fatal("stale write landed next to the current-generation fields")
 	}
 }
+
+// TestWALStaleSettersAfterReset pins the live() generation checks in
+// the setter entry points that do not route through append's gen check:
+// setMessage, setLevel, and setError's hasErr latch all trust live()
+// alone. Found as a gap by review (GLM finding 1): removing live() from
+// setMessage passed the entire non-race suite — the pool canary's
+// sentinel oracle only observes field-key landings (the "!BUG" Add),
+// never msg/requestedLevel mutations, which are invisible on the wire
+// until a later request reuses the event.
+func TestWALStaleSettersAfterReset(t *testing.T) {
+	ev := newEvent()
+	gen := ev.state.Load() >> walStateBits
+	owner := &walRef{ev: ev, gen: gen}
+	stale := &walRef{ev: ev, gen: gen}
+
+	// Positive control before the recycle: the owner's setter writes
+	// land and latch their flags.
+	ev.setMessage(owner, "own")
+	ev.setLevel(owner, LevelWarn)
+	ev.setError(owner, errors.New("own error"))
+	if !ev.hasMsg || ev.msg != "own" {
+		t.Fatalf("owner setMessage lost: msg=%q hasMsg=%v", ev.msg, ev.hasMsg)
+	}
+	if !ev.hasRequestedLvl || ev.requestedLevel != LevelWarn {
+		t.Fatalf("owner setLevel lost: level=%v has=%v", ev.requestedLevel, ev.hasRequestedLvl)
+	}
+	if !ev.hasErr {
+		t.Fatal("owner setError lost")
+	}
+
+	ev.seal()
+	ev.reset() // the next request's newEvent() after the pool hands it out
+	if newGen := ev.state.Load() >> walStateBits; newGen == gen {
+		t.Fatal("reset did not advance the generation")
+	}
+
+	// Stale-generation setter writes must no-op on the reset event — in
+	// particular they must not set msg/requestedLevel/hasErr, which the
+	// field-key oracle of TestPoolReuseCanary cannot observe.
+	ev.setMessage(stale, "!BUG stale message")
+	ev.setLevel(stale, LevelError)
+	ev.setError(stale, errors.New("!BUG stale error"))
+	if ev.hasMsg || ev.msg != "" {
+		t.Fatalf("stale setMessage landed on the reset event: msg=%q hasMsg=%v", ev.msg, ev.hasMsg)
+	}
+	if ev.hasRequestedLvl || ev.requestedLevel != 0 {
+		t.Fatalf("stale setLevel landed on the reset event: level=%v has=%v", ev.requestedLevel, ev.hasRequestedLvl)
+	}
+	if ev.hasErr {
+		t.Fatal("stale setError latched hasErr on the reset event")
+	}
+	for _, f := range ev.fields {
+		if f.key == "error" {
+			t.Fatal("stale setError appended an error field on the reset event")
+		}
+	}
+
+	// Positive control after the recycle: the new owner's setters land.
+	freshGen := ev.state.Load() >> walStateBits
+	fresh := &walRef{ev: ev, gen: freshGen}
+	ev.setMessage(fresh, "new-owner")
+	ev.setLevel(fresh, LevelDebug)
+	if !ev.hasMsg || ev.msg != "new-owner" {
+		t.Fatalf("fresh setMessage lost: msg=%q hasMsg=%v", ev.msg, ev.hasMsg)
+	}
+	if !ev.hasRequestedLvl || ev.requestedLevel != LevelDebug {
+		t.Fatalf("fresh setLevel lost: level=%v has=%v", ev.requestedLevel, ev.hasRequestedLvl)
+	}
+}

@@ -10,12 +10,13 @@ import (
 )
 
 // TestStragglerStartLine stresses the straggler-vs-recycle window with
-// logrus's start-line technique (entry_test.go,
-// TestLoggingRaceWithHooksOnEntry): every goroutine is held on a
-// sync.Cond and released simultaneously with one Broadcast, so stale
-// writes, owner writes, and End/seal/recycle all contend on the same
-// instruction window instead of staggered goroutine spawns — the shape
-// that maximizes race-window hits (dst-research §11.4).
+// logrus's start-line technique (logrus_test.go,
+// TestLoggingRaceWithHooksOnEntry — sync.NewCond + Broadcast): every
+// goroutine is held on a sync.Cond and released simultaneously with
+// one Broadcast, so stale writes, owner writes, and End/seal/recycle
+// all contend on the same instruction window instead of staggered
+// goroutine spawns — the shape that maximizes race-window hits
+// (dst-research §11.4).
 //
 // Cast: one owner churns Start/Add/End requests so the pooled event a
 // stale context pins is constantly reset and reused, while straggler
