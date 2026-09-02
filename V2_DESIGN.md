@@ -200,7 +200,9 @@ accessors go internal.
    by humans, diffable in incidents.
 4. **Zero dependencies by default.** The first-party sink needs no
    logger; bridges exist for shops that already run slog/zap/zerolog,
-   with unchanged constructor ergonomics.
+   with unchanged constructor ergonomics. The root module's only
+   non-stdlib require is go.uber.org/goleak, a test-only dependency
+   (goroutine-leak verification); production builds stay dependency-free.
 5. **Failures are sacred.** Errors and panics are never sampled away.
    Sampling shapes healthy traffic; it never hides sick traffic.
 6. **The worst requests are the most visible.** Slow requests grow a

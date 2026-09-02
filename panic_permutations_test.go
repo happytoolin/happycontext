@@ -188,7 +188,8 @@ func eventMember(t *testing.T, ev lifeCapture, key string) (map[string]any, bool
 func TestSinkPanicPermutations(t *testing.T) {
 	for _, p := range panicPayloads() {
 		p := p
-		t.Run(p.name, func(t *testing.T) {
+		run := func(t *testing.T, handlerPanic any) {
+			t.Helper()
 			sink := &captureThenPanicSink{payload: p.value}
 			rt := MustCompile(Config{Sink: sink, SamplingRate: 1})
 			op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "sink-panic"})
@@ -197,6 +198,13 @@ func TestSinkPanicPermutations(t *testing.T) {
 			var escaped any
 			func() {
 				defer func() { escaped = recover() }()
+				if handlerPanic != nil {
+					// An in-flight handler panic: the sink panic replaces
+					// it (documented in End's comment) — the sink payload
+					// escapes, not the handler's.
+					defer op.End(nil)
+					panic(handlerPanic)
+				}
 				op.End(nil)
 			}()
 			if escaped == nil {
@@ -208,10 +216,17 @@ func TestSinkPanicPermutations(t *testing.T) {
 					t.Fatalf("escaped %T", escaped)
 				}
 			} else if escaped != p.value {
-				t.Fatalf("escaped %#v, want sink payload %#v", escaped, p.value)
+				t.Fatalf("escaped %#v, want sink payload %#v (handler panic %#v replaced)", escaped, p.value, handlerPanic)
 			}
 			if len(sink.captured) != 1 {
 				t.Fatalf("sink captured %d records", len(sink.captured))
+			}
+			if handlerPanic != nil {
+				// The captured record reflects the HANDLER panic (the
+				// event was built before the sink panicked).
+				if !bytes.Contains(sink.captured[0], []byte(fmt.Sprintf(`"value":%q`, fmt.Sprint(handlerPanic)))) {
+					t.Fatalf("record does not reflect the handler panic: %s", sink.captured[0])
+				}
 			}
 			// pool integrity after the sink panic
 			ok := &matrixSink{}
@@ -222,7 +237,9 @@ func TestSinkPanicPermutations(t *testing.T) {
 			if len(ok.capture) != 1 || !bytes.Contains(ok.capture[0], []byte(`"clean":true`)) {
 				t.Fatalf("pool corrupted after sink panic: %v", ok.capture)
 			}
-		})
+		}
+		t.Run(p.name, func(t *testing.T) { run(t, nil) })
+		t.Run(p.name+"-replaces-handler-panic", func(t *testing.T) { run(t, "handler-panic") })
 	}
 }
 

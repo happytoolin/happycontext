@@ -68,11 +68,15 @@ func (p matrixPhase) live() bool { return p == phasePreAnnotate || p == phasePre
 // stragglerWrite fires all six public mutation shapes through ctx —
 // the full straggler vocabulary the matrix applies at every phase.
 func stragglerWrite(ctx context.Context) {
+	// SetMessage/SetLevel fire FIRST: they are the shapes whose armed
+	// serialization under the event mutex is the review-pinned
+	// discipline (TestArmedSetterSerialization), so putting them first
+	// widens the race window the concurrent tests need.
+	SetMessage(ctx, "s-message")
+	SetLevel(ctx, LevelError)
 	Add(ctx, "s-add", "straggler-value")
 	AddRawJSON(ctx, "s-raw", []byte(`{"s":true}`))
 	Error(ctx, errors.New("s-error"))
-	SetMessage(ctx, "s-message")
-	SetLevel(ctx, LevelError)
 	SetRoute(ctx, "/s-route")
 }
 
@@ -381,6 +385,83 @@ func TestStragglerArmedBurst(t *testing.T) {
 				t.Fatalf("round %d: duplicate member %q: %s", round, m.key, sink.capture[0])
 			}
 			seen[m.key] = true
+		}
+	}
+}
+
+// TestStragglerSealedErrorNoLatch pins the hasErr-latch half of the
+// live() narrowing (review finding GLM-1): an Error straggler fired at
+// a sealed phase must neither append the error field NOR latch hasErr.
+// The latch is only observable through sampling — a latched hasErr
+// flips a rate-0 healthy event into the amendment-4 bypass and emits
+// it — so the matrix runs at rate 0: zero captures is the oracle. The
+// hasErr field is asserted directly as well.
+func TestStragglerSealedErrorNoLatch(t *testing.T) {
+	for _, armed := range []bool{false, true} {
+		for _, phase := range []matrixPhase{phasePreScan, phasePrePostSeal, phasePreCommit} {
+			phase, armed := phase, armed
+			t.Run(fmt.Sprintf("phase=%s armed=%v", phase, armed), func(t *testing.T) {
+				sink := &matrixSink{}
+				rt := MustCompile(Config{Sink: sink, SamplingRate: 0}) // healthy drops
+				op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "latch"})
+				ctx := op.Context()
+				if armed {
+					op.ev.arm()
+				}
+				stagedEnd(op, phase, func(context.Context) {
+					Error(ctx, errors.New("s-error"))
+				})
+				if op.ev.hasErr {
+					t.Fatalf("phase %v armed=%v: hasErr latched by a sealed-phase straggler", phase, armed)
+				}
+				if len(sink.capture) != 0 {
+					t.Fatalf("phase %v armed=%v: %d events at rate 0 — the latched "+
+						"hasErr bypassed sampling", phase, armed, len(sink.capture))
+				}
+			})
+		}
+	}
+}
+
+// TestArmedSetterSerialization is the deterministic companion to the
+// -race burst: concurrent SetMessage/SetLevel calls on an armed event
+// must serialize under the event mutex. A regression dropping the mu
+// is a plain data race, so this test's detection power is the -race
+// window — it widens that window by hammering ONLY the setter shapes
+// (the ones the fix serialized) across many rounds while the owner
+// seals. The assertions (single event, sane message) hold under both
+// the fixed and the reverted code; the race detector is the oracle.
+func TestArmedSetterSerialization(t *testing.T) {
+	for round := 0; round < 40; round++ {
+		sink := &matrixSink{}
+		rt := MustCompile(Config{Sink: sink, SamplingRate: 1})
+		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "setter-race"})
+		ctx := op.Context()
+		op.ev.arm()
+
+		const setters = 6
+		const writes = 2000
+		var wg sync.WaitGroup
+		for i := 0; i < setters; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				for j := 0; j < writes; j++ {
+					SetMessage(ctx, fmt.Sprintf("msg-%d", i))
+					SetLevel(ctx, LevelWarn)
+				}
+			}(i)
+		}
+		// The owner seals while the setters hammer: armed serialization
+		// means every write either lands pre-seal or drops post-seal.
+		op.End(nil)
+		wg.Wait()
+
+		if len(sink.capture) != 1 {
+			t.Fatalf("round %d: %d events", round, len(sink.capture))
+		}
+		if _, err := decodeLineStrict(t, sink.capture[0]); err == nil && len(sink.capture[0]) == 0 {
+			t.Fatalf("round %d: empty line", round)
 		}
 	}
 }

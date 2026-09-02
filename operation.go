@@ -78,6 +78,13 @@ func (op *Operation) Context() context.Context {
 // The closure form (defer func() { op.End(&err) }()) compiles but
 // silently disables panic capture. Note also that a sink which panics
 // during Write replaces an in-flight original panic.
+//
+// Reentrant use is NOT supported: End must not be called again from
+// inside a sink's Write (or any code the winning End invocation runs)
+// on the same operation — the one-shot claim would wait on itself and
+// deadlock. Concurrent first calls from multiple goroutines are safe
+// (characterized by TestConcurrentEndCharacterization): exactly one
+// wins, the rest return its published result.
 func (op *Operation) End(errp *error) (emitted bool) {
 	if op == nil {
 		return false
