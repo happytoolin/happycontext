@@ -464,9 +464,9 @@ type lifeModel struct {
 
 func buildModel(prog lifeProgram) *lifeModel {
 	m := &lifeModel{mode: prog.mode, start: prog.start}
-	// Start fields (applyOperationStartFields with Name "n").
-	m.append(fieldStr("op.domain", string(normalizeDomain(prog.start))))
-	m.append(fieldStr("op.name", "n"))
+	// Start fields are lazy: the real implementation appends
+	// op.domain/op.name only at End (see endAnnotations), so the live
+	// WAL carries no start metadata during the request.
 
 	for i := range prog.ops {
 		o := &prog.ops[i]
@@ -653,8 +653,12 @@ func (m *lifeModel) emitted(outcome Outcome) bool {
 
 // endAnnotations appends the canonical End writes the spec performs
 // after sealing, in order: the structured failure fields, then the
-// post-seal op.code/op.outcome. Called with the model in its pre-End
-// state.
+// post-seal block — the lazy start metadata (op.domain/op.name, with
+// Name "n", skipped when the request already wrote that key — the
+// user's override must not be clobbered), then op.code/op.outcome.
+// Called with the model in its pre-End state. Start metadata lands
+// here rather than at Start, so the live WAL never carries it; on the
+// wire it still precedes the completion fields.
 func (m *lifeModel) endAnnotations() {
 	if m.endPanicked {
 		m.append(Field{key: "panic", kind: KindAny, val: modelPanicField(m.endPayload)})
@@ -664,6 +668,12 @@ func (m *lifeModel) endAnnotations() {
 	} else if m.endPanicked {
 		m.append(Field{key: "error", kind: KindAny, val: modelErrorField(fmt.Errorf("panic: %v", m.endPayload))})
 	}
+	if !m.wrote("op.domain") {
+		m.append(fieldStr("op.domain", string(normalizeDomain(m.start))))
+	}
+	if !m.wrote("op.name") {
+		m.append(fieldStr("op.name", "n"))
+	}
 	_, _, _, _, opCode, hasOpCode := m.scan()
 	if normalizeDomain(m.start) != DomainHTTP && hasOpCode {
 		m.append(fieldInt64("op.code", int64(opCode)))
@@ -671,6 +681,17 @@ func (m *lifeModel) endAnnotations() {
 	// The resolved outcome is always written last (annotatePostSeal);
 	// the scan above ran before it, so this append cannot feed back.
 	m.append(fieldStr("op.outcome", string(m.outcome())))
+}
+
+// wrote reports whether the model WAL already carries a write under
+// key (any kind) — the lazy start-metadata suppression condition.
+func (m *lifeModel) wrote(key string) bool {
+	for i := range m.appends {
+		if m.appends[i].key == key {
+			return true
+		}
+	}
+	return false
 }
 
 // ---------------------------------------------------------------------------

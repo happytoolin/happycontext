@@ -100,8 +100,10 @@ func TestSinkTypedAttrs(t *testing.T) {
 	if _, ok := rec.Attrs["s"]; !ok {
 		t.Fatal("missing s")
 	}
-	// insertion order preserved: op.domain, op.name, s, i, b, d, ...
-	if rec.Order[2] != "s" || rec.Order[3] != "i" {
+	// insertion order preserved: s, i, b, d, then the lazy start
+	// metadata (op.domain, op.name, appended at commit) and completion
+	// fields
+	if rec.Order[0] != "s" || rec.Order[1] != "i" {
 		t.Fatalf("order = %v", rec.Order)
 	}
 }

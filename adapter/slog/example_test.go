@@ -23,7 +23,7 @@ func ExampleNew() {
 	op.End(nil)
 	_ = ts
 	// Output:
-	// level=INFO msg=operation_completed op.domain=job op.name=j k=1 rows=42 duration_ms=0 op.outcome=success
+	// level=INFO msg=operation_completed k=1 rows=42 op.domain=job op.name=j duration_ms=0 op.outcome=success
 }
 
 func demoLogger() *slog.Logger {

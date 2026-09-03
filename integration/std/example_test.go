@@ -28,7 +28,7 @@ func ExampleMiddleware() {
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/orders/123", nil))
 	fmt.Println("status:", rec.Code)
 	// Output:
-	// INFO request_completed op.domain=http op.name=request http.method=GET http.path=/orders/123 user_id=u_8472 http.status=204 duration_ms=0 op.outcome=success
+	// INFO request_completed http.method=GET http.path=/orders/123 user_id=u_8472 http.status=204 op.domain=http op.name=request duration_ms=0 op.outcome=success
 	// status: 204
 }
 

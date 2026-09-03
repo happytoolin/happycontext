@@ -58,7 +58,10 @@ func Start(ctx context.Context, rt *Runtime, start OperationStart) *Operation {
 		ev:    ev,
 	}
 	op.ctx = context.WithValue(ctx, contextKey{}, &op.ref)
-	applyOperationStartFields(ev, op.ref.gen, op.start)
+	// Start metadata (op.domain/op.name/...) is appended lazily at End
+	// (annotatePostSeal): the live WAL carries no start fields during
+	// the request, so Add-time appends, watchdog snapshots, and
+	// straggler windows stay free of them.
 	return op
 }
 
@@ -141,7 +144,7 @@ claimed:
 	scan := scanWAL(ev)
 	code = scan.code
 	outcome = resolveOutcomeV2(err, recovered, code, scan.outcome)
-	annotatePostSeal(ev, &op.ref, duration, normalizeDomain(start.Domain) == DomainHTTP, scan, outcome)
+	annotatePostSeal(ev, &op.ref, start, duration, normalizeDomain(start.Domain) == DomainHTTP, scan, outcome)
 
 	emitted = op.commit(ev, rt, start, outcome, code, duration, now, err, recovered != nil, scan)
 	op.emitted = emitted
@@ -153,8 +156,12 @@ claimed:
 }
 
 // walScan is the single backward walk over the sealed WAL collecting
-// everything End needs: explicit outcome, HTTP status, and the sampler
-// scalars (first — i.e. last-written — values win).
+// everything End needs: explicit outcome, HTTP status, the sampler
+// scalars (first — i.e. last-written — values win), and whether the
+// request wrote any of the start-metadata keys itself (lazy start
+// fields must not clobber a user write that already overrode them —
+// the old wire let the user's later append win the LWW fold, and
+// suppressing the canonical append reproduces that exactly).
 type walScan struct {
 	outcome    Outcome
 	hasOutcome bool
@@ -164,6 +171,13 @@ type walScan struct {
 	hasOpCode  bool
 	method     string
 	path       string
+
+	hasDomain      bool // user wrote op.domain/op.name/... (any kind)
+	hasName        bool
+	hasID          bool
+	hasSource      bool
+	hasAttempt     bool
+	hasMaxAttempts bool
 }
 
 func scanWAL(ev *event) walScan {
@@ -196,6 +210,18 @@ func scanWAL(ev *event) walScan {
 			if s.path == "" && f.kind == KindString {
 				s.path = f.str
 			}
+		case "op.domain":
+			s.hasDomain = true
+		case "op.name":
+			s.hasName = true
+		case "op.id":
+			s.hasID = true
+		case "op.source":
+			s.hasSource = true
+		case "op.attempt":
+			s.hasAttempt = true
+		case "op.max_attempts":
+			s.hasMaxAttempts = true
 		}
 	}
 	return s
@@ -252,20 +278,33 @@ func shouldWriteHealthy(rt *Runtime, policy OperationPolicy, in SampleInput) boo
 	return shouldSample(rate)
 }
 
-func applyOperationStartFields(ev *event, gen uint64, start OperationStart) {
-	ev.appendStr(gen, "op.domain", string(normalizeDomain(start.Domain)))
-	ev.appendStr(gen, "op.name", start.Name)
-	if start.ID != "" {
-		ev.appendStr(gen, "op.id", start.ID)
+// applyOperationStartFields appends the normalized start metadata.
+// These are lazy: Start leaves them out of the live WAL; End writes
+// them post-seal (via annotatePostSeal) so the record carries them in
+// the canonical start-metadata → completion order without the request
+// paying for them while it runs. A key the request already wrote is
+// skipped — its later position would otherwise flip the last-write-wins
+// fold and clobber the user's override (the v0-parity route-name
+// contract in the HTTP integrations depends on this).
+func applyOperationStartFields(ev *event, ref *walRef, start OperationStart, scan walScan) {
+	gen := ref.gen
+	if !scan.hasDomain {
+		ev.appendSealed(gen, fieldStr("op.domain", string(normalizeDomain(start.Domain))))
 	}
-	if start.Source != "" {
-		ev.appendStr(gen, "op.source", start.Source)
+	if !scan.hasName {
+		ev.appendSealed(gen, fieldStr("op.name", start.Name))
 	}
-	if start.Attempt > 0 {
-		ev.appendInt64(gen, "op.attempt", int64(start.Attempt))
+	if !scan.hasID && start.ID != "" {
+		ev.appendSealed(gen, fieldStr("op.id", start.ID))
 	}
-	if start.MaxAttempts > 0 {
-		ev.appendInt64(gen, "op.max_attempts", int64(start.MaxAttempts))
+	if !scan.hasSource && start.Source != "" {
+		ev.appendSealed(gen, fieldStr("op.source", start.Source))
+	}
+	if !scan.hasAttempt && start.Attempt > 0 {
+		ev.appendSealed(gen, fieldInt64("op.attempt", int64(start.Attempt)))
+	}
+	if !scan.hasMaxAttempts && start.MaxAttempts > 0 {
+		ev.appendSealed(gen, fieldInt64("op.max_attempts", int64(start.MaxAttempts)))
 	}
 }
 
@@ -284,11 +323,18 @@ func annotateOperationFailures(ev *event, ref *walRef, err error, recovered any)
 // writes belong to the owner (the request goroutine) and cannot race
 // stragglers: everything else is already sealed off.
 //
+// The start metadata joins here too (lazy start fields) — before the
+// completion fields, so the record's insertion order stays
+// start-metadata → completion. The wire field set is unchanged; only
+// the WAL position of the start metadata moves from request start to
+// commit.
+//
 // Canonical fields: HTTP operations carry http.status (op.code is
 // non-HTTP only, from the explicit op.code field); non-HTTP operations
 // surface their explicit op.code here (ledger: canonical fields).
-func annotatePostSeal(ev *event, ref *walRef, duration time.Duration, isHTTP bool, scan walScan, outcome Outcome) {
+func annotatePostSeal(ev *event, ref *walRef, start OperationStart, duration time.Duration, isHTTP bool, scan walScan, outcome Outcome) {
 	gen := ref.gen
+	applyOperationStartFields(ev, ref, start, scan)
 	ev.appendSealed(gen, fieldInt64("duration_ms", duration.Milliseconds()))
 	if !isHTTP && scan.hasOpCode {
 		ev.appendSealed(gen, fieldInt64("op.code", int64(scan.opCode)))

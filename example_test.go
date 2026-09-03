@@ -158,7 +158,7 @@ func ExampleNewJSONSink() {
 	}
 	fmt.Println(line)
 	// Output:
-	// {"level":"info","op.domain":"job","op.name":"j","k":1…
+	// {"level":"info","k":1,"op.domain":"job","op.name":"j"…
 }
 
 // ExampleNewTestSink shows the in-memory sink for assertions.
