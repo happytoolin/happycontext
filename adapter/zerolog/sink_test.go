@@ -283,6 +283,71 @@ func TestSinkEnrichedLoggerKeepsNativeAugmentation(t *testing.T) {
 	})
 }
 
+// TestSinkCustomizedFieldNamesFallsBackToTypedPath pins the F1 gate:
+// when zerolog's member-name globals are customized, the bridge must
+// not serve the canonical line (whose envelope members are always
+// "level"/"message"/"time") — the typed path emits the customized
+// names through zerolog's own constructors.
+func TestSinkCustomizedFieldNamesFallsBackToTypedPath(t *testing.T) {
+	levelName, timeName, messageName := zerolog.LevelFieldName, zerolog.TimestampFieldName, zerolog.MessageFieldName
+	zerolog.LevelFieldName, zerolog.TimestampFieldName, zerolog.MessageFieldName = "lvl", "ts", "msg"
+	t.Cleanup(func() {
+		zerolog.LevelFieldName, zerolog.TimestampFieldName, zerolog.MessageFieldName = levelName, timeName, messageName
+	})
+
+	rec := bridgeRecord(t, func(ctx context.Context) { hc.Add(ctx, "k", "v") })
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf) // plain logger: the fast path would serve it
+	New(&logger).Write(context.Background(), rec)
+
+	if buf.Len() == 0 {
+		t.Fatal("record dropped")
+	}
+	payload := lastPayload(t, &buf)
+	if payload["lvl"] != "info" {
+		t.Fatalf("lvl = %v, want the customized level member", payload["lvl"])
+	}
+	if payload["msg"] != rec.Message() {
+		t.Fatalf("msg = %v, want the customized message member", payload["msg"])
+	}
+	if _, ok := payload["level"]; ok {
+		t.Fatalf("canonical %q member leaked onto a customized pipeline: %v", "level", payload)
+	}
+	if _, ok := payload["message"]; ok {
+		t.Fatalf("canonical %q member leaked onto a customized pipeline: %v", "message", payload)
+	}
+	if payload["k"] != "v" {
+		t.Fatalf("record field missing: %v", payload)
+	}
+}
+
+// TestSinkTypedPathStampsRecordCompletionTime pins the F6 symmetry:
+// the enriched-logger typed path stamps the record's own completion
+// time (rec.Time()) — the instant the canonical line carries — rather
+// than a fresh write-time read.
+func TestSinkTypedPathStampsRecordCompletionTime(t *testing.T) {
+	rec := bridgeRecord(t, func(ctx context.Context) { hc.Add(ctx, "k", "v") })
+
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf).With().Str("svc", "payments").Logger() // enriched: typed path
+	New(&logger).Write(context.Background(), rec)
+
+	payload := lastPayload(t, &buf)
+	s, ok := payload["time"].(string)
+	if !ok {
+		t.Fatalf("time = %v, want RFC3339 string", payload["time"])
+	}
+	got, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		t.Fatalf("time %q not RFC3339: %v", s, err)
+	}
+	// Both the canonical line and zerolog's TimeFieldFormat render
+	// RFC3339 seconds precision, so compare at that granularity.
+	if want := rec.Time().Truncate(time.Second); !got.Equal(want) {
+		t.Fatalf("typed path stamped %v, want the record's completion time %v", got, want)
+	}
+}
+
 func TestSinkConcurrentWrites(t *testing.T) {
 	var mu sync.Mutex
 	var buf bytes.Buffer

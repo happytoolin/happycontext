@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 	"unsafe"
 
 	"github.com/happytoolin/happycontext"
@@ -89,6 +88,19 @@ func (v *loggerView) enabled(level hc.Level) bool {
 	return zlvlFor(level) >= v.level && zlvlFor(level) >= zerolog.GlobalLevel()
 }
 
+// defaultFieldNames reports whether zerolog's member-name globals are
+// still the defaults the canonical line writes. rec.Encoded() is a
+// fixed line: its envelope members are always "level", "time", and
+// "message". When the globals are customized, native events carry the
+// custom names, so serving the canonical bytes would emit members the
+// user's pipeline does not expect — the typed path (which honors the
+// globals through zerolog's own constructors) must take over.
+func defaultFieldNames() bool {
+	return zerolog.LevelFieldName == "level" &&
+		zerolog.TimestampFieldName == "time" &&
+		zerolog.MessageFieldName == "message"
+}
+
 // writeEncoded serves the record's pre-encoded canonical JSON line
 // directly to the logger's writer — the bridge fast path (ledger:
 // "zerolog bridge may serve rec.Encoded() directly"). It reports
@@ -99,8 +111,10 @@ func (v *loggerView) enabled(level hc.Level) bool {
 //   - The line is hc's canonical line, not a zerolog-assembled event:
 //     field names and shapes follow hc's wire contract (level, message,
 //     RFC3339 time), which is byte-identical to the first-party JSON
-//     sink's output. zerolog package-level field-name customization
-//     (LevelFieldName & co.) applies only on the typed path.
+//     sink's output. When zerolog's member-name globals (LevelFieldName,
+//     TimestampFieldName, MessageFieldName) are customized, the fast
+//     path is skipped (defaultFieldNames) and the typed path emits the
+//     customized names.
 //   - The writer sees one WriteLevel call per record with the full
 //     line, exactly like a native event's write — level-aware writers
 //     (MultiLevelWriter, FilteredLevelWriter, ...) keep working.
@@ -110,7 +124,7 @@ func (v *loggerView) enabled(level hc.Level) bool {
 //     (see plain), preserving their native augmentation.
 func (z *Sink) writeEncoded(rec *hc.Record) bool {
 	view := (*loggerView)(unsafe.Pointer(z.logger))
-	if !view.plain() || !view.enabled(rec.Level()) {
+	if !view.plain() || !view.enabled(rec.Level()) || !defaultFieldNames() {
 		return false
 	}
 	if _, err := view.w.WriteLevel(zlvlFor(rec.Level()), rec.Encoded()); err != nil {
@@ -146,7 +160,10 @@ func (z *Sink) Write(ctx context.Context, rec *hc.Record) {
 	for _, i := range lastOccurrences(fields) {
 		event = appendField(event, fields[i])
 	}
-	event.Time("time", time.Now())
+	// Stamp the record's own completion time (rec.Time) rather than a
+	// fresh write-time read: the fast path and the canonical line carry
+	// completedAt, so the typed path stays symmetric with them.
+	event.Time("time", rec.Time())
 	event.Msg(rec.Message())
 }
 

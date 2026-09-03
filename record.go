@@ -28,6 +28,11 @@ func (r *Record) Level() Level { return r.level }
 // Message returns the final message.
 func (r *Record) Message() string { return r.msg }
 
+// Time returns the event's completion timestamp — the instant the
+// canonical line stamps under the "time" member. Mirrors
+// slog.Record.Time: the record's own clock read, not the sink's.
+func (r *Record) Time() time.Time { return r.completedAt }
+
 // Fields returns the event's fields in insertion order (last-write-wins
 // duplicates included; see Lookup for the resolved view). No map is
 // built and no clone occurs.

@@ -112,6 +112,7 @@ type Sink interface {
 type Record struct{ /* read-only view; valid only inside Write */ }
 func (r *Record) Level() Level
 func (r *Record) Message() string
+func (r *Record) Time() time.Time // completion stamp — the wire "time" member
 func (r *Record) Fields() []Field // insertion order; zero copy
 func (r *Record) Lookup(key string) (any, bool)
 func (r *Record) Encoded() []byte // encode-once cache; reuse freely
