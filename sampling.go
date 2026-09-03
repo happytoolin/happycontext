@@ -7,7 +7,9 @@ import (
 	"time"
 )
 
-// SampleInput contains finalized operation data used for sampling decisions.
+// SampleInput contains finalized operation data used for sampling
+// decisions: the resolved scalars plus read access to the request's
+// fields (Lookup and a zero-copy Fields view).
 type SampleInput struct {
 	Domain    Domain
 	Operation string
@@ -21,7 +23,26 @@ type SampleInput struct {
 	Duration   time.Duration
 	Level      Level
 	HasError   bool
-	Event      *Event
+
+	// ev backs Lookup/Fields; nil when the input was built synthetically.
+	ev *event
+}
+
+// Lookup returns the last value written under key on the request's WAL.
+func (in SampleInput) Lookup(key string) (any, bool) {
+	if in.ev == nil {
+		return nil, false
+	}
+	return in.ev.lookup(key)
+}
+
+// Fields returns a read-only view of the request's fields in insertion
+// order — the v0 EventFields iteration capability, restored (amendment 8).
+func (in SampleInput) Fields() []Field {
+	if in.ev == nil {
+		return nil
+	}
+	return in.ev.fields
 }
 
 // Sampler returns true when an event should be written.

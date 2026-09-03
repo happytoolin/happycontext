@@ -17,9 +17,17 @@ type JobMeta struct {
 	ScheduledAt time.Time
 }
 
-// Start initializes a worker operation handle.
-func Start(ctx context.Context, meta JobMeta) *hc.Operation {
-	op := hc.StartOperation(ctx, hc.OperationStart{
+// Start initializes a worker operation handle. rt comes from
+// hc.Compile/MustCompile; a nil *hc.Runtime runs the operation with no
+// emission. End the operation with the deferred-error idiom:
+//
+//	func run(ctx context.Context) (err error) {
+//		op := workerhc.Start(ctx, rt, meta)
+//		defer op.End(&err)
+//		...
+//	}
+func Start(ctx context.Context, rt *hc.Runtime, meta JobMeta) *hc.Operation {
+	op := hc.Start(ctx, rt, hc.OperationStart{
 		Domain:      hc.DomainJob,
 		Name:        meta.Name,
 		ID:          meta.ID,
@@ -31,16 +39,11 @@ func Start(ctx context.Context, meta JobMeta) *hc.Operation {
 	return op
 }
 
+// addJobFields records only what op.* does not already carry: the
+// mirrors (name/id/queue/attempt/max_attempts) were dropped with the
+// canonical-field pass; scheduled_at has no op.* equivalent.
 func addJobFields(ctx context.Context, meta JobMeta) {
-	kv := []any{
-		"job.name", meta.Name,
-		"job.id", meta.ID,
-		"job.queue", meta.Queue,
-		"job.attempt", meta.Attempt,
-		"job.max_attempts", meta.MaxAttempts,
-	}
 	if !meta.ScheduledAt.IsZero() {
-		kv = append(kv, "job.scheduled_at", meta.ScheduledAt.UTC())
+		hc.Add(ctx, "job.scheduled_at", meta.ScheduledAt.UTC())
 	}
-	hc.Add(ctx, kv[0].(string), kv[1], kv[2:]...)
 }

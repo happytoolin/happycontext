@@ -5,7 +5,7 @@
 [![CI](https://github.com/happytoolin/happycontext/actions/workflows/ci.yml/badge.svg)](https://github.com/happytoolin/happycontext/actions/workflows/ci.yml)
 [![Release](https://github.com/happytoolin/happycontext/actions/workflows/release.yml/badge.svg)](https://github.com/happytoolin/happycontext/actions/workflows/release.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/happytoolin/happycontext.svg)](https://pkg.go.dev/github.com/happytoolin/happycontext)
-[![Go Version](https://img.shields.io/badge/go-1.24%2B-00ADD8?logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/go-1.25%2B-00ADD8?logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 Most application logs are high-volume but low-context.
@@ -39,6 +39,8 @@ Install only the adapter and integration packages you use.
 
 ## Quick Start (`net/http` + `slog`)
 
+Compile the runtime once, wrap the handler, annotate with `hc.Add`:
+
 ```go
 package main
 
@@ -57,11 +59,11 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	sink := sloghc.New(logger)
 
-	mw := stdhc.Middleware(hc.Config{
+	rt := hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1.0,
-		Message:      hc.DefaultMessage,
 	})
+	mw := stdhc.Middleware(rt)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /orders/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -85,75 +87,36 @@ Other quick starts:
 - `net/http + zap` and `net/http + zerolog` are in `## More Examples`
 - `gin`, `echo`, `fiber v2`, and `fiber v3` (with `slog`) are in `## More Examples`
 - Runnable reference apps are in `cmd/examples`
+- Zero-dependency output: `hc.NewJSONSink(os.Stdout)` needs no logger at all
 
-## Quick Start (Background Job + `slog`)
+## Quick Start (Background Job)
 
 ```go
-package main
-
-import (
-	"context"
-	"log/slog"
-	"os"
-
-	hc "github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	workerhc "github.com/happytoolin/happycontext/integration/worker"
-)
-
-func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := sloghc.New(logger)
-	cfg := hc.Config{
-		Sink:         sink,
-		SamplingRate: 1,
-	}
-
-	meta := workerhc.JobMeta{
-		Name:        "billing.reconcile",
+func runImport(ctx context.Context, rt *hc.Runtime) (err error) {
+	op := hc.Start(ctx, rt, hc.OperationStart{
+		Domain:      hc.DomainJob,
+		Name:        "import",
 		ID:          "job_8472",
-		Queue:       "nightly",
-		Attempt:     1,
+		Attempt:     2,
 		MaxAttempts: 3,
-	}
+	})
+	defer op.End(&err) // captures errors AND panics; re-panics
 
-	_ = runJob(context.Background(), cfg, meta)
-}
-
-func runJob(ctx context.Context, cfg hc.Config, meta workerhc.JobMeta) (err error) {
-	op := workerhc.Start(ctx, meta)
-	defer op.End(cfg, &err)
-
-	hc.Add(op.Context(), "tenant", "enterprise")
-	return nil
+	hc.Add(op.Context(), "rows", 42, "source", "queue")
+	return doImport(ctx)
 }
 ```
 
-Example output:
-
-```json
-{
-  "time": "2026-02-09T14:03:12.451Z",
-  "level": "INFO",
-  "msg": "operation_completed",
-  "duration_ms": 3,
-  "job.attempt": 1,
-  "job.id": "job_8472",
-  "job.max_attempts": 3,
-  "job.name": "billing.reconcile",
-  "job.queue": "nightly",
-  "op.attempt": 1,
-  "op.domain": "job",
-  "op.id": "job_8472",
-  "op.max_attempts": 3,
-  "op.name": "billing.reconcile",
-  "op.outcome": "success",
-  "op.source": "nightly",
-  "tenant": "enterprise"
-}
-```
+One event, always: header fields, handler fields in attach order, and
+completion fields — deterministic by construction. Failures are never
+sampled away.
 
 ## Configuration
+
+Compile once at startup; `*hc.Runtime` is immutable and shared by all
+requests. Invalid configuration is a construction-time error
+(`hc.ErrInvalidRate`, `hc.ErrInvalidLevel`, `hc.ErrInvalidOutcome`) —
+use `hc.Compile` for config from files, `hc.MustCompile` for literals.
 
 `hc.Config` gives you the core controls:
 
@@ -207,20 +170,20 @@ Errors are recorded as structured metadata:
 Per-level sampling:
 
 ```go
-mw := stdhc.Middleware(hc.Config{
+mw := stdhc.Middleware(hc.MustCompile(hc.Config{
 	Sink:         sink,
 	SamplingRate: 0.05, // default for healthy traffic
 	LevelSamplingRates: map[hc.Level]float64{
 		hc.LevelWarn:  1.0, // keep all warns
 		hc.LevelDebug: 0.01,
 	},
-})
+}))
 ```
 
 Custom sampler (route/user/latency rules):
 
 ```go
-mw := stdhc.Middleware(hc.Config{
+mw := stdhc.Middleware(hc.MustCompile(hc.Config{
 	Sink: sink,
 	Sampler: func(in hc.SampleInput) bool {
 		// Always keep failures and slow requests.
@@ -235,14 +198,11 @@ mw := stdhc.Middleware(hc.Config{
 			return true
 		}
 		// Keep enterprise requests based on event fields.
-		fields := hc.EventFields(in.Event)
-		tier, _ := fields["user_tier"].(string)
+		tier, _ := in.Lookup("user_tier")
 		return tier == "enterprise"
 	},
-})
+}))
 ```
-
-`hc.EventFields` returns a shallow copy of top-level fields. Nested maps/slices are shared references.
 
 `hc.Add` accepts one or more key/value pairs:
 `hc.Add(ctx, "k1", v1, "k2", v2, "k3", v3)`.
@@ -253,7 +213,7 @@ For non-HTTP operations use `Domain`, `Operation`, `Outcome`, and `Code`.
 Built-in sampler chain:
 
 ```go
-mw := stdhc.Middleware(hc.Config{
+mw := stdhc.Middleware(hc.MustCompile(hc.Config{
 	Sink: sink,
 	Sampler: hc.ChainSampler(
 		hc.RateSampler(0.05),        // base sampler
@@ -261,7 +221,7 @@ mw := stdhc.Middleware(hc.Config{
 		hc.KeepPathPrefix("/admin"), // always keep admin paths
 		hc.KeepSlowerThan(500*time.Millisecond),
 	),
-})
+}))
 ```
 
 Sampler building blocks:
@@ -276,25 +236,26 @@ Sampler building blocks:
 
 ### Generic Operation Lifecycle API
 
-For non-HTTP flows, use `hc.StartOperation` for the ergonomic stateful handle:
+For non-HTTP flows, use `hc.Start` with the compiled runtime:
 
 ```go
-func runJob(cfg hc.Config) (err error) {
-	op := hc.StartOperation(context.Background(), hc.OperationStart{
+func runJob(ctx context.Context, rt *hc.Runtime) (err error) {
+	op := hc.Start(ctx, rt, hc.OperationStart{
 		Domain: hc.DomainJob,
 		Name:   "invoice.reconcile",
 		ID:     "job_1001",
 		Source: "nightly",
 	})
-	defer op.End(cfg, &err)
+	defer op.End(&err) // direct defer: captures errors and panics
 
-	hc.Add(op.Context(), "job.queue", "nightly")
 	hc.Add(op.Context(), "account_id", "acct_42")
 	return nil
 }
 ```
 
-`op.End(cfg, &err)` is the supported non-HTTP completion path in this API.
+`op.End(&err)` is the only completion path: one-shot, returning whether
+the event was emitted. The `worker` integration wraps this idiom for
+queue consumers.
 
 ## Integrations
 
@@ -311,14 +272,19 @@ func runJob(cfg hc.Config) (err error) {
 - `adapter/zap`
 - `adapter/zerolog`
 
-All adapters expose `NewWithOptions` plus a `SinkOptions` value reserved for future options. Adapters do not sort fields: field order follows Go's map iteration and is unspecified. Deterministic, insertion-ordered output arrives structurally with the upcoming record-based core.
+Adapters expose `New` only (the `SinkOptions`/`NewWithOptions` shapes
+were removed at 1.0: nothing to configure until proven otherwise).
+Fields arrive in insertion order, deterministically, as typed
+constructors.
 
 ### First-party JSON sink (no logger dependency)
 
 `hc.NewJSONSink(w io.Writer)` emits the same canonical event shape as the
 zerolog adapter — lowercase `level`, RFC3339 `time`, your fields, `message`
 last — as one JSON line per event, with zero dependencies beyond the
-standard library:
+standard library (the module's only non-stdlib require is
+go.uber.org/goleak — a test-only dependency used by the package's
+goroutine-leak check, never linked into consumers):
 
 ```go
 sink := hc.NewJSONSink(os.Stdout)
@@ -326,7 +292,7 @@ sink := hc.NewJSONSink(os.Stdout)
 
 The wire format matches `zerolog.New(w).With().Timestamp().Logger()`
 through `adapter/zerolog`, so existing pipelines ingest it unchanged.
-Field order remains unspecified (map-based, same as the adapters).
+Field order is insertion order — deterministic by construction, identical across every sink.
 
 ## More Examples
 
@@ -349,7 +315,7 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	sink := sloghc.New(logger)
-	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
+	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -384,7 +350,7 @@ func main() {
 	sink := sloghc.New(logger)
 
 	r := gin.New()
-	r.Use(ginhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	r.Use(ginhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
 	r.GET("/users/:id", func(c *gin.Context) {
 		hc.Add(c.Request.Context(), "router", "gin")
 		c.Status(200)
@@ -417,7 +383,7 @@ func main() {
 	sink := sloghc.New(logger)
 
 	app := fiber.New()
-	app.Use(fiberhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/users/:id", func(c *fiber.Ctx) error {
 		hc.Add(c.UserContext(), "router", "fiber-v2")
 		return c.SendStatus(200)
@@ -450,7 +416,7 @@ func main() {
 	sink := sloghc.New(logger)
 
 	app := fiber.New()
-	app.Use(fiberv3hc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberv3hc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/users/:id", func(c fiber.Ctx) error {
 		hc.Add(c.Context(), "router", "fiber-v3")
 		return c.SendStatus(200)
@@ -483,7 +449,7 @@ func main() {
 	sink := sloghc.New(logger)
 
 	e := echo.New()
-	e.Use(echohc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	e.Use(echohc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
 	e.GET("/users/:id", func(c echo.Context) error {
 		hc.Add(c.Request().Context(), "router", "echo")
 		return c.NoContent(200)
@@ -513,7 +479,7 @@ import (
 func main() {
 	logger := zap.NewExample()
 	sink := zaphc.New(logger)
-	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
+	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -546,7 +512,7 @@ import (
 func main() {
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
 	sink := zerologhc.New(&logger)
-	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
+	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -597,6 +563,12 @@ Published nested modules:
 - `integration/gin`
 - `integration/std`
 - `integration/worker`
+
+## Migrating from v0.x
+
+Coming from a 0.x release? [`MIGRATION.md`](./MIGRATION.md) maps every
+removed or changed symbol, the outcome-precedence change, and the wire
+format differences.
 
 ## References
 

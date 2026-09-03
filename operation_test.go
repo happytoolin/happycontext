@@ -1,511 +1,950 @@
 package hc
 
+// Operation lifecycle, concurrent-End, and panic tests
+
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
-func TestBeginOperationAddsEnvelopeFields(t *testing.T) {
-	var parent context.Context
-	ctx, event := BeginOperation(parent, OperationStart{
-		Domain:      DomainJob,
-		Name:        "cleanup",
-		ID:          "job_1",
-		Source:      "nightly",
-		Attempt:     2,
-		MaxAttempts: 5,
-	})
-	if ctx == nil || event == nil {
-		t.Fatal("expected context and event")
+func testRT(t *testing.T, mut func(*Config)) (*Runtime, *TestSink) {
+	t.Helper()
+	cfg := Config{Sink: NewTestSink(), SamplingRate: 1}
+	if mut != nil {
+		mut(&cfg)
 	}
-
-	fields := EventFields(event)
-	if fields["op.domain"] != string(DomainJob) {
-		t.Fatalf("op.domain = %v", fields["op.domain"])
+	rt, err := Compile(cfg)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
 	}
-	if fields["op.name"] != "cleanup" {
-		t.Fatalf("op.name = %v", fields["op.name"])
-	}
-	if fields["op.id"] != "job_1" {
-		t.Fatalf("op.id = %v", fields["op.id"])
-	}
-	if fields["op.source"] != "nightly" {
-		t.Fatalf("op.source = %v", fields["op.source"])
-	}
-	if fields["op.attempt"] != 2 {
-		t.Fatalf("op.attempt = %v", fields["op.attempt"])
-	}
-	if fields["op.max_attempts"] != 5 {
-		t.Fatalf("op.max_attempts = %v", fields["op.max_attempts"])
-	}
+	ts, _ := rt.sink.(*TestSink)
+	return rt, ts
 }
 
-func TestStartOperationProvidesHandle(t *testing.T) {
-	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
-	if op == nil {
-		t.Fatal("expected operation handle")
-	}
-	if op.Context() == nil {
-		t.Fatal("expected operation context")
-	}
-	if op.Event() == nil {
-		t.Fatal("expected operation event")
-	}
-}
-
-func TestOperationNilAccessors(t *testing.T) {
-	var op *Operation
-
-	if op.Context() != nil {
-		t.Fatalf("nil operation context = %v, want nil", op.Context())
-	}
-	if op.Event() != nil {
-		t.Fatalf("nil operation event = %v, want nil", op.Event())
-	}
-}
-
-func TestOperationEndSuccessWritesDefaultOperationMessage(t *testing.T) {
-	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
-	sink := NewTestSink()
+func TestLifecycleBasicEmit(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "import", ID: "j-1"})
+	ctx := op.Context()
+	Add(ctx, "user_id", "u_1", "attempt_no", 2)
+	Add(ctx, "took", 1500*time.Millisecond)
 	var err error
-
-	ok := op.End(Config{Sink: sink, SamplingRate: 1}, &err)
-	if !ok {
-		t.Fatal("expected end to write")
+	err = errors.New("db down")
+	if !op.End(&err) {
+		t.Fatal("event not emitted")
 	}
 
-	events := sink.Events()
+	events := ts.Events()
 	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
+		t.Fatalf("events = %d", len(events))
 	}
-	if events[0].Message != DefaultOperationMessage {
-		t.Fatalf("message = %q, want %q", events[0].Message, DefaultOperationMessage)
+	ev := events[0]
+	if ev.Level() != LevelError {
+		t.Errorf("level = %v", ev.Level())
 	}
-	if events[0].Level != LevelInfo {
-		t.Fatalf("level = %s, want INFO", events[0].Level)
+	if ev.Message() != "operation_completed" {
+		t.Errorf("message = %q", ev.Message())
 	}
-	if events[0].Fields["op.outcome"] != string(OutcomeSuccess) {
-		t.Fatalf("op.outcome = %v", events[0].Fields["op.outcome"])
+	checks := map[string]any{
+		"op.domain":   "job",
+		"op.name":     "import",
+		"op.id":       "j-1",
+		"user_id":     "u_1",
+		"attempt_no":  int64(2),
+		"took":        1500 * time.Millisecond,
+		"op.outcome":  "failure",
+		"duration_ms": int64(0), // overwritten below with presence check
 	}
-	if events[0].Fields["op.code"] != 0 {
-		t.Fatalf("op.code = %v, want 0", events[0].Fields["op.code"])
-	}
-}
-
-func TestOperationEndErrorAndPanic(t *testing.T) {
-	t.Run("error", func(t *testing.T) {
-		op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "sync"})
-		sink := NewTestSink()
-		err := errors.New("boom")
-
-		ok := op.End(Config{Sink: sink, SamplingRate: 0}, &err)
+	for k, want := range checks {
+		got, ok := ev.Lookup(k)
 		if !ok {
-			t.Fatal("expected errored operation to bypass sampling")
+			t.Errorf("missing field %q", k)
+			continue
 		}
-
-		events := sink.Events()
-		if len(events) != 1 {
-			t.Fatalf("expected 1 event, got %d", len(events))
+		if k == "duration_ms" {
+			if _, isInt := got.(int64); !isInt {
+				t.Errorf("duration_ms = %T", got)
+			}
+			continue
 		}
-		if events[0].Level != LevelError {
-			t.Fatalf("level = %s, want ERROR", events[0].Level)
+		if got != want {
+			t.Errorf("%q = %v, want %v", k, got, want)
 		}
-		if events[0].Fields["op.outcome"] != string(OutcomeFailure) {
-			t.Fatalf("outcome = %v", events[0].Fields["op.outcome"])
-		}
-		if _, ok := events[0].Fields["error"].(map[string]any); !ok {
-			t.Fatal("expected structured error field")
-		}
-	})
-
-	t.Run("panic", func(t *testing.T) {
-		op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "sync"})
-		sink := NewTestSink()
-		func() {
-			var err error
-			defer func() {
-				recovered := recover()
-				if recovered != "panic-value" {
-					t.Fatalf("recovered = %v, want panic-value", recovered)
-				}
-			}()
-			defer op.End(Config{Sink: sink, SamplingRate: 0}, &err)
-			panic("panic-value")
-		}()
-
-		events := sink.Events()
-		if len(events) != 1 {
-			t.Fatalf("expected 1 event, got %d", len(events))
-		}
-		if events[0].Fields["op.outcome"] != string(OutcomePanic) {
-			t.Fatalf("outcome = %v", events[0].Fields["op.outcome"])
-		}
-		if _, ok := events[0].Fields["panic"].(map[string]any); !ok {
-			t.Fatal("expected panic metadata")
-		}
-	})
-}
-
-func TestOperationEndAppliesPolicyAndRequestedFloor(t *testing.T) {
-	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
-	SetLevel(op.Context(), LevelWarn)
-	sink := NewTestSink()
-	rate := 2.0
-	var err error
-
-	ok := op.End(Config{
-		Sink:         sink,
-		SamplingRate: 1,
-		OperationPolicies: map[Domain]OperationPolicy{
-			DomainJob: {
-				SuccessLevel: LevelDebug,
-				SamplingRate: &rate,
-			},
-		},
-	}, &err)
-	if !ok {
-		t.Fatal("expected end to write")
 	}
-
-	events := sink.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
-	}
-	if events[0].Level != LevelWarn {
-		t.Fatalf("level = %s, want WARN floor", events[0].Level)
+	if errField, ok := ev.Lookup("error"); !ok {
+		t.Error("missing structured error field")
+	} else if m := errField.(map[string]any); m["message"] != "db down" {
+		t.Errorf("error.message = %v", m["message"])
 	}
 }
 
-func TestOperationEndNilGuard(t *testing.T) {
-	var op *Operation
-	var err error
-	if op.End(Config{Sink: NewTestSink()}, &err) {
-		t.Fatal("expected false for nil operation")
+func TestLifecycleHTTPDefaults(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "GET /x"})
+	Add(op.Context(), "http.method", "GET", "http.path", "/x", "http.status", 204)
+	op.End(nil)
+
+	ev := ts.Events()[0]
+	if ev.Message() != "request_completed" {
+		t.Errorf("message = %q, want request_completed", ev.Message())
+	}
+	if v, _ := ev.Lookup("op.outcome"); v != "success" {
+		t.Errorf("outcome = %v", v)
+	}
+	if _, hasOpCode := ev.Lookup("op.code"); hasOpCode {
+		t.Error("op.code must not be emitted for HTTP operations (http.status carries it)")
+	}
+	if v, _ := ev.Lookup("http.status"); v != int64(204) {
+		t.Errorf("http.status = %v", v)
+	}
+	if ev.Level() != LevelInfo {
+		t.Errorf("level = %v", ev.Level())
 	}
 }
 
-func TestOperationEndUsesErrorPointer(t *testing.T) {
-	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
-	sink := NewTestSink()
-	err := errors.New("boom")
-
-	if !op.End(Config{Sink: sink, SamplingRate: 1}, &err) {
-		t.Fatal("expected end to write")
+func TestLifecycleOneShotEnd(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{})
+	first := op.End(nil)
+	second := op.End(nil)
+	third := op.End(nil)
+	if !first || second != first || third != first {
+		t.Fatalf("one-shot violated: %v %v %v", first, second, third)
 	}
-
-	events := sink.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
+	if len(ts.Events()) != 1 {
+		t.Fatalf("events = %d, want 1", len(ts.Events()))
 	}
-	if events[0].Fields["op.outcome"] != string(OutcomeFailure) {
-		t.Fatalf("outcome = %v", events[0].Fields["op.outcome"])
+	// pool state intact: a fresh request still works
+	op2 := Start(context.Background(), rt, OperationStart{})
+	if !op2.End(nil) {
+		t.Fatal("second request dropped")
+	}
+	if len(ts.Events()) != 2 {
+		t.Fatalf("events = %d, want 2", len(ts.Events()))
 	}
 }
 
-func TestOperationEndCapturesAndRepanics(t *testing.T) {
-	op := StartOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
-	sink := NewTestSink()
+func TestLifecyclePanicCapturedAndRepanicked(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "boom"})
 
 	func() {
-		var err error
-		defer func() {
-			recovered := recover()
-			if recovered != "panic-value" {
-				t.Fatalf("recovered = %v, want panic-value", recovered)
-			}
-		}()
-		defer op.End(Config{Sink: sink, SamplingRate: 1}, &err)
-		panic("panic-value")
+		defer func() { recover() }() // swallows End's re-panic
+		defer op.End(nil)            // direct defer: observes the panic
+		panic("kaboom")
 	}()
 
-	events := sink.Events()
+	if len(ts.Events()) != 1 {
+		t.Fatal("panic event not emitted")
+	}
+	ev := ts.Events()[0]
+	if v, _ := ev.Lookup("op.outcome"); v != "panic" {
+		t.Errorf("outcome = %v", v)
+	}
+	if p, ok := ev.Lookup("panic"); !ok {
+		t.Error("missing panic field")
+	} else if pm := p.(map[string]any); pm["value"] != "kaboom" {
+		t.Errorf("panic.value = %v", pm["value"])
+	}
+	if ev.Level() != LevelError {
+		t.Errorf("level = %v", ev.Level())
+	}
+}
+
+// deferred End observes the panic itself and must re-panic after commit
+func TestLifecycleRepanic(t *testing.T) {
+	rt, _ := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{})
+	repanicked := false
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				repanicked = true
+				if r != "original" {
+					t.Errorf("re-panic value = %v", r)
+				}
+			}
+		}()
+		defer op.End(nil)
+		panic("original")
+	}()
+	if !repanicked {
+		t.Fatal("End swallowed the panic")
+	}
+}
+
+func TestOutcomePrecedence(t *testing.T) {
+	cases := []struct {
+		name     string
+		setup    func(ctx context.Context)
+		err      error
+		panicked any
+		want     Outcome
+	}{
+		{"success", func(context.Context) {}, nil, nil, OutcomeSuccess},
+		{"panic beats error", func(context.Context) {}, errors.New("e"), "p", OutcomePanic},
+		{"error", func(context.Context) {}, errors.New("e"), nil, OutcomeFailure},
+		{"canceled", func(context.Context) {}, context.Canceled, nil, OutcomeCanceled},
+		{"timeout", func(context.Context) {}, context.DeadlineExceeded, nil, OutcomeTimeout},
+		{"explicit beats 5xx", func(ctx context.Context) {
+			Add(ctx, "op.outcome", "retry")
+			Add(ctx, "http.status", 503)
+		}, nil, nil, OutcomeRetry},
+		{"error beats explicit", func(ctx context.Context) { Add(ctx, "op.outcome", "retry") }, errors.New("e"), nil, OutcomeFailure},
+		{"5xx status", func(ctx context.Context) { Add(ctx, "http.status", 500) }, nil, nil, OutcomeFailure},
+		{"4xx is success", func(ctx context.Context) { Add(ctx, "http.status", 404) }, nil, nil, OutcomeSuccess},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rt, ts := testRT(t, nil)
+			op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "x"})
+			c.setup(op.Context())
+			if c.panicked != nil {
+				func() {
+					defer func() { recover() }()
+					defer op.End(nil)
+					panic(c.panicked)
+				}()
+			} else {
+				op.End(&c.err)
+			}
+			got, _ := ts.Events()[0].Lookup("op.outcome")
+			if Outcome(got.(string)) != c.want {
+				t.Fatalf("outcome = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestPanicBeatsErrorWhenCoDelivered pins the panic > error precedence
+// for the shape the table test cannot reach: the error pointer is
+// already set when End runs AND a panic is in flight (defer op.End(&err)
+// with err non-nil, then panic). resolveOutcomeV2 must still resolve
+// OutcomePanic — a swap to error-first precedence silently turns the
+// event into OutcomeFailure. Found as a gap by mutation testing (M7):
+// every panic test deferred op.End(nil), so the error was never
+// co-delivered and the precedence row in TestOutcomePrecedence carried
+// an err it never passed to End.
+func TestPanicBeatsErrorWhenCoDelivered(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "both"})
+
+	err := errors.New("original error")
+	func() {
+		defer func() { recover() }() // swallow End's re-panic
+		defer op.End(&err)           // direct defer: observes the panic
+		panic("panic value")
+	}()
+
+	events := ts.Events()
 	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
+		t.Fatalf("captured %d events, want 1", len(events))
 	}
-	if events[0].Fields["op.outcome"] != string(OutcomePanic) {
-		t.Fatalf("outcome = %v", events[0].Fields["op.outcome"])
+	ev := events[0]
+
+	if v, _ := ev.Lookup("op.outcome"); v != string(OutcomePanic) {
+		t.Fatalf("op.outcome = %v, want %q — panic must beat the co-delivered error", v, OutcomePanic)
+	}
+	if p, ok := ev.Lookup("panic"); !ok {
+		t.Fatal("missing panic field")
+	} else if pm, ok := p.(map[string]any); !ok || pm["value"] != "panic value" {
+		t.Fatalf("panic field = %v, want value %q", p, "panic value")
+	}
+	if e, ok := ev.Lookup("error"); !ok {
+		t.Fatal("missing error field")
+	} else if em, ok := e.(map[string]any); !ok || em["message"] != "original error" {
+		t.Fatalf("error.message = %v, want %q — the real error must survive, not the synthetic \"panic: …\" error", em["message"], "original error")
 	}
 }
 
-func TestFinishOperationCompatibilityAppliesPolicyAndRequestedFloor(t *testing.T) {
-	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
-	SetLevel(ctx, LevelWarn)
-	sink := NewTestSink()
-	rate := 2.0
-
-	ok := FinishOperation(Config{
-		Sink:         sink,
-		SamplingRate: 1,
-		OperationPolicies: map[Domain]OperationPolicy{
-			DomainJob: {
-				SuccessLevel: LevelDebug,
-				SamplingRate: &rate,
-			},
-		},
-	}, OperationFinish{
-		Ctx:   ctx,
-		Event: event,
-		Start: OperationStart{Domain: DomainJob, Name: "cleanup"},
+// TestErrorsBypassSampling is amendment 4: failures are never sampled
+// away, structurally, before any custom sampler runs.
+func TestErrorsBypassSampling(t *testing.T) {
+	samplerCalls := 0
+	rt, ts := testRT(t, func(c *Config) {
+		c.Sampler = func(in SampleInput) bool {
+			samplerCalls++
+			return false
+		}
 	})
-	if !ok {
-		t.Fatal("expected finish to write")
+	_ = rt
+
+	// failing request still emits; the sampler never ran
+	op := Start(context.Background(), rt, OperationStart{})
+	var err error = errors.New("boom")
+	if !op.End(&err) {
+		t.Fatal("error event was sampled away")
+	}
+	if samplerCalls != 0 {
+		t.Fatalf("custom sampler ran %d times on an error event", samplerCalls)
+	}
+	if len(ts.Events()) != 1 {
+		t.Fatal("error event not written")
 	}
 
-	events := sink.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
+	// healthy request is dropped by the sampler
+	op2 := Start(context.Background(), rt, OperationStart{})
+	if op2.End(nil) {
+		t.Fatal("healthy event survived NeverSampler")
 	}
-	if events[0].Level != LevelWarn {
-		t.Fatalf("level = %s, want WARN floor", events[0].Level)
+	if samplerCalls != 1 {
+		t.Fatalf("sampler calls = %d, want 1", samplerCalls)
 	}
 }
 
-func TestFinishOperationPolicySamplingOverride(t *testing.T) {
-	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
-	sink := NewTestSink()
-	rate := 0.0
+// TestNonHTTPOpCode pins the canonical-field rule: op.code is non-HTTP
+// only, surfaced from the explicit op.code field the caller wrote.
+func TestNonHTTPOpCode(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "import"})
+	Add(op.Context(), "op.code", 42)
+	op.End(nil)
+	ev := ts.Events()[0]
+	if v, _ := ev.Lookup("op.code"); v != int64(42) {
+		t.Fatalf("op.code = %v, want 42", v)
+	}
 
-	ok := FinishOperation(Config{
-		Sink:         sink,
-		SamplingRate: 1,
-		OperationPolicies: map[Domain]OperationPolicy{
-			DomainJob: {
-				SamplingRate: &rate,
-			},
-		},
-	}, OperationFinish{
-		Ctx:   ctx,
-		Event: event,
-		Start: OperationStart{Domain: DomainJob, Name: "cleanup"},
+	// absent when not set
+	op2 := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "x"})
+	op2.End(nil)
+	if _, has := ts.Events()[1].Lookup("op.code"); has {
+		t.Fatal("op.code emitted without an explicit field")
+	}
+}
+
+// TestExplicitOpCodeOnHTTPIsUserData pins the boundary: the core never
+// SYNTHESIZES op.code for HTTP operations, but an explicit user write
+// is their data and survives.
+func TestExplicitOpCodeOnHTTPIsUserData(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "GET /x"})
+	Add(op.Context(), "http.status", 200)
+	op.End(nil)
+	if _, has := ts.Events()[0].Lookup("op.code"); has {
+		t.Fatal("core synthesized op.code for an HTTP operation")
+	}
+
+	op2 := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "GET /x"})
+	Add(op2.Context(), "http.status", 200, "op.code", 777)
+	op2.End(nil)
+	if v, has := ts.Events()[1].Lookup("op.code"); !has || v != int64(777) {
+		t.Fatalf("explicit user op.code dropped: %v %v", v, has)
+	}
+}
+
+func TestRequestedLevelFloor(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{})
+	SetLevel(op.Context(), LevelWarn) // success auto-level is info
+	op.End(nil)
+	if ev := ts.Events()[0]; ev.Level() != LevelWarn {
+		t.Fatalf("level = %v, want warn floor", ev.Level())
+	}
+}
+
+func TestSetMessageOverride(t *testing.T) {
+	rt, ts := testRT(t, func(c *Config) { c.Message = "configured" })
+	op := Start(context.Background(), rt, OperationStart{})
+	SetMessage(op.Context(), "handler message")
+	op.End(nil)
+	if ev := ts.Events()[0]; ev.Message() != "handler message" {
+		t.Fatalf("message = %q", ev.Message())
+	}
+
+	op2 := Start(context.Background(), rt, OperationStart{})
+	op2.End(nil)
+	if ev := ts.Events()[1]; ev.Message() != "configured" {
+		t.Fatalf("configured message = %q", ev.Message())
+	}
+}
+
+func TestNilRuntimeNoop(t *testing.T) {
+	var rt *Runtime
+	op := Start(context.Background(), rt, OperationStart{})
+	Add(op.Context(), "k", 1) // requests run
+	if op.End(nil) {
+		t.Fatal("nil runtime emitted")
+	}
+	// and nothing panicked
+}
+
+func TestAddNoEventNoop(t *testing.T) {
+	Add(context.Background(), "k", 1) // no panic
+	Add(nil, "k", 1)
+	AddRawJSON(context.Background(), "k", []byte(`{}`))
+	Error(context.Background(), errors.New("x"))
+	SetMessage(context.Background(), "m")
+	SetRoute(context.Background(), "/r")
+	SetLevel(context.Background(), LevelWarn)
+}
+
+func TestAddRawJSONField(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{})
+	AddRawJSON(op.Context(), "meta", []byte(`{"nested":true}`))
+	op.End(nil)
+	ev := ts.Events()[0]
+	var found *Field
+	for _, cand := range ev.Fields() {
+		if cand.Key() == "meta" {
+			f := cand
+			found = &f
+		}
+	}
+	if found == nil {
+		t.Fatal("raw field missing")
+	}
+	if found.Kind() != KindRaw {
+		t.Fatalf("kind = %v", found.Kind())
+	}
+	if raw, ok := found.Raw(); !ok || string(raw) != `{"nested":true}` {
+		t.Fatalf("raw = %v", raw)
+	}
+}
+
+func TestLevelSamplingRates(t *testing.T) {
+	rt, ts := testRT(t, func(c *Config) {
+		c.SamplingRate = 0
+		c.LevelSamplingRates = map[Level]float64{LevelWarn: 1}
 	})
-	if ok {
-		t.Fatal("expected operation policy sampling override to drop healthy event")
+	// info events dropped (rate 0), warn kept via level rate
+	op := Start(context.Background(), rt, OperationStart{})
+	if op.End(nil) {
+		t.Fatal("info event kept despite rate 0")
 	}
-	if len(sink.Events()) != 0 {
-		t.Fatal("expected no events")
+	op2 := Start(context.Background(), rt, OperationStart{})
+	SetLevel(op2.Context(), LevelWarn)
+	if !op2.End(nil) {
+		t.Fatal("warn event dropped despite level rate 1")
+	}
+	if len(ts.Events()) != 1 {
+		t.Fatalf("events = %d", len(ts.Events()))
 	}
 }
 
-func TestFinishOperationDomainSamplingOverridesLevelSampling(t *testing.T) {
-	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
-	sink := NewTestSink()
+func TestDomainPolicySamplingRate(t *testing.T) {
 	rate := 1.0
-
-	ok := FinishOperation(Config{
-		Sink:         sink,
-		SamplingRate: 0,
-		LevelSamplingRates: map[Level]float64{
-			LevelInfo: 0,
-		},
-		OperationPolicies: map[Domain]OperationPolicy{
-			DomainJob: {
-				SamplingRate: &rate,
-			},
-		},
-	}, OperationFinish{
-		Ctx:   ctx,
-		Event: event,
-		Start: OperationStart{Domain: DomainJob, Name: "cleanup"},
+	rt, ts := testRT(t, func(c *Config) {
+		c.SamplingRate = 0
+		c.OperationPolicies = map[Domain]OperationPolicy{
+			DomainJob: {SamplingRate: &rate},
+		}
 	})
-	if !ok {
-		t.Fatal("expected domain sampling override to beat level sampling")
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob})
+	if !op.End(nil) {
+		t.Fatal("job event dropped despite domain rate 1")
 	}
-	if len(sink.Events()) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(sink.Events()))
+	op2 := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP})
+	if op2.End(nil) {
+		t.Fatal("http event kept despite generic rate 0")
+	}
+	if len(ts.Events()) != 1 {
+		t.Fatalf("events = %d", len(ts.Events()))
 	}
 }
 
-func TestFinishOperationLevelSamplingAppliesWithoutDomainOverride(t *testing.T) {
-	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
-	sink := NewTestSink()
-
-	ok := FinishOperation(Config{
-		Sink:         sink,
+func TestOperationContextReachesSink(t *testing.T) {
+	type ctxKey struct{}
+	var gotCtx context.Context
+	rt := MustCompile(Config{
+		Sink:         sinkFunc(func(ctx context.Context, rec *Record) { gotCtx = ctx }),
 		SamplingRate: 1,
-		LevelSamplingRates: map[Level]float64{
-			LevelInfo: 0,
-		},
-	}, OperationFinish{
-		Ctx:   ctx,
-		Event: event,
-		Start: OperationStart{Domain: DomainJob, Name: "cleanup"},
 	})
-	if ok {
-		t.Fatal("expected level sampling override to apply when domain has no explicit sampling policy")
-	}
-	if len(sink.Events()) != 0 {
-		t.Fatalf("expected no events, got %d", len(sink.Events()))
+	parent := context.WithValue(context.Background(), ctxKey{}, "request-value")
+	op := Start(parent, rt, OperationStart{})
+	op.End(nil)
+	if gotCtx.Value(ctxKey{}) != "request-value" {
+		t.Fatal("sink did not receive the request context")
 	}
 }
 
-func TestFinishOperationHTTPDefaultsAndSamplerCompatibility(t *testing.T) {
-	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainHTTP, Name: "GET /x"})
-	Add(ctx, "http.method", "GET", "http.path", "/x", "http.status", 200)
+type sinkFunc func(context.Context, *Record)
 
-	var got SampleInput
-	sink := NewTestSink()
-	ok := FinishOperation(Config{
-		Sink: sink,
-		Sampler: func(in SampleInput) bool {
-			got = in
-			return true
-		},
-	}, OperationFinish{
-		Ctx:   ctx,
-		Event: event,
-		Start: OperationStart{Domain: DomainHTTP, Name: "GET /x"},
-		Code:  200,
+func (f sinkFunc) Write(ctx context.Context, rec *Record) { f(ctx, rec) }
+
+func TestSinkPanicDoesNotLeakPool(t *testing.T) {
+	rt, _ := testRT(t, func(c *Config) {
+		c.Sink = sinkFunc(func(context.Context, *Record) { panic("sink exploded") })
 	})
+	func() {
+		defer func() { _ = recover() }()
+		op := Start(context.Background(), rt, OperationStart{})
+		defer op.End(nil)
+	}()
+	// pool must still be usable
+	rt2, ts := testRT(t, nil)
+	op := Start(context.Background(), rt2, OperationStart{})
+	if !op.End(nil) || len(ts.Events()) != 1 {
+		t.Fatal("pool corrupted after sink panic")
+	}
+}
+
+func TestConcurrentRequests(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	const goroutines = 16
+	const each = 50
+	done := make(chan struct{}, goroutines)
+	for g := 0; g < goroutines; g++ {
+		go func(g int) {
+			defer func() { done <- struct{}{} }()
+			for i := 0; i < each; i++ {
+				op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j", ID: "g"})
+				ctx := op.Context()
+				Add(ctx, "g", g, "i", i)
+				Add(ctx, strings.Repeat("f", 32), i)
+				var err error
+				if i%7 == 0 {
+					err = errors.New("periodic failure")
+				}
+				op.End(&err)
+			}
+		}(g)
+	}
+	for g := 0; g < goroutines; g++ {
+		<-done
+	}
+	events := ts.Events()
+	if len(events) != goroutines*each {
+		t.Fatalf("events = %d, want %d", len(events), goroutines*each)
+	}
+	for _, ev := range events {
+		if _, ok := ev.Lookup("g"); !ok {
+			t.Fatal("event lost its fields — pool corruption")
+		}
+	}
+}
+
+// concurrentEnd races n goroutines over one End on a fresh runtime and
+// returns their results plus the emitted event count.
+func concurrentEnd(t *testing.T, rate float64, n int) ([]bool, int) {
+	t.Helper()
+	ts := NewTestSink()
+	rt := MustCompile(Config{Sink: ts, SamplingRate: rate})
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "race"})
+
+	results := make([]bool, n)
+	var mu sync.Mutex
+	start := sync.NewCond(&mu)
+	released, ready := false, 0
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			mu.Lock()
+			ready++
+			start.Broadcast()
+			for !released {
+				start.Wait()
+			}
+			mu.Unlock()
+			results[i] = op.End(nil)
+		}(i)
+	}
+	mu.Lock()
+	for ready != n {
+		start.Wait()
+	}
+	released = true
+	start.Broadcast()
+	mu.Unlock()
+	wg.Wait()
+
+	return results, len(ts.Events())
+}
+
+// TestConcurrentEndCharacterization races End on one operation: the
+// winner commits exactly one event and every caller observes the same
+// emitted result (the losers wait for the winner's publication).
+func TestConcurrentEndCharacterization(t *testing.T) {
+	// Emitted case (rate 1): exactly one event, every caller sees true.
+	for round := 0; round < 25; round++ {
+		results, events := concurrentEnd(t, 1, 16)
+		if events != 1 {
+			t.Fatalf("round %d: %d events, want exactly 1", round, events)
+		}
+		for i, r := range results {
+			if !r {
+				t.Fatalf("round %d: caller %d returned false although the event was emitted", round, i)
+			}
+		}
+	}
+	// Sampled-away case (rate 0): no event, every caller sees false.
+	for round := 0; round < 25; round++ {
+		results, events := concurrentEnd(t, 0, 16)
+		if events != 0 {
+			t.Fatalf("round %d: %d events at rate 0", round, events)
+		}
+		for i, r := range results {
+			if r {
+				t.Fatalf("round %d: caller %d saw an emission that never happened", round, i)
+			}
+		}
+	}
+}
+
+// TestConcurrentEndArmed races End on an armed event: the armed-seal
+// mutex and the claim word must keep the whole race single-emission
+// and race-free (watchdog-style guarded appends interleave with the
+// End callers).
+func TestConcurrentEndArmed(t *testing.T) {
+	for round := 0; round < 25; round++ {
+		ts := NewTestSink()
+		rt := MustCompile(Config{Sink: ts, SamplingRate: 1})
+		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "armed-race"})
+		ctx := op.Context()
+		op.ev.arm()
+
+		var mu sync.Mutex
+		start := sync.NewCond(&mu)
+		released, ready := false, 0
+		const n = 8
+		var wg sync.WaitGroup
+		results := make([]bool, n)
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				mu.Lock()
+				ready++
+				start.Broadcast()
+				for !released {
+					start.Wait()
+				}
+				mu.Unlock()
+				if i%2 == 0 {
+					results[i] = op.End(nil)
+				} else {
+					Add(ctx, "async", i) // guarded append racing the seal
+					results[i] = false
+				}
+			}(i)
+		}
+		mu.Lock()
+		for ready != n {
+			start.Wait()
+		}
+		released = true
+		start.Broadcast()
+		mu.Unlock()
+		wg.Wait()
+
+		if got := len(ts.Events()); got != 1 {
+			t.Fatalf("round %d: %d events, want exactly 1", round, got)
+		}
+		for i, r := range results {
+			if r != (i%2 == 0) {
+				t.Fatalf("round %d: caller %d returned %v", round, i, r)
+			}
+		}
+		// Pool is clean for the next request.
+		ok := &matrixSink{}
+		rt2 := MustCompile(Config{Sink: ok, SamplingRate: 1})
+		op2 := Start(context.Background(), rt2, OperationStart{Domain: DomainJob, Name: "after"})
+		Add(op2.Context(), "clean", true)
+		op2.End(nil)
+		if len(ok.capture) != 1 || !bytes.Contains(ok.capture[0], []byte(`"clean":true`)) {
+			t.Fatalf("round %d: pool corrupted after the armed race", round)
+		}
+	}
+}
+
+// TestConcurrentEndErrorPointer races End with per-caller error
+// pointers: the winner's error is the one recorded; the event commits
+// exactly once and every caller sees the same result.
+func TestConcurrentEndErrorPointer(t *testing.T) {
+	for round := 0; round < 25; round++ {
+		ts := NewTestSink()
+		rt := MustCompile(Config{Sink: ts, SamplingRate: 1})
+		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "err-race"})
+		results := make([]bool, 8)
+		var wg sync.WaitGroup
+		for i := 0; i < 8; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				err := fmt.Errorf("caller-%d", i)
+				results[i] = op.End(&err)
+			}(i)
+		}
+		wg.Wait()
+		if len(ts.Events()) != 1 {
+			t.Fatalf("round %d: %d events", round, len(ts.Events()))
+		}
+		for i := 1; i < len(results); i++ {
+			if results[i] != results[0] {
+				t.Fatalf("round %d: inconsistent results %v", round, results)
+			}
+		}
+	}
+}
+
+// panicPayload is one panic value shape.
+type panicPayload struct {
+	name  string
+	value any
+}
+
+// typedNilErr is a typed-nil panic payload (the interface is non-nil,
+// the pointer is nil — the classic typed-nil trap).
+type typedNilErr struct{}
+
+func (p *typedNilErr) Error() string { return "typed-nil" }
+
+// runtimeStyleError implements runtime.Error (a real runtime panic
+// payload shape without reaching into the runtime package).
+type runtimeStyleError string
+
+func (e runtimeStyleError) Error() string        { return string(e) }
+func (e runtimeStyleError) RuntimeError() string { return string(e) }
+
+func panicPayloads() []panicPayload {
+	return []panicPayload{
+		{"string", "boom"},
+		{"error", errors.New("boom-err")},
+		{"int", 42},
+		{"struct", struct{ X int }{7}},
+		{"nil-interface", nil}, // panic(nil): *runtime.PanicNilError
+		{"typed-nil", (*typedNilErr)(nil)},
+		{"runtime-error", runtimeStyleError("runtime-style")},
+	}
+}
+
+// runPanic executes fn inside a recover and returns what escaped.
+func runPanic(fn func()) (recovered any) {
+	defer func() { recovered = recover() }()
+	fn()
+	return nil
+}
+
+// capturePanicEvent runs a panicking lifecycle and returns the capture
+// plus the re-panicked value.
+func capturePanicEvent(t *testing.T, run func(op *Operation)) (lifeCapture, any) {
+	t.Helper()
+	sink := &lifeSink{}
+	cfg := rtConfigFor(sink)
+	op := Start(context.Background(), MustCompile(cfg), OperationStart{Domain: DomainJob, Name: "panic"})
+	var rePanicked any
+	func() {
+		defer func() { rePanicked = recover() }()
+		run(op)
+	}()
+	if len(sink.events) != 1 {
+		t.Fatalf("captured %d events, want 1", len(sink.events))
+	}
+	return sink.events[0], rePanicked
+}
+
+func rtConfigFor(s Sink) Config { return Config{Sink: s, SamplingRate: 1} }
+
+// TestPanicValuePermutations covers every payload through the direct-
+// defer source (the documented usage) and the deferred-function source.
+func TestPanicValuePermutations(t *testing.T) {
+	for _, p := range panicPayloads() {
+		p := p
+		t.Run("direct-"+p.name, func(t *testing.T) {
+			ev, rePanicked := capturePanicEvent(t, func(op *Operation) {
+				defer op.End(nil) // direct defer: observes the panic
+				panic(p.value)
+			})
+			verifyPanicEvent(t, ev, rePanicked, p.value, nil)
+		})
+		t.Run("deferred-func-"+p.name, func(t *testing.T) {
+			ev, rePanicked := capturePanicEvent(t, func(op *Operation) {
+				defer op.End(nil) // registered first → runs last, sees the panic
+				defer func() { panic(p.value) }()
+				Add(op.Context(), "before", "work")
+			})
+			verifyPanicEvent(t, ev, rePanicked, p.value, nil)
+		})
+		t.Run("co-delivered-"+p.name, func(t *testing.T) {
+			err := errors.New("co-err")
+			ev, rePanicked := capturePanicEvent(t, func(op *Operation) {
+				defer op.End(&err) // error pointer set when the panic hits
+				panic(p.value)
+			})
+			verifyPanicEvent(t, ev, rePanicked, p.value, err)
+		})
+	}
+}
+
+// verifyPanicEvent checks the captured event and the re-panicked value
+// against the payload. coErr nil means the error field must carry the
+// synthetic "panic: <value>" error; non-nil means the real error.
+func verifyPanicEvent(t *testing.T, ev lifeCapture, rePanicked, payload any, coErr error) {
+	t.Helper()
+
+	// The re-panic propagates the original value — except panic(nil),
+	// which Go ≥1.21 surfaces as *runtime.PanicNilError.
+	if payload == nil {
+		if _, ok := rePanicked.(error); !ok {
+			t.Fatalf("panic(nil) re-panicked %T (%v), want an error", rePanicked, rePanicked)
+		}
+	} else if rePanicked != payload {
+		t.Fatalf("re-panicked %#v, want the original %#v", rePanicked, payload)
+	}
+
+	if ev.level != LevelError {
+		t.Fatalf("level = %v, want ERROR (panic policy)", ev.level)
+	}
+
+	// Panic field shape: {type, value} derived from the payload. For
+	// panic(nil) the observed value is the *runtime.PanicNilError
+	// wrapper Go ≥1.21 recovers, so expectations derive from it.
+	observed := payload
+	if payload == nil {
+		observed = rePanicked
+	}
+	line := string(ev.line)
+	panicField, ok := eventMember(t, ev, "panic")
 	if !ok {
-		t.Fatal("expected finish to write")
+		t.Fatalf("missing panic field in %s", line)
 	}
-	if got.Domain != DomainHTTP {
-		t.Fatalf("domain = %q, want %q", got.Domain, DomainHTTP)
+	wantType := fmt.Sprintf("%T", observed)
+	if got := panicField["type"]; got != wantType {
+		t.Fatalf("panic.type = %v, want %s", got, wantType)
 	}
-	if got.Method != "GET" || got.Path != "/x" || got.StatusCode != 200 {
-		t.Fatalf("legacy fields = %+v", got)
+	wantValue := fmt.Sprint(observed)
+	if got := panicField["value"]; got != wantValue {
+		t.Fatalf("panic.value = %q, want %q", got, wantValue)
 	}
-	events := sink.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
-	}
-	if events[0].Message != DefaultMessage {
-		t.Fatalf("message = %q, want %q", events[0].Message, DefaultMessage)
-	}
-}
 
-func TestCustomSamplerKeepsPreCallbackSnapshot(t *testing.T) {
-	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainHTTP, Name: "GET /x"})
-	Add(ctx, "before", true)
-	sink := NewTestSink()
-
-	ok := FinishOperation(Config{
-		Sink: sink,
-		Sampler: func(in SampleInput) bool {
-			Add(ctx, "sampler.mutation", true)
-			return in.Event == event
-		},
-	}, OperationFinish{Ctx: ctx, Event: event, Code: 200})
+	// Error field: the real co-delivered error or the synthetic panic
+	// fallback.
+	ef, ok := eventMember(t, ev, "error")
 	if !ok {
-		t.Fatal("expected custom sampler to keep event")
+		t.Fatalf("missing error field in %s", line)
 	}
-	if _, ok := sink.Events()[0].Fields["sampler.mutation"]; ok {
-		t.Fatal("sink snapshot included a sampler callback mutation")
-	}
-	if EventFields(event)["sampler.mutation"] != true {
-		t.Fatal("sampler callback mutation was not retained on Event")
-	}
-}
-
-func TestBuiltInSamplingDropRetainsCompletionFields(t *testing.T) {
-	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
-	if FinishOperation(Config{Sink: NewTestSink(), SamplingRate: 0}, OperationFinish{Ctx: ctx, Event: event, Code: 204}) {
-		t.Fatal("expected healthy operation to be dropped")
-	}
-
-	fields := EventFields(event)
-	if fields["op.code"] != 204 || fields["op.outcome"] != string(OutcomeSuccess) {
-		t.Fatalf("completion fields = %#v", fields)
-	}
-	if _, ok := fields["duration_ms"]; !ok {
-		t.Fatal("missing duration_ms after sampling drop")
+	if coErr != nil {
+		if ef["message"] != coErr.Error() {
+			t.Fatalf("error.message = %v, want %q", ef["message"], coErr.Error())
+		}
+	} else {
+		want := "panic: " + fmt.Sprint(observed)
+		if ef["message"] != want {
+			t.Fatalf("error.message = %v, want %q", ef["message"], want)
+		}
 	}
 }
 
-func TestFinishOperationAppliesEventMessage(t *testing.T) {
-	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
-	SetMessage(ctx, "hello world")
-	sink := NewTestSink()
-
-	ok := FinishOperation(Config{Sink: sink, SamplingRate: 1, Message: "default message"}, OperationFinish{
-		Ctx:   ctx,
-		Event: event,
-		Start: OperationStart{Domain: DomainJob, Name: "cleanup"},
-	})
+// eventMember parses the captured line and returns one member's value
+// as a decoded map.
+func eventMember(t *testing.T, ev lifeCapture, key string) (map[string]any, bool) {
+	t.Helper()
+	got, _ := decodeLineStrict(t, ev.line)
+	raw, ok := got[key]
 	if !ok {
-		t.Fatal("expected finish to write")
+		return nil, false
 	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatalf("member %s not an object: %v", key, err)
+	}
+	return m, true
+}
 
-	events := sink.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
-	}
-	if events[0].Message != "hello world" {
-		t.Fatalf("message = %q, want %q", events[0].Message, "hello world")
+// TestSinkPanicPermutations: a panicking sink (payload from the table)
+// with and without an in-flight handler panic. The sink panic replaces
+// the in-flight panic (documented) and must not corrupt the pool.
+func TestSinkPanicPermutations(t *testing.T) {
+	for _, p := range panicPayloads() {
+		p := p
+		run := func(t *testing.T, handlerPanic any) {
+			t.Helper()
+			sink := &captureThenPanicSink{payload: p.value}
+			rt := MustCompile(Config{Sink: sink, SamplingRate: 1})
+			op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "sink-panic"})
+			Add(op.Context(), "k", "v")
+
+			var escaped any
+			func() {
+				defer func() { escaped = recover() }()
+				if handlerPanic != nil {
+					// An in-flight handler panic: the sink panic replaces
+					// it (documented in End's comment) — the sink payload
+					// escapes, not the handler's.
+					defer op.End(nil)
+					panic(handlerPanic)
+				}
+				op.End(nil)
+			}()
+			if escaped == nil {
+				t.Fatal("sink panic did not escape End")
+			}
+			if p.value == nil {
+				// sink panics with panic(nil) → PanicNilError wrapper
+				if _, ok := escaped.(error); !ok {
+					t.Fatalf("escaped %T", escaped)
+				}
+			} else if escaped != p.value {
+				t.Fatalf("escaped %#v, want sink payload %#v (handler panic %#v replaced)", escaped, p.value, handlerPanic)
+			}
+			if len(sink.captured) != 1 {
+				t.Fatalf("sink captured %d records", len(sink.captured))
+			}
+			if handlerPanic != nil {
+				// The captured record reflects the HANDLER panic (the
+				// event was built before the sink panicked).
+				if !bytes.Contains(sink.captured[0], []byte(fmt.Sprintf(`"value":%q`, fmt.Sprint(handlerPanic)))) {
+					t.Fatalf("record does not reflect the handler panic: %s", sink.captured[0])
+				}
+			}
+			// pool integrity after the sink panic
+			ok := &matrixSink{}
+			rt2 := MustCompile(Config{Sink: ok, SamplingRate: 1})
+			op2 := Start(context.Background(), rt2, OperationStart{Domain: DomainJob, Name: "after"})
+			Add(op2.Context(), "clean", true)
+			op2.End(nil)
+			if len(ok.capture) != 1 || !bytes.Contains(ok.capture[0], []byte(`"clean":true`)) {
+				t.Fatalf("pool corrupted after sink panic: %v", ok.capture)
+			}
+		}
+		t.Run(p.name, func(t *testing.T) { run(t, nil) })
+		t.Run(p.name+"-replaces-handler-panic", func(t *testing.T) { run(t, "handler-panic") })
 	}
 }
 
-func TestFinishOperationAppliesStartFieldsToProvidedEvent(t *testing.T) {
-	mismatchedCtx, _ := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "wrong"})
-	_, event := NewContext(context.Background())
-	sink := NewTestSink()
-
-	ok := FinishOperation(Config{Sink: sink, SamplingRate: 1}, OperationFinish{
-		Ctx:   mismatchedCtx,
-		Event: event,
-		Start: OperationStart{
-			Domain: DomainCLI,
-			Name:   "right",
-			ID:     "op_1",
-		},
-	})
-	if !ok {
-		t.Fatal("expected finish to write")
-	}
-
-	events := sink.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
-	}
-	if events[0].Fields["op.domain"] != string(DomainCLI) {
-		t.Fatalf("op.domain = %v, want %s", events[0].Fields["op.domain"], DomainCLI)
-	}
-	if events[0].Fields["op.name"] != "right" {
-		t.Fatalf("op.name = %v, want right", events[0].Fields["op.name"])
-	}
-	if events[0].Fields["op.id"] != "op_1" {
-		t.Fatalf("op.id = %v, want op_1", events[0].Fields["op.id"])
-	}
+// captureThenPanicSink records the record, then panics with the
+// configured payload.
+type captureThenPanicSink struct {
+	payload  any
+	captured [][]byte
 }
 
-func TestFinishOperationGuardPaths(t *testing.T) {
-	ctx, event := BeginOperation(context.Background(), OperationStart{Domain: DomainJob, Name: "cleanup"})
-	if FinishOperation(Config{}, OperationFinish{Ctx: ctx, Event: event}) {
-		t.Fatal("expected false when sink is nil")
-	}
-	if FinishOperation(Config{Sink: NewTestSink()}, OperationFinish{Ctx: nil, Event: event}) {
-		t.Fatal("expected false when ctx is nil")
-	}
-	if FinishOperation(Config{Sink: NewTestSink()}, OperationFinish{Ctx: ctx, Event: nil}) {
-		t.Fatal("expected false when event is nil")
-	}
+func (s *captureThenPanicSink) Write(_ context.Context, rec *Record) {
+	s.captured = append(s.captured, bytes.Clone(rec.Encoded()))
+	panic(s.payload)
 }
 
-func TestFinishOperationUsesExistingStartFieldsWhenMissing(t *testing.T) {
-	ctx, event := BeginOperation(context.Background(), OperationStart{
-		Domain: DomainJob,
-		Name:   "reconcile",
-		ID:     "job_2",
-	})
-	sink := NewTestSink()
-
-	ok := FinishOperation(Config{Sink: sink, SamplingRate: 1}, OperationFinish{
-		Ctx:   ctx,
-		Event: event,
-		Start: OperationStart{},
-	})
-	if !ok {
-		t.Fatal("expected finish to write")
+// TestPanicAfterEndRan documents the defer-order requirement: when End
+// is deferred LAST it runs first — a panic in a later deferred
+// function is NOT captured (the event commits as a success) and the
+// panic propagates.
+func TestPanicAfterEndRan(t *testing.T) {
+	sink := &lifeSink{}
+	op := Start(context.Background(), MustCompile(rtConfigFor(sink)), OperationStart{Domain: DomainJob, Name: "late"})
+	var escaped any
+	func() {
+		defer func() { escaped = recover() }()
+		defer func() { panic("late-panic") }() // runs first
+		defer op.End(nil)                      // runs last: no panic in flight
+	}()
+	if escaped != "late-panic" {
+		t.Fatalf("escaped %v", escaped)
 	}
-	ev := sink.Events()[0]
-	if ev.Fields["op.domain"] != string(DomainJob) {
-		t.Fatalf("op.domain = %v", ev.Fields["op.domain"])
+	if len(sink.events) != 1 {
+		t.Fatalf("events = %d", len(sink.events))
 	}
-	if ev.Fields["op.name"] != "reconcile" {
-		t.Fatalf("op.name = %v", ev.Fields["op.name"])
+	if v := sink.events[0].level; v != LevelInfo {
+		t.Fatalf("level = %v, want INFO (End ran before the panic)", v)
 	}
-	if ev.Fields["op.id"] != "job_2" {
-		t.Fatalf("op.id = %v", ev.Fields["op.id"])
+	if got := sink.events[0].line; bytes.Contains(got, []byte(`"panic"`)) {
+		t.Fatalf("late panic leaked into the event: %s", got)
 	}
 }

@@ -2,22 +2,22 @@ package ginhappycontext
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/happycontext"
 	"github.com/happytoolin/happycontext/integration/common"
 )
 
-// Middleware returns a Gin middleware that captures one event per request.
-func Middleware(cfg hc.Config) gin.HandlerFunc {
-	cfg = common.NormalizeConfig(cfg)
-	if cfg.Sink == nil {
+// Middleware returns a Gin middleware that captures one event per
+// request. rt comes from hc.Compile/MustCompile; nil is a passthrough.
+func Middleware(rt *hc.Runtime) gin.HandlerFunc {
+	if rt == nil {
 		return func(c *gin.Context) {
 			c.Next()
 		}
 	}
 
 	return func(c *gin.Context) {
-		ctx, event := common.StartRequest(c.Request.Context(), c.Request.Method, c.Request.URL.Path)
-		c.Request = c.Request.WithContext(ctx)
+		op := common.StartRequest(c.Request.Context(), rt, c.Request.Method, c.Request.URL.Path)
+		c.Request = c.Request.WithContext(op.Context())
 
 		defer func() {
 			recovered := recover()
@@ -28,14 +28,7 @@ func Middleware(cfg hc.Config) gin.HandlerFunc {
 				}
 			}
 			status := common.ResolveStatus(c.Writer.Status(), err, recovered, c.Writer.Written(), 0)
-			common.FinalizeRequest(cfg, common.FinalizeInput{
-				Ctx:        ctx,
-				Event:      event,
-				Route:      c.FullPath(),
-				StatusCode: status,
-				Err:        err,
-				Recovered:  recovered,
-			})
+			common.FinalizeRequest(op, c.FullPath(), status, err, recovered)
 
 			if recovered != nil {
 				panic(recovered)
