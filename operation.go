@@ -25,6 +25,13 @@ type Operation struct {
 	ref   walRef // embedded-by-value: the ctx points here, no extra alloc
 	ev    *event
 
+	// record is the pooled Record view for this operation's single
+	// commit. The Record's lifetime (inside sink.Write) is a subset of
+	// the Operation's — only the winning End caller writes it, and only
+	// during commit — so embedding it replaces the per-commit heap
+	// allocation of &Record{...} with one that dies with the operation.
+	record Record
+
 	// endState is the one-shot claim word: 0 open, 1 claimed by the
 	// winning End caller, 2 published (emitted is valid). End is
 	// documented request-confined, but concurrent misuse must still be
@@ -218,12 +225,17 @@ func (op *Operation) commit(ev *event, rt *Runtime, start OperationStart, outcom
 	}
 
 	msg := resolveEventMessage(rt.message, start.Domain, ev.msg)
-	rec := &Record{
-		level:       level,
-		msg:         msg,
-		fields:      ev.fields,
-		completedAt: now,
-	}
+	// Pooled record: op.record is owned by this commit (see the field
+	// comment on Operation). Reset the lazy-encode cache — the record
+	// is embedded, so a stale atomic pointer from a previous generation
+	// would otherwise keep an old line alive and, if the operation were
+	// ever committed again, serve stale bytes.
+	rec := &op.record
+	rec.level = level
+	rec.msg = msg
+	rec.fields = ev.fields
+	rec.completedAt = now
+	rec.encoded.Store(nil)
 	rt.emit(op.ctx, rec)
 	return true
 }
