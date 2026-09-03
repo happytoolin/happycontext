@@ -238,15 +238,20 @@ func (op *Operation) commit(ev *event, rt *Runtime, start OperationStart, outcom
 
 	in := buildSampleInput(ev, start, outcome, code, duration, level, err, panicked, scan)
 
-	// Amendment 4: error and panic bypass is structural — decided before
-	// any custom sampler runs, so failures are never sampled away.
-	if !in.HasError {
-		if rt.sampler != nil {
-			if !rt.sampler(in) {
+	// The keep-everything fast path (rate == 1.0 and no sampler, level
+	// rates, or policies): every healthy event is kept, so the sampling
+	// gate below is skipped entirely. Error/panic events never entered
+	// the gate (amendment 4 bypass), so the flag only short-circuits
+	// the healthy branch.
+	if !rt.alwaysKeep {
+		if !in.HasError {
+			if rt.sampler != nil {
+				if !rt.sampler(in) {
+					return false
+				}
+			} else if !shouldWriteHealthy(rt, policy, in) {
 				return false
 			}
-		} else if !shouldWriteHealthy(rt, policy, in) {
-			return false
 		}
 	}
 
