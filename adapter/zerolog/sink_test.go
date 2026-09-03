@@ -2,8 +2,10 @@ package zerologadapter
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"errors"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,152 +13,179 @@ import (
 	"github.com/rs/zerolog"
 )
 
+func emit(t *testing.T, buf *bytes.Buffer, mutate func(ctx context.Context)) {
+	t.Helper()
+	logger := zerolog.New(buf)
+	rt := hc.MustCompile(hc.Config{Sink: New(&logger), SamplingRate: 1})
+	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
+	if mutate != nil {
+		mutate(op.Context())
+	}
+	op.End(nil)
+}
+
+func lastPayload(t *testing.T, buf *bytes.Buffer) map[string]any {
+	t.Helper()
+	line := bytes.TrimRight(buf.Bytes(), "\n")
+	lines := strings.Split(string(line), "\n")
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &payload); err != nil {
+		t.Fatalf("invalid JSON %q: %v", line, err)
+	}
+	return payload
+}
+
 func TestSinkWriteMapsLevelAndFields(t *testing.T) {
 	var buf bytes.Buffer
-	logger := zerolog.New(&buf)
-	sink := New(&logger)
-
-	sink.Write("WARN", "", map[string]any{
-		"http.status": 429,
-		"retry":       true,
+	emit(t, &buf, func(ctx context.Context) {
+		hc.Add(ctx, "http.status", 500, "user_id", "u_1")
+		hc.SetLevel(ctx, hc.LevelError)
 	})
 
-	var payload map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
-		t.Fatalf("failed to decode zerolog payload: %v", err)
+	payload := lastPayload(t, &buf)
+	if payload["level"] != "error" {
+		t.Fatalf("level = %v", payload["level"])
 	}
-	if payload["level"] != "warn" {
-		t.Fatalf("expected warn level, got %v", payload["level"])
+	if payload["message"] != hc.DefaultOperationMessage {
+		t.Fatalf("message = %q", payload["message"])
 	}
-	if payload["message"] != hc.DefaultMessage {
-		t.Fatalf("expected default message, got %v", payload["message"])
+	if payload["user_id"] != "u_1" {
+		t.Fatalf("user_id = %v", payload["user_id"])
 	}
-	if payload["http.status"] != float64(429) {
-		t.Fatalf("expected status field, got %v", payload["http.status"])
+	if payload["http.status"] != float64(500) {
+		t.Fatalf("http.status = %v", payload["http.status"])
 	}
-	if payload["retry"] != true {
-		t.Fatalf("expected retry field, got %v", payload["retry"])
+	if _, err := time.Parse(time.RFC3339, payload["time"].(string)); err != nil {
+		t.Fatalf("time not RFC3339: %v", payload["time"])
 	}
 }
 
-func TestSinkWriteAllSupportedFieldTypes(t *testing.T) {
-	var buf bytes.Buffer
-	logger := zerolog.New(&buf)
-	sink := New(&logger)
-	now := time.Now().UTC().Truncate(time.Second)
-
-	sink.Write(hc.LevelInfo, "typed", map[string]any{
-		"s":   "x",
-		"i":   int(1),
-		"i8":  int8(2),
-		"i16": int16(3),
-		"i32": int32(4),
-		"i64": int64(5),
-		"u":   uint(6),
-		"u8":  uint8(7),
-		"u16": uint16(8),
-		"u32": uint32(9),
-		"u64": uint64(10),
-		"f32": float32(1.5),
-		"f64": float64(2.5),
-		"b":   true,
-		"t":   now,
-		"d":   3 * time.Second,
-		"e":   errors.New("boom"),
-		"x":   map[string]any{"k": "v"},
-	})
-
-	var payload map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
-		t.Fatalf("failed to decode zerolog payload: %v", err)
-	}
-
-	for _, key := range []string{"s", "i", "i8", "i16", "i32", "i64", "u", "u8", "u16", "u32", "u64", "f32", "f64", "b", "t", "d", "e", "x"} {
-		if _, ok := payload[key]; !ok {
-			t.Fatalf("expected key %q in payload", key)
-		}
-	}
-	if payload["e"] != "boom" {
-		t.Fatalf("expected error string value, got %v", payload["e"])
-	}
-}
-
-func TestSinkWriteMapsAllLevelsAndMessageBehavior(t *testing.T) {
-	tests := []struct {
-		name        string
-		level       hc.Level
-		message     string
-		wantLevel   string
-		wantMessage string
+func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
+	cases := map[string]struct {
+		mutate func(ctx context.Context)
+		err    error
+		want   string
 	}{
-		{name: "debug", level: hc.LevelDebug, message: "m", wantLevel: "debug", wantMessage: "m"},
-		{name: "warn", level: hc.LevelWarn, message: "m", wantLevel: "warn", wantMessage: "m"},
-		{name: "error", level: hc.LevelError, message: "m", wantLevel: "error", wantMessage: "m"},
-		{name: "default", level: "UNKNOWN", message: "", wantLevel: "info", wantMessage: hc.DefaultMessage},
+		"debug": {mutate: func(ctx context.Context) { hc.SetLevel(ctx, hc.LevelDebug) }, want: "info"}, // floor never lowers
+		"warn":  {mutate: func(ctx context.Context) { hc.SetLevel(ctx, hc.LevelWarn) }, want: "warn"},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
-			logger := zerolog.New(&buf)
-			sink := New(&logger)
-			sink.Write(tt.level, tt.message, map[string]any{"k": "v"})
-
-			var payload map[string]any
-			if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
-				t.Fatalf("failed to decode zerolog payload: %v", err)
-			}
-			if payload["level"] != tt.wantLevel {
-				t.Fatalf("level = %v, want %v", payload["level"], tt.wantLevel)
-			}
-			if payload["message"] != tt.wantMessage {
-				t.Fatalf("message = %v, want %v", payload["message"], tt.wantMessage)
+			emit(t, &buf, c.mutate)
+			if payload := lastPayload(t, &buf); payload["level"] != c.want {
+				t.Fatalf("level = %v, want %v", payload["level"], c.want)
 			}
 		})
+	}
+	t.Run("error", func(t *testing.T) {
+		var buf bytes.Buffer
+		var err error = errBoom{}
+		logger := zerolog.New(&buf)
+		rt := hc.MustCompile(hc.Config{Sink: New(&logger), SamplingRate: 1})
+		op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
+		op.End(&err)
+		if payload := lastPayload(t, &buf); payload["level"] != "error" {
+			t.Fatalf("level = %v", payload["level"])
+		}
+	})
+}
+
+func TestSinkTypedFieldsAndDedupe(t *testing.T) {
+	var buf bytes.Buffer
+	now := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	emit(t, &buf, func(ctx context.Context) {
+		hc.Add(ctx, "s", "v", "i", 7, "b", true, "t", now, "d", 1500*time.Millisecond)
+		hc.Add(ctx, "k", "first", "k", "second")
+		hc.AddRawJSON(ctx, "meta", []byte(`{"raw":true}`))
+	})
+
+	payload := lastPayload(t, &buf)
+	if payload["i"] != float64(7) || payload["b"] != true || payload["s"] != "v" {
+		t.Fatalf("scalars = %v %v %v", payload["i"], payload["b"], payload["s"])
+	}
+	if payload["t"] != "2026-09-01T10:00:00Z" {
+		t.Fatalf("t = %v", payload["t"])
+	}
+	if payload["d"] != 1500.0 { // zerolog Dur default: float ms
+		t.Fatalf("d = %v", payload["d"])
+	}
+	if payload["k"] != "second" || strings.Count(string(buf.Bytes()), `"k":`) != 1 {
+		t.Fatalf("dedupe broken: k = %v", payload["k"])
+	}
+	if raw, ok := payload["meta"].(map[string]any); !ok || raw["raw"] != true {
+		t.Fatalf("raw json = %v", payload["meta"])
+	}
+}
+
+// TestSinkFloat32WireFidelity pins the 32-bit rendering (0.1, not the
+// widened double digits).
+func TestSinkFloat32WireFidelity(t *testing.T) {
+	var buf bytes.Buffer
+	emit(t, &buf, func(ctx context.Context) {
+		hc.Add(ctx, "f", float32(0.1))
+	})
+	payload := lastPayload(t, &buf)
+	if payload["f"] != 0.1 {
+		t.Fatalf("float32 = %v, want 0.1", payload["f"])
+	}
+	if !strings.Contains(buf.String(), `"f":0.1`) {
+		t.Fatalf("wire shows widened digits: %s", buf.String())
 	}
 }
 
 func TestSinkWriteNilSafety(t *testing.T) {
 	var nilSink *Sink
-	nilSink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
+	nilSink.Write(context.Background(), nil)
 
-	sink := New(nil)
-	sink.Write(hc.LevelInfo, "x", map[string]any{"k": 1})
+	New(nil).Write(context.Background(), nil)
 }
 
-type countingSampler struct {
-	levels []zerolog.Level
-}
-
-func (s *countingSampler) Sample(level zerolog.Level) bool {
-	s.levels = append(s.levels, level)
-	return true
-}
-
-func TestSinkCreatesOneSampledEvent(t *testing.T) {
+func TestSinkConcurrentWrites(t *testing.T) {
+	var mu sync.Mutex
 	var buf bytes.Buffer
-	sampler := &countingSampler{}
-	logger := zerolog.New(&buf).Sample(sampler)
-	sink := New(&logger)
+	logger := zerolog.New(lockedWriter{mu: &mu, buf: &buf})
+	rt := hc.MustCompile(hc.Config{Sink: New(&logger), SamplingRate: 1})
 
-	sink.Write(hc.LevelWarn, "warn", map[string]any{"k": "v"})
-
-	if len(sampler.levels) != 1 || sampler.levels[0] != zerolog.WarnLevel {
-		t.Fatalf("sampled levels = %v, want [warn]", sampler.levels)
+	var wg sync.WaitGroup
+	for w := 0; w < 8; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := 0; i < 100; i++ {
+				op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "w"})
+				hc.Add(op.Context(), "w", w, "i", i)
+				op.End(nil)
+			}
+		}(w)
 	}
-	if buf.Len() == 0 {
-		t.Fatal("expected warn event")
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if len(lines) != 800 {
+		t.Fatalf("lines = %d, want 800", len(lines))
+	}
+	for _, ln := range lines {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(ln), &payload); err != nil {
+			t.Fatalf("corrupt line: %q", ln)
+		}
 	}
 }
 
-func TestSinkSkipsDisabledEvent(t *testing.T) {
-	var buf bytes.Buffer
-	logger := zerolog.New(&buf).Level(zerolog.InfoLevel)
-	sink := New(&logger)
-
-	sink.Write(hc.LevelDebug, "debug", map[string]any{"k": "v"})
-
-	if buf.Len() != 0 {
-		t.Fatalf("disabled debug produced output: %q", buf.String())
-	}
+type lockedWriter struct {
+	mu  *sync.Mutex
+	buf *bytes.Buffer
 }
+
+func (w lockedWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.Write(p)
+}
+
+type errBoom struct{}
+
+func (errBoom) Error() string { return "boom" }

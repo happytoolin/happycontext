@@ -1,11 +1,10 @@
 package echohappycontext
 
 import (
+	"context"
 	"errors"
-	"maps"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 
 	"github.com/happytoolin/happycontext"
@@ -14,11 +13,11 @@ import (
 
 func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 	e := echo.New()
-	sink := &memorySink{}
-	e.Use(Middleware(hc.Config{
+	sink := newMemorySink()
+	e.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}))
+	})))
 	e.GET("/orders/:id", func(c echo.Context) error {
 		hc.Add(c.Request().Context(), "user_id", "u_1")
 		return c.NoContent(http.StatusAccepted)
@@ -45,7 +44,7 @@ func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 
 func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
 	e := echo.New()
-	e.Use(Middleware(hc.Config{}))
+	e.Use(Middleware(hc.MustCompile(hc.Config{})))
 	e.GET("/ok", func(c echo.Context) error {
 		return c.NoContent(http.StatusAccepted)
 	})
@@ -59,11 +58,11 @@ func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
 
 func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 	e := echo.New()
-	sink := &memorySink{}
-	e.Use(Middleware(hc.Config{
+	sink := newMemorySink()
+	e.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 0,
-	}))
+	})))
 	e.GET("/drop", func(c echo.Context) error {
 		return c.NoContent(http.StatusOK)
 	})
@@ -94,11 +93,11 @@ func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 
 func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 	e := echo.New()
-	sink := &memorySink{}
-	e.Use(Middleware(hc.Config{
+	sink := newMemorySink()
+	e.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}))
+	})))
 	e.GET("/panic/:id", func(c echo.Context) error {
 		panic("bad")
 	})
@@ -132,11 +131,11 @@ func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 
 func TestMiddlewareEchoHTTPErrorKeepsHTTPStatus(t *testing.T) {
 	e := echo.New()
-	sink := &memorySink{}
-	e.Use(Middleware(hc.Config{
+	sink := newMemorySink()
+	e.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}))
+	})))
 	e.GET("/forbidden", func(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusForbidden, "nope")
 	})
@@ -156,12 +155,12 @@ func TestMiddlewareEchoHTTPErrorKeepsHTTPStatus(t *testing.T) {
 
 func TestMiddlewareCustomMessagePropagates(t *testing.T) {
 	e := echo.New()
-	sink := &memorySink{}
-	e.Use(Middleware(hc.Config{
+	sink := newMemorySink()
+	e.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 		Message:      "done",
-	}))
+	})))
 	e.GET("/ok", func(c echo.Context) error {
 		return c.NoContent(http.StatusOK)
 	})
@@ -182,11 +181,11 @@ func TestMiddlewareLogsStatusFromCustomEchoErrorHandler(t *testing.T) {
 		_ = c.String(http.StatusTeapot, "handled")
 	}
 
-	sink := &memorySink{}
-	e.Use(Middleware(hc.Config{
+	sink := newMemorySink()
+	e.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}))
+	})))
 	e.GET("/custom-err", func(c echo.Context) error {
 		return errors.New("boom")
 	})
@@ -209,33 +208,41 @@ func TestMiddlewareLogsStatusFromCustomEchoErrorHandler(t *testing.T) {
 	}
 }
 
-type memoryEvent struct {
+// capturedEvent mirrors the v0 test-facing shape (map fields, int
+// numerics) over the v2 TestSink capture, keeping the assertions below
+// unchanged from the v0 suite.
+type capturedEvent struct {
 	Level   hc.Level
 	Message string
 	Fields  map[string]any
 }
 
 type memorySink struct {
-	mu     sync.Mutex
-	events []memoryEvent
+	ts *hc.TestSink
 }
 
-func (s *memorySink) Write(level hc.Level, message string, fields map[string]any) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cp := make(map[string]any, len(fields))
-	maps.Copy(cp, fields)
-	s.events = append(s.events, memoryEvent{
-		Level:   level,
-		Message: message,
-		Fields:  cp,
-	})
+func newMemorySink() *memorySink {
+	return &memorySink{ts: hc.NewTestSink()}
 }
 
-func (s *memorySink) Events() []memoryEvent {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cp := make([]memoryEvent, len(s.events))
-	copy(cp, s.events)
-	return cp
+func (s *memorySink) Write(ctx context.Context, rec *hc.Record) {
+	s.ts.Write(ctx, rec)
+}
+
+func (s *memorySink) Events() []capturedEvent {
+	captured := s.ts.Events()
+	out := make([]capturedEvent, 0, len(captured))
+	for _, ev := range captured {
+		fields := make(map[string]any, len(ev.Fields())+4)
+		for _, f := range ev.Fields() {
+			v, _ := ev.Lookup(f.Key())
+			if i, ok := v.(int64); ok {
+				fields[f.Key()] = int(i)
+			} else {
+				fields[f.Key()] = v
+			}
+		}
+		out = append(out, capturedEvent{Level: ev.Level(), Message: ev.Message(), Fields: fields})
+	}
+	return out
 }

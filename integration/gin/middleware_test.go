@@ -1,11 +1,10 @@
 package ginhappycontext
 
 import (
+	"context"
 	"errors"
-	"maps"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -15,12 +14,12 @@ import (
 func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	sink := &memorySink{}
+	sink := newMemorySink()
 	r := gin.New()
-	r.Use(Middleware(hc.Config{
+	r.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}))
+	})))
 	r.GET("/orders/:id", func(c *gin.Context) {
 		hc.Add(c.Request.Context(), "user_id", "u_1")
 		c.Status(http.StatusCreated)
@@ -48,7 +47,7 @@ func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(Middleware(hc.Config{}))
+	r.Use(Middleware(hc.MustCompile(hc.Config{})))
 	r.GET("/ok", func(c *gin.Context) {
 		c.Status(http.StatusAccepted)
 	})
@@ -62,12 +61,12 @@ func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
 
 func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	sink := &memorySink{}
+	sink := newMemorySink()
 	r := gin.New()
-	r.Use(Middleware(hc.Config{
+	r.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 0,
-	}))
+	})))
 	r.GET("/drop", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -99,12 +98,12 @@ func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 
 func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	sink := &memorySink{}
+	sink := newMemorySink()
 	r := gin.New()
-	r.Use(Middleware(hc.Config{
+	r.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}))
+	})))
 	r.GET("/panic/:id", func(c *gin.Context) {
 		panic("bad")
 	})
@@ -138,12 +137,12 @@ func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 
 func TestMiddlewareLogsNoRouteWithoutTemplate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	sink := &memorySink{}
+	sink := newMemorySink()
 	r := gin.New()
-	r.Use(Middleware(hc.Config{
+	r.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}))
+	})))
 	r.NoRoute(func(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 	})
@@ -163,12 +162,12 @@ func TestMiddlewareLogsNoRouteWithoutTemplate(t *testing.T) {
 
 func TestMiddlewareGinErrorKeepsCommittedStatus(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	sink := &memorySink{}
+	sink := newMemorySink()
 	r := gin.New()
-	r.Use(Middleware(hc.Config{
+	r.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}))
+	})))
 	r.GET("/too-many", func(c *gin.Context) {
 		_ = c.Error(errors.New("boom"))
 		c.AbortWithStatus(http.StatusTooManyRequests)
@@ -189,12 +188,12 @@ func TestMiddlewareGinErrorKeepsCommittedStatus(t *testing.T) {
 
 func TestMiddlewareGinErrorUsesUnderlyingErrorMetadata(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	sink := &memorySink{}
+	sink := newMemorySink()
 	r := gin.New()
-	r.Use(Middleware(hc.Config{
+	r.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}))
+	})))
 	r.GET("/err", func(c *gin.Context) {
 		_ = c.Error(errors.New("boom"))
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -217,33 +216,41 @@ func TestMiddlewareGinErrorUsesUnderlyingErrorMetadata(t *testing.T) {
 	}
 }
 
-type memoryEvent struct {
+// capturedEvent mirrors the v0 test-facing shape (map fields, int
+// numerics) over the v2 TestSink capture, keeping the assertions below
+// unchanged from the v0 suite.
+type capturedEvent struct {
 	Level   hc.Level
 	Message string
 	Fields  map[string]any
 }
 
 type memorySink struct {
-	mu     sync.Mutex
-	events []memoryEvent
+	ts *hc.TestSink
 }
 
-func (s *memorySink) Write(level hc.Level, message string, fields map[string]any) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cp := make(map[string]any, len(fields))
-	maps.Copy(cp, fields)
-	s.events = append(s.events, memoryEvent{
-		Level:   level,
-		Message: message,
-		Fields:  cp,
-	})
+func newMemorySink() *memorySink {
+	return &memorySink{ts: hc.NewTestSink()}
 }
 
-func (s *memorySink) Events() []memoryEvent {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cp := make([]memoryEvent, len(s.events))
-	copy(cp, s.events)
-	return cp
+func (s *memorySink) Write(ctx context.Context, rec *hc.Record) {
+	s.ts.Write(ctx, rec)
+}
+
+func (s *memorySink) Events() []capturedEvent {
+	captured := s.ts.Events()
+	out := make([]capturedEvent, 0, len(captured))
+	for _, ev := range captured {
+		fields := make(map[string]any, len(ev.Fields())+4)
+		for _, f := range ev.Fields() {
+			v, _ := ev.Lookup(f.Key())
+			if i, ok := v.(int64); ok {
+				fields[f.Key()] = int(i)
+			} else {
+				fields[f.Key()] = v
+			}
+		}
+		out = append(out, capturedEvent{Level: ev.Level(), Message: ev.Message(), Fields: fields})
+	}
+	return out
 }

@@ -4,15 +4,15 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/happycontext"
 	"github.com/happytoolin/happycontext/integration/common"
 	"github.com/labstack/echo/v4"
 )
 
-// Middleware returns an Echo middleware that captures one event per request.
-func Middleware(cfg hc.Config) echo.MiddlewareFunc {
-	cfg = common.NormalizeConfig(cfg)
-	if cfg.Sink == nil {
+// Middleware returns an Echo middleware that captures one event per
+// request. rt comes from hc.Compile/MustCompile; nil is a passthrough.
+func Middleware(rt *hc.Runtime) echo.MiddlewareFunc {
+	if rt == nil {
 		return func(next echo.HandlerFunc) echo.HandlerFunc {
 			return func(c echo.Context) error {
 				return next(c)
@@ -22,8 +22,8 @@ func Middleware(cfg hc.Config) echo.MiddlewareFunc {
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) (err error) {
-			ctx, event := common.StartRequest(c.Request().Context(), c.Request().Method, c.Request().URL.Path)
-			c.SetRequest(c.Request().WithContext(ctx))
+			op := common.StartRequest(c.Request().Context(), rt, c.Request().Method, c.Request().URL.Path)
+			c.SetRequest(c.Request().WithContext(op.Context()))
 			var finalizeErr error
 
 			defer func() {
@@ -36,14 +36,7 @@ func Middleware(cfg hc.Config) echo.MiddlewareFunc {
 					c.Response().Committed,
 					statusFromEchoError(finalizeErr),
 				)
-				common.FinalizeRequest(cfg, common.FinalizeInput{
-					Ctx:        ctx,
-					Event:      event,
-					Route:      route,
-					StatusCode: status,
-					Err:        finalizeErr,
-					Recovered:  recovered,
-				})
+				common.FinalizeRequest(op, route, status, finalizeErr, recovered)
 
 				if recovered != nil {
 					panic(recovered)

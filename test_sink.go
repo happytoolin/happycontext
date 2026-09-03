@@ -1,19 +1,40 @@
 package hc
 
 import (
-	"reflect"
+	"bytes"
+	"context"
 	"sync"
-	"time"
 )
 
-// CapturedEvent is one event captured by TestSink.
+// CapturedEvent is one event captured by TestSink — a retained, copied
+// snapshot (the Record view is only valid during Write).
 type CapturedEvent struct {
-	Level   Level
-	Message string
-	Fields  map[string]any
+	level   Level
+	message string
+	fields  []Field
 }
 
-// TestSink captures events in memory for tests.
+// Level returns the captured event's severity.
+func (c CapturedEvent) Level() Level { return c.level }
+
+// Message returns the captured event's message.
+func (c CapturedEvent) Message() string { return c.message }
+
+// Fields returns the captured fields in insertion order.
+func (c CapturedEvent) Fields() []Field { return c.fields }
+
+// Lookup returns the last value written under key.
+func (c CapturedEvent) Lookup(key string) (any, bool) {
+	for i := len(c.fields) - 1; i >= 0; i-- {
+		if f := c.fields[i]; f.key == key {
+			return valueOf(f), true
+		}
+	}
+	return nil, false
+}
+
+// TestSink captures events in memory for tests, copying retained values
+// out of the transient Record.
 type TestSink struct {
 	mu     sync.Mutex
 	events []CapturedEvent
@@ -24,228 +45,56 @@ func NewTestSink() *TestSink {
 	return &TestSink{}
 }
 
-// Write appends one captured event.
-func (t *TestSink) Write(level Level, message string, fields map[string]any) {
+// Write captures one event, deep-copying the field values that are
+// mutable (KindAny/KindRaw payloads); typed scalars are immutable by
+// construction.
+func (t *TestSink) Write(_ context.Context, rec *Record) {
+	if t == nil || rec == nil {
+		return
+	}
+	captured := CapturedEvent{
+		level:   rec.Level(),
+		message: rec.Message(),
+		fields:  copyFields(rec.Fields()),
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	cp := deepCopyFields(fields)
-	t.events = append(t.events, CapturedEvent{Level: level, Message: message, Fields: cp})
+	t.events = append(t.events, captured)
 }
 
-// Events returns a copy of captured events.
+// Events returns the captured events.
 func (t *TestSink) Events() []CapturedEvent {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-
-	cp := make([]CapturedEvent, len(t.events))
-	for i := range t.events {
-		ev := t.events[i]
-		cp[i] = CapturedEvent{
-			Level:   ev.Level,
-			Message: ev.Message,
-			Fields:  deepCopyFields(ev.Fields),
-		}
-	}
-	return cp
+	out := make([]CapturedEvent, len(t.events))
+	copy(out, t.events)
+	return out
 }
 
-func deepCopyFields(fields map[string]any) map[string]any {
-	tracker := &deepCopyTracker{}
-	return deepCopyMapStringAny(fields, tracker)
+// Reset drops all captured events.
+func (t *TestSink) Reset() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.events = nil
 }
 
-type deepCopyVisit struct {
-	typ reflect.Type
-	ptr uintptr
-}
-
-type deepCopyTracker struct {
-	fast []deepCopyFastEntry
-	seen map[deepCopyVisit]reflect.Value
-}
-
-type deepCopyFastKind uint8
-
-const (
-	deepCopyFastMap deepCopyFastKind = iota + 1
-	deepCopyFastSlice
-)
-
-type deepCopyFastEntry struct {
-	ptr  uintptr
-	kind deepCopyFastKind
-	size int
-	val  any
-}
-
-func (t *deepCopyTracker) lookupFast(ptr uintptr, kind deepCopyFastKind, size int) (any, bool) {
-	if ptr == 0 {
-		return nil, false
-	}
-	for i := range t.fast {
-		if t.fast[i].ptr == ptr && t.fast[i].kind == kind && t.fast[i].size == size {
-			return t.fast[i].val, true
-		}
-	}
-	return nil, false
-}
-
-func (t *deepCopyTracker) rememberFast(ptr uintptr, kind deepCopyFastKind, size int, copied any) {
-	if ptr == 0 {
-		return
-	}
-	t.fast = append(t.fast, deepCopyFastEntry{ptr: ptr, kind: kind, size: size, val: copied})
-}
-
-func (t *deepCopyTracker) lookupGeneric(typ reflect.Type, ptr uintptr) (reflect.Value, bool) {
-	if ptr == 0 || t.seen == nil {
-		return reflect.Value{}, false
-	}
-	v, ok := t.seen[deepCopyVisit{typ: typ, ptr: ptr}]
-	return v, ok
-}
-
-func (t *deepCopyTracker) rememberGeneric(typ reflect.Type, ptr uintptr, copied reflect.Value) {
-	if ptr == 0 {
-		return
-	}
-	if t.seen == nil {
-		t.seen = make(map[deepCopyVisit]reflect.Value)
-	}
-	t.seen[deepCopyVisit{typ: typ, ptr: ptr}] = copied
-}
-
-func deepCopyAny(value any, tracker *deepCopyTracker) any {
-	if value == nil {
+func copyFields(fields []Field) []Field {
+	if fields == nil {
 		return nil
 	}
-
-	switch v := value.(type) {
-	case map[string]any:
-		return deepCopyMapStringAny(v, tracker)
-	case []any:
-		return deepCopySliceAny(v, tracker)
-	case string, bool,
-		int, int8, int16, int32, int64,
-		uint, uint8, uint16, uint32, uint64, uintptr,
-		float32, float64,
-		complex64, complex128,
-		time.Time, time.Duration:
-		return v
-	default:
-		return deepCopyValue(reflect.ValueOf(value), tracker).Interface()
+	out := make([]Field, len(fields))
+	for i, f := range fields {
+		switch f.kind {
+		case KindRaw:
+			raw, _ := f.val.([]byte)
+			out[i] = Field{key: f.key, kind: f.kind, val: bytes.Clone(raw)}
+		case KindAny, KindErr:
+			out[i] = Field{key: f.key, kind: f.kind, val: deepCopyValue(f.val)}
+		default:
+			out[i] = f
+		}
 	}
+	return out
 }
 
-func deepCopyMapStringAny(src map[string]any, tracker *deepCopyTracker) map[string]any {
-	if src == nil {
-		return nil
-	}
-
-	ptr := reflect.ValueOf(src).Pointer()
-	if copied, ok := tracker.lookupFast(ptr, deepCopyFastMap, 0); ok {
-		if m, ok := copied.(map[string]any); ok {
-			return m
-		}
-	}
-
-	dst := make(map[string]any, len(src))
-	tracker.rememberFast(ptr, deepCopyFastMap, 0, dst)
-	for k, v := range src {
-		dst[k] = deepCopyAny(v, tracker)
-	}
-	return dst
-}
-
-func deepCopySliceAny(src []any, tracker *deepCopyTracker) []any {
-	if src == nil {
-		return nil
-	}
-
-	ptr := reflect.ValueOf(src).Pointer()
-	if copied, ok := tracker.lookupFast(ptr, deepCopyFastSlice, len(src)); ok {
-		if s, ok := copied.([]any); ok {
-			return s
-		}
-	}
-
-	dst := make([]any, len(src))
-	tracker.rememberFast(ptr, deepCopyFastSlice, len(src), dst)
-	for i := range src {
-		dst[i] = deepCopyAny(src[i], tracker)
-	}
-	return dst
-}
-
-func deepCopyValue(value reflect.Value, tracker *deepCopyTracker) reflect.Value {
-	if !value.IsValid() {
-		return value
-	}
-
-	switch value.Kind() {
-	case reflect.Pointer:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		if copied, ok := tracker.lookupGeneric(value.Type(), value.Pointer()); ok {
-			return copied
-		}
-		copied := reflect.New(value.Type().Elem())
-		tracker.rememberGeneric(value.Type(), value.Pointer(), copied)
-		copied.Elem().Set(deepCopyValue(value.Elem(), tracker))
-		return copied
-	case reflect.Map:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		if copied, ok := tracker.lookupGeneric(value.Type(), value.Pointer()); ok {
-			return copied
-		}
-		copied := reflect.MakeMapWithSize(value.Type(), value.Len())
-		tracker.rememberGeneric(value.Type(), value.Pointer(), copied)
-		iter := value.MapRange()
-		for iter.Next() {
-			copiedKey := deepCopyValue(iter.Key(), tracker)
-			copiedValue := deepCopyValue(iter.Value(), tracker)
-			copied.SetMapIndex(copiedKey, copiedValue)
-		}
-		return copied
-	case reflect.Slice:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		if copied, ok := tracker.lookupGeneric(value.Type(), value.Pointer()); ok {
-			return copied
-		}
-		copied := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
-		tracker.rememberGeneric(value.Type(), value.Pointer(), copied)
-		for i := range value.Len() {
-			copied.Index(i).Set(deepCopyValue(value.Index(i), tracker))
-		}
-		return copied
-	case reflect.Array:
-		copied := reflect.New(value.Type()).Elem()
-		for i := range value.Len() {
-			copied.Index(i).Set(deepCopyValue(value.Index(i), tracker))
-		}
-		return copied
-	case reflect.Struct:
-		copied := reflect.New(value.Type()).Elem()
-		copied.Set(value)
-		for i := range value.NumField() {
-			dst := copied.Field(i)
-			if !dst.CanSet() {
-				continue
-			}
-			dst.Set(deepCopyValue(value.Field(i), tracker))
-		}
-		return copied
-	case reflect.Interface:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		return deepCopyValue(value.Elem(), tracker)
-	default:
-		return value
-	}
-}
+var _ Sink = (*TestSink)(nil)

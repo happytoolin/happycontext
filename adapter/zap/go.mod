@@ -9,4 +9,4 @@ require (
 
 require go.uber.org/multierr v1.10.0 // indirect
 
-replace github.com/happytoolin/happycontext => ../../
+replace github.com/happytoolin/happycontext => ../..

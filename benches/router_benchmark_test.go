@@ -29,6 +29,16 @@ func (noopSlogHandler) Handle(context.Context, slog.Record) error { return nil }
 func (noopSlogHandler) WithAttrs([]slog.Attr) slog.Handler        { return noopSlogHandler{} }
 func (noopSlogHandler) WithGroup(string) slog.Handler             { return noopSlogHandler{} }
 
+// benchResponseWriter is a reusable, allocation-free ResponseWriter so
+// the middleware gates measure the middleware, not the test recorder.
+type benchResponseWriter struct{ status int }
+
+func (w *benchResponseWriter) Header() http.Header         { return benchHeader }
+func (w *benchResponseWriter) Write(p []byte) (int, error) { return len(p), nil }
+func (w *benchResponseWriter) WriteHeader(code int)        { w.status = code }
+
+var benchHeader = http.Header{}
+
 func BenchmarkRouterStd(b *testing.B) {
 	req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
 	handlerHappycontextAPI := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -37,12 +47,13 @@ func BenchmarkRouterStd(b *testing.B) {
 	})
 
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
-		mw := stdhc.Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1})
+		mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: discardSink{}, SamplingRate: 1}))
 		wrapped := mw(handlerHappycontextAPI)
+		bww := &benchResponseWriter{}
 		b.ReportAllocs()
 		for b.Loop() {
-			rr := httptest.NewRecorder()
-			wrapped.ServeHTTP(rr, req)
+			bww.status = 0
+			wrapped.ServeHTTP(bww, req)
 		}
 	})
 
@@ -59,9 +70,10 @@ func BenchmarkRouterStd(b *testing.B) {
 			w.WriteHeader(http.StatusNoContent)
 		})
 		b.ReportAllocs()
+		bww := &benchResponseWriter{}
 		for b.Loop() {
-			rr := httptest.NewRecorder()
-			h.ServeHTTP(rr, req)
+			bww.status = 0
+			h.ServeHTTP(bww, req)
 		}
 	})
 
@@ -78,9 +90,10 @@ func BenchmarkRouterStd(b *testing.B) {
 			w.WriteHeader(http.StatusNoContent)
 		})
 		b.ReportAllocs()
+		bww := &benchResponseWriter{}
 		for b.Loop() {
-			rr := httptest.NewRecorder()
-			h.ServeHTTP(rr, req)
+			bww.status = 0
+			h.ServeHTTP(bww, req)
 		}
 	})
 
@@ -97,9 +110,10 @@ func BenchmarkRouterStd(b *testing.B) {
 			w.WriteHeader(http.StatusNoContent)
 		})
 		b.ReportAllocs()
+		bww := &benchResponseWriter{}
 		for b.Loop() {
-			rr := httptest.NewRecorder()
-			h.ServeHTTP(rr, req)
+			bww.status = 0
+			h.ServeHTTP(bww, req)
 		}
 	})
 
@@ -115,9 +129,10 @@ func BenchmarkRouterStd(b *testing.B) {
 			w.WriteHeader(http.StatusNoContent)
 		})
 		b.ReportAllocs()
+		bww := &benchResponseWriter{}
 		for b.Loop() {
-			rr := httptest.NewRecorder()
-			h.ServeHTTP(rr, req)
+			bww.status = 0
+			h.ServeHTTP(bww, req)
 		}
 	})
 }
@@ -127,7 +142,7 @@ func BenchmarkRouterGin(b *testing.B) {
 
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
 		r := gin.New()
-		r.Use(ginhc.Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1}))
+		r.Use(ginhc.Middleware(hc.MustCompile(hc.Config{Sink: discardSink{}, SamplingRate: 1})))
 		r.GET("/orders/:id", func(c *gin.Context) {
 			hc.Add(c.Request.Context(), "user_id", "u_1")
 			c.Status(http.StatusNoContent)
@@ -227,7 +242,7 @@ func BenchmarkRouterGin(b *testing.B) {
 func BenchmarkRouterEcho(b *testing.B) {
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
 		e := echo.New()
-		e.Use(echohc.Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1}))
+		e.Use(echohc.Middleware(hc.MustCompile(hc.Config{Sink: discardSink{}, SamplingRate: 1})))
 		e.GET("/orders/:id", func(c echo.Context) error {
 			hc.Add(c.Request().Context(), "user_id", "u_1")
 			return c.NoContent(http.StatusNoContent)
@@ -327,7 +342,7 @@ func BenchmarkRouterEcho(b *testing.B) {
 func BenchmarkRouterFiber(b *testing.B) {
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
 		app := fiber.New()
-		app.Use(fiberhc.Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1}))
+		app.Use(fiberhc.Middleware(hc.MustCompile(hc.Config{Sink: discardSink{}, SamplingRate: 1})))
 		app.Get("/orders/:id", func(c *fiber.Ctx) error {
 			hc.Add(c.UserContext(), "user_id", "u_1")
 			return c.SendStatus(http.StatusNoContent)
@@ -422,7 +437,7 @@ func BenchmarkRouterFiber(b *testing.B) {
 func BenchmarkRouterFiberV3(b *testing.B) {
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
 		app := fiberv3.New()
-		app.Use(fiberv3hc.Middleware(hc.Config{Sink: discardSink{}, SamplingRate: 1}))
+		app.Use(fiberv3hc.Middleware(hc.MustCompile(hc.Config{Sink: discardSink{}, SamplingRate: 1})))
 		app.Get("/orders/:id", func(c fiberv3.Ctx) error {
 			hc.Add(c.Context(), "user_id", "u_1")
 			return c.SendStatus(http.StatusNoContent)

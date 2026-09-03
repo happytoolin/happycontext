@@ -3,26 +3,25 @@ package stdhappycontext
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"io"
-	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/happytoolin/happycontext"
 )
 
 func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	sink := newMemorySink()
+	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 		Message:      "done",
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hc.Add(r.Context(), "example", "std-integration")
@@ -48,17 +47,15 @@ func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {
 }
 
 func TestMiddlewareAppliesCustomMessageFromHandlerContext(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	sink := newMemorySink()
+	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 		Message:      "done",
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !hc.SetMessage(r.Context(), "order shipped") {
-			t.Fatal("expected SetMessage to succeed")
-		}
+		hc.SetMessage(r.Context(), "order shipped")
 		w.WriteHeader(http.StatusAccepted)
 	}))
 
@@ -78,11 +75,11 @@ func TestMiddlewareAppliesCustomMessageFromHandlerContext(t *testing.T) {
 }
 
 func TestMiddlewarePanicPropagatesAndLogsError(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	sink := newMemorySink()
+	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("bad")
@@ -118,11 +115,11 @@ func TestMiddlewarePanicPropagatesAndLogsError(t *testing.T) {
 }
 
 func TestMiddlewareWriteHeaderTwiceLogsFirstCommittedStatus(t *testing.T) {
-	backend := &memorySink{}
-	mw := Middleware(hc.Config{
+	backend := newMemorySink()
+	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         backend,
 		SamplingRate: 1,
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusCreated)
@@ -146,11 +143,11 @@ func TestMiddlewareWriteHeaderTwiceLogsFirstCommittedStatus(t *testing.T) {
 }
 
 func TestMiddlewarePanicAfterCommittedStatusKeepsCommittedStatus(t *testing.T) {
-	backend := &memorySink{}
-	mw := Middleware(hc.Config{
+	backend := newMemorySink()
+	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         backend,
 		SamplingRate: 1,
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusCreated)
@@ -188,11 +185,11 @@ func TestMiddlewarePanicAfterCommittedStatusKeepsCommittedStatus(t *testing.T) {
 }
 
 func TestMiddlewareSetsRouteFromRequestPattern(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	sink := newMemorySink()
+	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	})
+	}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /orders/{id}", func(w http.ResponseWriter, _ *http.Request) {
@@ -214,11 +211,11 @@ func TestMiddlewareSetsRouteFromRequestPattern(t *testing.T) {
 }
 
 func TestMiddlewarePreservesOptionalInterfaces(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	sink := newMemorySink()
+	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		flusher, ok := w.(http.Flusher)
@@ -265,11 +262,11 @@ func TestMiddlewarePreservesOptionalInterfaces(t *testing.T) {
 }
 
 func TestMiddlewareWriteSetsStatusCode(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	sink := newMemorySink()
+	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if _, err := io.Copy(w, bytes.NewBufferString("ok")); err != nil {
@@ -291,11 +288,11 @@ func TestMiddlewareWriteSetsStatusCode(t *testing.T) {
 }
 
 func TestMiddlewareReadFromSetsStatusCode(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	sink := newMemorySink()
+	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		readerFrom, ok := w.(io.ReaderFrom)
@@ -321,7 +318,7 @@ func TestMiddlewareReadFromSetsStatusCode(t *testing.T) {
 }
 
 func TestMiddlewareNilSinkStillRunsHandler(t *testing.T) {
-	mw := Middleware(hc.Config{})
+	mw := Middleware(hc.MustCompile(hc.Config{}))
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 	}))
@@ -333,11 +330,11 @@ func TestMiddlewareNilSinkStillRunsHandler(t *testing.T) {
 }
 
 func TestMiddlewareSamplingDropForHealthyRequest(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	sink := newMemorySink()
+	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 0,
-	})
+	}))
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -348,35 +345,43 @@ func TestMiddlewareSamplingDropForHealthyRequest(t *testing.T) {
 	}
 }
 
-type memoryEvent struct {
+// capturedEvent mirrors the v0 test-facing shape (map fields, int
+// numerics) over the v2 TestSink capture, keeping the assertions below
+// unchanged from the v0 suite.
+type capturedEvent struct {
 	Level   hc.Level
 	Message string
 	Fields  map[string]any
 }
 
 type memorySink struct {
-	mu     sync.Mutex
-	events []memoryEvent
+	ts *hc.TestSink
 }
 
-func (s *memorySink) Write(level hc.Level, message string, fields map[string]any) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cp := make(map[string]any, len(fields))
-	maps.Copy(cp, fields)
-	s.events = append(s.events, memoryEvent{
-		Level:   level,
-		Message: message,
-		Fields:  cp,
-	})
+func newMemorySink() *memorySink {
+	return &memorySink{ts: hc.NewTestSink()}
 }
 
-func (s *memorySink) Events() []memoryEvent {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cp := make([]memoryEvent, len(s.events))
-	copy(cp, s.events)
-	return cp
+func (s *memorySink) Write(ctx context.Context, rec *hc.Record) {
+	s.ts.Write(ctx, rec)
+}
+
+func (s *memorySink) Events() []capturedEvent {
+	captured := s.ts.Events()
+	out := make([]capturedEvent, 0, len(captured))
+	for _, ev := range captured {
+		fields := make(map[string]any, len(ev.Fields())+4)
+		for _, f := range ev.Fields() {
+			v, _ := ev.Lookup(f.Key())
+			if i, ok := v.(int64); ok {
+				fields[f.Key()] = int(i)
+			} else {
+				fields[f.Key()] = v
+			}
+		}
+		out = append(out, capturedEvent{Level: ev.Level(), Message: ev.Message(), Fields: fields})
+	}
+	return out
 }
 
 type testOptionalWriter struct {
