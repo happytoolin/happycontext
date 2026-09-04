@@ -44,8 +44,5 @@ func levelFloor(auto Level, requested Level, hasRequested bool) Level {
 	if !hasRequested || !IsValidLevel(requested) {
 		return auto
 	}
-	if requested > auto {
-		return requested
-	}
-	return auto
+	return max(auto, requested)
 }

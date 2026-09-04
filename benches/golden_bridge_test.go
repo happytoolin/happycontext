@@ -46,14 +46,14 @@ func TestGoldenZerologBridgeParity(t *testing.T) {
 			hc.Add(ctx, "k", "first", "k", "second", "other", 1)
 		}, nil},
 		{"wide", func(ctx context.Context) {
-			for i := 0; i < 32; i++ {
+			for i := range 32 {
 				hc.Add(ctx, "k"+strings.Repeat("x", i+1), i)
 			}
 		}, nil},
 		{"error", nil, errors.New("boom")},
 		{"wide_duplicates", func(ctx context.Context) {
 			hc.Add(ctx, "dup", "first-write")
-			for i := 0; i < 28; i++ {
+			for i := range 28 {
 				hc.Add(ctx, "k"+strings.Repeat("x", i+1), i)
 			}
 			hc.Add(ctx, "dup", "last-write")
@@ -64,7 +64,6 @@ func TestGoldenZerologBridgeParity(t *testing.T) {
 	}
 
 	for _, c := range corpus {
-		c := c
 		t.Run(c.name, func(t *testing.T) {
 			// first-party JSON sink
 			var hbuf bytes.Buffer

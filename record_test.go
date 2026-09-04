@@ -75,7 +75,7 @@ func TestRecordEncodedDedupLastWriteWins(t *testing.T) {
 
 func TestRecordEncodedWideDedupePath(t *testing.T) {
 	fields := make([]Field, 0, 40)
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		fields = append(fields, fieldOf(strings.Repeat("a", i+1), i))
 	}
 	fields = append(fields, fieldOf(strings.Repeat("a", 1), 999)) // dup of first key
@@ -122,7 +122,7 @@ func TestFloat32WireParity(t *testing.T) {
 func TestDedupeCrossover(t *testing.T) {
 	for _, n := range []int{23, 24, 25, 26, 33, 40} {
 		fields := make([]Field, 0, n)
-		for i := 0; i < n-1; i++ {
+		for i := range n - 1 {
 			fields = append(fields, fieldStr(strings.Repeat("k", i+2), "v"))
 		}
 		fields = append(fields, fieldStr("kk", "last")) // dup of the first key
@@ -187,7 +187,7 @@ func TestRecordEncodedOnce(t *testing.T) {
 
 	var wg sync.WaitGroup
 	first := make([][]byte, 8)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -363,7 +363,7 @@ func capturedLine(t *testing.T, ev CapturedEvent) []byte {
 
 func allocFields(n int) []Field {
 	fields := make([]Field, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		fields = append(fields, fieldStr(fmt.Sprintf("k%02d", i), "v"))
 	}
 	return fields
@@ -455,10 +455,10 @@ func TestRecordEncodeAllocFreshRecord(t *testing.T) {
 func TestRecordEncodeSizeMonotonicProperty(t *testing.T) {
 	rng := rand.New(rand.NewPCG(0x51E5E5eed, 0x600D5eed))
 	for width := 1; width <= 80; width++ {
-		for iter := 0; iter < 50; iter++ {
+		for iter := range 50 {
 			used := map[string]bool{}
 			fields := make([]Field, 0, width+1)
-			for i := 0; i < width; i++ {
+			for range width {
 				key := fmt.Sprintf("k%03d", rng.IntN(width+5))
 				if used[key] {
 					continue // keep the generated list unique-keyed
@@ -583,11 +583,11 @@ func TestJSONSinkConcurrency(t *testing.T) {
 	w := lockedTestWriter{mu: &mu, buf: &buf}
 	sink := NewJSONSink(w)
 	var wg sync.WaitGroup
-	for g := 0; g < 8; g++ {
+	for g := range 8 {
 		wg.Add(1)
 		go func(g int) {
 			defer wg.Done()
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				rec := recOf(LevelInfo, "concurrent", fieldOf("g", g), fieldOf("i", i))
 				sink.Write(context.Background(), rec)
 			}

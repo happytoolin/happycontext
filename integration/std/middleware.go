@@ -1,3 +1,6 @@
+// Package stdhappycontext provides the net/http happycontext
+// middleware: one canonical event per request with optional-interface
+// response-writer fidelity (Flusher/Hijacker/Pusher/ReaderFrom).
 package stdhappycontext
 
 import (
@@ -97,6 +100,7 @@ func (ow onlyWriter) Write(p []byte) (int, error) { return ow.rw.Write(p) }
 // CloseNotify keeps the deprecated interface assertable for v0 users;
 // it is a no-op when the underlying writer does not implement it.
 func (rw *responseWriter) CloseNotify() <-chan bool {
+	//lint:ignore SA1019 v0 parity: keep the deprecated interface assertable for existing users
 	if cn, ok := rw.ResponseWriter.(http.CloseNotifier); ok {
 		return cn.CloseNotify()
 	}

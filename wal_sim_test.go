@@ -40,6 +40,7 @@ package hc
 //     sequential equivalent.
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -476,13 +477,13 @@ func verifySchedule(t *testing.T, s *sim, replay bool) {
 	for i := range s.plans {
 		p := &s.plans[i]
 		want := false
-		switch {
-		case p.mode == modeLive || p.mode == modeSetLive:
+		switch p.mode {
+		case modeLive, modeSetLive:
 			// A live load with a matching generation lands
 			// unconditionally at act — even across a seal or recycle
 			// (the documented residual).
 			want = p.loadGen == p.refGen
-		case p.mode == modeArmed || p.mode == modeSetArmed:
+		case modeArmed, modeSetArmed:
 			// An armed load lands iff the act-time recheck still sees
 			// the same generation in the armed state.
 			want = p.actGen == p.refGen && p.actState == walArmed
@@ -493,7 +494,7 @@ func verifySchedule(t *testing.T, s *sim, replay bool) {
 		}
 		if !p.landed {
 			// A dropped attempt must not appear on the wire.
-			if key := p.key; key != "" && containsKey(s.ev.fields, key) {
+			if key := p.key; key != "" && slices.Contains(s.ev.fields, key) {
 				t.Fatalf("straggler %d key %q landed despite a drop decision\nschedule: %s",
 					i, key, scheduleLog(s))
 			}
@@ -502,7 +503,7 @@ func verifySchedule(t *testing.T, s *sim, replay bool) {
 
 	// Invariant 2: the owner's post-seal writes always land.
 	for _, k := range s.postKeys {
-		if !containsKey(s.ev.fields, k) {
+		if !slices.Contains(s.ev.fields, k) {
 			t.Fatalf("owner post-seal write %q missing from %v\nschedule: %s",
 				k, s.ev.fields, scheduleLog(s))
 		}
@@ -556,15 +557,6 @@ func foldKeys(keys []string) []string {
 		out = append(out, keys[i])
 	}
 	return out
-}
-
-func containsKey(keys []string, k string) bool {
-	for _, x := range keys {
-		if x == k {
-			return true
-		}
-	}
-	return false
 }
 
 // ---------------------------------------------------------------------------

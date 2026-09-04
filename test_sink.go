@@ -145,11 +145,11 @@ func deepCopyReflect(src, dst reflect.Value, seen map[uintptr]reflect.Value) {
 		}
 		dst.Set(reflect.MakeSlice(src.Type(), src.Len(), src.Cap()))
 		seen[src.Pointer()] = dst
-		for i := 0; i < src.Len(); i++ {
+		for i := range src.Len() {
 			deepCopyReflect(src.Index(i), dst.Index(i), seen)
 		}
 	case reflect.Array:
-		for i := 0; i < src.Len(); i++ {
+		for i := range src.Len() {
 			deepCopyReflect(src.Index(i), dst.Index(i), seen)
 		}
 	case reflect.Pointer:

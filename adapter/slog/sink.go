@@ -1,8 +1,12 @@
+// Package slogadapter bridges happycontext records into log/slog: a
+// Sink that forwards each finalized record as typed slog attributes on
+// the logger's own level threshold.
 package slogadapter
 
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"sync"
 
 	"github.com/happytoolin/happycontext"
@@ -146,9 +150,7 @@ func lastOccurrences(fields []hc.Field) []int {
 		seen[fields[i].Key()] = struct{}{}
 		kept = append(kept, i)
 	}
-	for i, j := 0, len(kept)-1; i < j; i, j = i+1, j-1 {
-		kept[i], kept[j] = kept[j], kept[i]
-	}
+	slices.Reverse(kept)
 	return kept
 }
 

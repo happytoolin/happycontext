@@ -31,7 +31,7 @@ func (c *bridgeCapture) Write(_ context.Context, rec *hc.Record) { c.recs = appe
 func bridgeRecords(n int) []*hc.Record {
 	cap := &bridgeCapture{}
 	rt := hc.MustCompile(hc.Config{Sink: cap, SamplingRate: 1})
-	for i := 0; i < 64; i++ {
+	for range 64 {
 		op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainHTTP, Name: "GET /api/v1/orders/:id"})
 		benchmarkFields(op.Context(), n)
 		op.End(nil)

@@ -92,9 +92,7 @@ func KeepErrors() SamplerMiddleware {
 //
 // Negative durations are treated as zero.
 func KeepSlowerThan(minDuration time.Duration) SamplerMiddleware {
-	if minDuration < 0 {
-		minDuration = 0
-	}
+	minDuration = max(minDuration, 0)
 	return func(next Sampler) Sampler {
 		return func(in SampleInput) bool {
 			return in.Duration >= minDuration || next(in)

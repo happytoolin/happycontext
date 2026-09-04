@@ -168,7 +168,7 @@ func appendDedupedFields(dst []byte, fields []Field) []byte {
 	for i := len(fields) - 1; i >= 0; i-- {
 		key := fields[i].key
 		dup := false
-		for j := 0; j < n; j++ {
+		for j := range n {
 			if seenArr[j] == key {
 				dup = true
 				break
@@ -185,7 +185,7 @@ func appendDedupedFields(dst []byte, fields []Field) []byte {
 			n++
 		} else if seen == nil {
 			seen = make(map[string]struct{}, len(fields))
-			for j := 0; j < n; j++ {
+			for j := range n {
 				seen[seenArr[j]] = struct{}{}
 			}
 			seen[key] = struct{}{}

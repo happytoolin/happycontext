@@ -1,3 +1,6 @@
+// Package fiberv3happycontext provides the Fiber v3 happycontext
+// middleware: one canonical event per request, with errors, panics,
+// status, and route resolved from the Fiber context.
 package fiberv3happycontext
 
 import (

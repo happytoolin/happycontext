@@ -8,7 +8,7 @@ import (
 
 func TestAppendBytesMirrorsString(t *testing.T) {
 	rng := rand.New(rand.NewPCG(7, 7))
-	for i := 0; i < 20_000; i++ {
+	for range 20_000 {
 		b := make([]byte, rng.IntN(80))
 		for j := range b {
 			b[j] = byte(rng.Uint64())

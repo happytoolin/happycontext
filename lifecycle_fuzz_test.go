@@ -1067,7 +1067,7 @@ func seedPrograms() []seedProg {
 	// duplicate keys at the dedupe width boundaries (keys cycle k0-k4).
 	for _, w := range []int{1, 24, 25, 32, 33, 80} {
 		ops := make([]lifeOp, 0, w+1)
-		for i := 0; i < w-1; i++ {
+		for i := range w - 1 {
 			ops = append(ops, strOp(fmt.Sprintf("k%d", i%5), fmt.Sprintf("v%d", i)))
 		}
 		ops = append(ops, strOp("k0", "last-wins"), endErr(nil))
@@ -1234,7 +1234,7 @@ func valuesEqual(a, b any) bool {
 // honest without the fuzzer.
 func TestLifecyclePropertyRandom(t *testing.T) {
 	rng := rand.New(rand.NewPCG(0x11FE5eed, 0x9A11FE5))
-	for i := 0; i < 2000; i++ {
+	for range 2000 {
 		buf := make([]byte, 2+rng.IntN(260))
 		for j := range buf {
 			buf[j] = byte(rng.Uint64())
@@ -1325,12 +1325,12 @@ func encodeProgram(prog lifeProgram) []byte {
 				break
 			}
 			err := o.val.(error)
-			switch {
-			case err == nil:
+			switch err {
+			case nil:
 				b = append(b, 0)
-			case err == context.Canceled:
+			case context.Canceled:
 				b = append(b, 2)
-			case err == context.DeadlineExceeded:
+			case context.DeadlineExceeded:
 				b = append(b, 3)
 			default:
 				msg := err.Error()

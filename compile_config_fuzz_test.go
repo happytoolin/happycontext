@@ -281,7 +281,7 @@ func FuzzCompileConfig(f *testing.F) {
 // PCG-generated configs — seed-only coverage without the fuzzer.
 func TestCompileConfigPropertyRandom(t *testing.T) {
 	rng := rand.New(rand.NewPCG(0xC0FFE5eed, 0x00F1E5))
-	for i := 0; i < 2000; i++ {
+	for i := range 2000 {
 		buf := make([]byte, 1+rng.IntN(60))
 		for j := range buf {
 			buf[j] = byte(rng.Uint64())

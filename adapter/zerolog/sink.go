@@ -1,9 +1,13 @@
+// Package zerologadapter bridges happycontext records into zerolog. A
+// Sink serves the record's pre-encoded canonical line directly to plain
+// loggers; context/hook/sampler-augmented loggers take the typed path.
 package zerologadapter
 
 import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"unsafe"
 
 	"github.com/happytoolin/happycontext"
@@ -267,9 +271,7 @@ func lastOccurrences(fields []hc.Field) []int {
 		seen[fields[i].Key()] = struct{}{}
 		kept = append(kept, i)
 	}
-	for i, j := 0, len(kept)-1; i < j; i, j = i+1, j-1 {
-		kept[i], kept[j] = kept[j], kept[i]
-	}
+	slices.Reverse(kept)
 	return kept
 }
 

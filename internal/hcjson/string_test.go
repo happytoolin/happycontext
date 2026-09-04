@@ -109,7 +109,7 @@ func TestAppendStringAdversarialPositions(t *testing.T) {
 	}
 	base := strings.Repeat("a", 24)
 	for _, sp := range specials {
-		for pos := 0; pos < len(base); pos++ {
+		for pos := range len(base) {
 			s := base[:pos] + string(sp) + base[pos+1:]
 			got := string(Encoder{}.AppendString(nil, s))
 			want := string(appendStringTable(nil, s))
@@ -143,7 +143,7 @@ func TestChunkDetector(t *testing.T) {
 	}
 	place := func(i int, b byte) uint64 { return clean&^uint64(0xff)<<(8*i) | uint64(b)<<(8*i) }
 
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		if x := clean &^ uint64(0xe0) << (8 * i); chunkIsClean(x) {
 			t.Fatalf("control byte at %d accepted", i)
 		}
@@ -162,7 +162,7 @@ func TestChunkDetector(t *testing.T) {
 	if hasZero64(clean) {
 		t.Fatal("clean chunk reported as containing zero")
 	}
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		if x := clean &^ uint64(0xff) << (8 * i); !hasZero64(x) {
 			t.Fatalf("zero at byte %d not detected", i)
 		}
@@ -201,7 +201,7 @@ func TestAppendStringProperty(t *testing.T) {
 	}
 	runes := []rune{'a', 'Z', '0', ' ', 'é', 'ö', '☃', 'ñ', '🍜', '😀', 0x00a0, 0x2028, 0xfffd}
 
-	for i := 0; i < total; i++ {
+	for i := range total {
 		var s string
 		switch i % 6 {
 		case 0: // fully random bytes, every length class
@@ -215,7 +215,7 @@ func TestAppendStringProperty(t *testing.T) {
 			for j := range b {
 				b[j] = byte(0x21 + rng.IntN(0x5d)) // printable-ish ASCII
 			}
-			for k := 0; k < rng.IntN(3); k++ {
+			for range rng.IntN(3) {
 				b[rng.IntN(len(b))] = specials[rng.IntN(len(specials))]
 			}
 			s = string(b)

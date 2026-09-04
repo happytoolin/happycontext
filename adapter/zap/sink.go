@@ -1,7 +1,11 @@
+// Package zapadapter bridges happycontext records into zap: a Sink that
+// forwards each finalized record as typed zap fields through the
+// logger's CheckedEntry path.
 package zapadapter
 
 import (
 	"context"
+	"slices"
 
 	"github.com/happytoolin/happycontext"
 	"go.uber.org/zap"
@@ -124,9 +128,7 @@ func lastOccurrences(fields []hc.Field) []int {
 		seen[fields[i].Key()] = struct{}{}
 		kept = append(kept, i)
 	}
-	for i, j := 0, len(kept)-1; i < j; i, j = i+1, j-1 {
-		kept[i], kept[j] = kept[j], kept[i]
-	}
+	slices.Reverse(kept)
 	return kept
 }
 

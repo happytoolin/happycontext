@@ -1,3 +1,6 @@
+// Package workerhc provides the background-job happycontext lifecycle:
+// Start opens a job operation from JobMeta and returns the deferred-End
+// handle.
 package workerhc
 
 import (

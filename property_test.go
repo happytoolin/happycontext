@@ -239,7 +239,7 @@ func TestFieldRoundTripProperty(t *testing.T) {
 		t.Run(k.name, func(t *testing.T) {
 			rng := rand.New(rand.NewPCG(uint64(k.kind)<<32|0x51EE5eed, 0x600D5eed))
 			const n = 3000
-			for i := 0; i < n; i++ {
+			for i := range n {
 				val := rtFieldValue(rng, k.kind)
 				var r *Record
 				if k.kind == KindRaw {
@@ -276,7 +276,7 @@ func TestFieldRoundTripProperty(t *testing.T) {
 // with equal content encode to equal bytes (action plan P6).
 func TestRecordEncodeDeterminismProperty(t *testing.T) {
 	rng := rand.New(rand.NewPCG(0xD371E5eed, 0xD371E5eed))
-	for i := 0; i < 2000; i++ {
+	for i := range 2000 {
 		width := 1 + rng.IntN(40)
 		fields := make([]Field, width)
 		for j := range fields {
@@ -447,7 +447,7 @@ func TestEncodedRoundTripProperty(t *testing.T) {
 	rng := rand.New(rand.NewPCG(0x600D5eed, 0x51EE5eed))
 
 	specials := []byte{0x00, 0x09, 0x0a, '"', '\\', 0x7f, 0x80, 0xff}
-	for i := 0; i < total; i++ {
+	for i := range total {
 		width := 1 + rng.IntN(8)
 		fields := make([]Field, width)
 		for w := range fields {
@@ -671,7 +671,7 @@ func FuzzRecordEncodedDedupe(f *testing.F) {
 // hc.Error, or a non-success outcome) is the oracle.
 func TestSamplingErrorBypassProperty(t *testing.T) {
 	rng := rand.New(rand.NewPCG(0x5A9A1E5eed, 0x8A55E5eed))
-	for i := 0; i < 3000; i++ {
+	for i := range 3000 {
 		buf := make([]byte, 2+rng.IntN(120))
 		for j := range buf {
 			buf[j] = byte(rng.Uint64())
@@ -709,7 +709,7 @@ func TestSamplingRateBoundaryProperty(t *testing.T) {
 		executeProgramOn(prog, op)
 		return len(sink.events)
 	}
-	for i := 0; i < 1500; i++ {
+	for i := range 1500 {
 		buf := make([]byte, 2+rng.IntN(120))
 		for j := range buf {
 			buf[j] = byte(rng.Uint64())
@@ -754,15 +754,9 @@ func chainReference(c chainCase) bool {
 	// defers to the (dropping) base, so the composed decision is the OR
 	// of the middlewares' predicates. KeepSlowerThan clamps negative
 	// minimums to zero; KeepPathPrefix filters empty prefixes.
-	keep := false
-	if c.keepErr && (c.hasErr || c.code >= 500 || c.status >= 500) {
-		keep = true
-	}
+	keep := c.keepErr && (c.hasErr || c.code >= 500 || c.status >= 500)
 	if c.useSlower {
-		min := c.minDur
-		if min < 0 {
-			min = 0
-		}
+		min := max(c.minDur, 0)
 		if c.duration >= min {
 			keep = true
 		}
@@ -781,7 +775,7 @@ func chainReference(c chainCase) bool {
 // against the reference union formula over generated inputs.
 func TestChainSamplerProperty(t *testing.T) {
 	rng := rand.New(rand.NewPCG(0xC4A1A5eed, 0xE5EED5E))
-	for i := 0; i < 5000; i++ {
+	for i := range 5000 {
 		c := chainCase{
 			hasErr:    rng.Uint64()&1 == 0,
 			code:      int(rng.IntN(700)),
@@ -876,7 +870,7 @@ func capturedEqual(a, b lifeCapture) bool {
 // through a stale context after both requests completed.
 func TestPoolSafetyReplayProperty(t *testing.T) {
 	rng := rand.New(rand.NewPCG(0x90F15E5eed, 0xE6A1E5eed))
-	for i := 0; i < 400; i++ {
+	for i := range 400 {
 		buf := make([]byte, 2+rng.IntN(160))
 		for j := range buf {
 			buf[j] = byte(rng.Uint64())

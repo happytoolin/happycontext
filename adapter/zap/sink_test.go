@@ -165,11 +165,11 @@ func TestSinkConcurrentWrites(t *testing.T) {
 	rt := hc.MustCompile(hc.Config{Sink: New(zap.New(core)), SamplingRate: 1})
 
 	var wg sync.WaitGroup
-	for w := 0; w < 8; w++ {
+	for w := range 8 {
 		wg.Add(1)
 		go func(w int) {
 			defer wg.Done()
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "w"})
 				hc.Add(op.Context(), "w", w, "i", i)
 				op.End(nil)

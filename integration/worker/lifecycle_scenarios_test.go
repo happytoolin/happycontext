@@ -178,7 +178,7 @@ func TestWorkerConsecutiveJobs(t *testing.T) {
 	ts := hc.NewTestSink()
 	rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: 1})
 	const jobs = 32
-	for i := 0; i < jobs; i++ {
+	for i := range jobs {
 		op := Start(context.Background(), rt, JobMeta{Name: "job", ID: string(rune('a' + i))})
 		hc.Add(op.Context(), "index", i)
 		var err error
@@ -204,11 +204,11 @@ func TestWorkerConcurrentJobs(t *testing.T) {
 	ts := hc.NewTestSink()
 	rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: 1})
 	var wg sync.WaitGroup
-	for w := 0; w < 12; w++ {
+	for w := range 12 {
 		wg.Add(1)
 		go func(w int) {
 			defer wg.Done()
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				op := Start(context.Background(), rt, JobMeta{Name: "worker", ID: "w"})
 				hc.Add(op.Context(), "worker", w, "seq", i)
 				var err error

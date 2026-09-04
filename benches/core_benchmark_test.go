@@ -171,7 +171,7 @@ func BenchmarkOperationLifecycleWithPolicies(b *testing.B) {
 // policy table (the scale axis of the v0 quality matrix).
 func BenchmarkOperationPolicyScale(b *testing.B) {
 	policies := make(map[hc.Domain]hc.OperationPolicy, 128)
-	for i := 0; i < 128; i++ {
+	for i := range 128 {
 		policies[hc.Domain("svc"+strconv.Itoa(i))] = hc.OperationPolicy{SuccessLevel: hc.LevelInfo}
 	}
 	rt := hc.MustCompile(hc.Config{Sink: discardSink{}, SamplingRate: 1, OperationPolicies: policies})

@@ -375,6 +375,7 @@ func TestNilRuntimeNoop(t *testing.T) {
 
 func TestAddNoEventNoop(t *testing.T) {
 	Add(context.Background(), "k", 1) // no panic
+	//lint:ignore SA1012 intentional: pin the nil-context no-op contract
 	Add(nil, "k", 1)
 	AddRawJSON(context.Background(), "k", []byte(`{}`))
 	Error(context.Background(), errors.New("x"))
@@ -396,10 +397,10 @@ func TestAddRawJSONField(t *testing.T) {
 			found = &f
 		}
 	}
-	if found == nil {
-		t.Fatal("raw field missing")
-	}
-	if found.Kind() != KindRaw {
+	if found == nil || found.Kind() != KindRaw {
+		if found == nil {
+			t.Fatal("raw field missing")
+		}
 		t.Fatalf("kind = %v", found.Kind())
 	}
 	if raw, ok := found.Raw(); !ok || string(raw) != `{"nested":true}` {
@@ -489,10 +490,10 @@ func TestConcurrentRequests(t *testing.T) {
 	const goroutines = 16
 	const each = 50
 	done := make(chan struct{}, goroutines)
-	for g := 0; g < goroutines; g++ {
+	for g := range goroutines {
 		go func(g int) {
 			defer func() { done <- struct{}{} }()
-			for i := 0; i < each; i++ {
+			for i := range each {
 				op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j", ID: "g"})
 				ctx := op.Context()
 				Add(ctx, "g", g, "i", i)
@@ -505,7 +506,7 @@ func TestConcurrentRequests(t *testing.T) {
 			}
 		}(g)
 	}
-	for g := 0; g < goroutines; g++ {
+	for range goroutines {
 		<-done
 	}
 	events := ts.Events()
@@ -532,7 +533,7 @@ func concurrentEnd(t *testing.T, rate float64, n int) ([]bool, int) {
 	start := sync.NewCond(&mu)
 	released, ready := false, 0
 	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -563,7 +564,7 @@ func concurrentEnd(t *testing.T, rate float64, n int) ([]bool, int) {
 // emitted result (the losers wait for the winner's publication).
 func TestConcurrentEndCharacterization(t *testing.T) {
 	// Emitted case (rate 1): exactly one event, every caller sees true.
-	for round := 0; round < 25; round++ {
+	for round := range 25 {
 		results, events := concurrentEnd(t, 1, 16)
 		if events != 1 {
 			t.Fatalf("round %d: %d events, want exactly 1", round, events)
@@ -575,7 +576,7 @@ func TestConcurrentEndCharacterization(t *testing.T) {
 		}
 	}
 	// Sampled-away case (rate 0): no event, every caller sees false.
-	for round := 0; round < 25; round++ {
+	for round := range 25 {
 		results, events := concurrentEnd(t, 0, 16)
 		if events != 0 {
 			t.Fatalf("round %d: %d events at rate 0", round, events)
@@ -593,7 +594,7 @@ func TestConcurrentEndCharacterization(t *testing.T) {
 // and race-free (watchdog-style guarded appends interleave with the
 // End callers).
 func TestConcurrentEndArmed(t *testing.T) {
-	for round := 0; round < 25; round++ {
+	for round := range 25 {
 		ts := NewTestSink()
 		rt := MustCompile(Config{Sink: ts, SamplingRate: 1})
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "armed-race"})
@@ -606,7 +607,7 @@ func TestConcurrentEndArmed(t *testing.T) {
 		const n = 8
 		var wg sync.WaitGroup
 		results := make([]bool, n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
@@ -658,13 +659,13 @@ func TestConcurrentEndArmed(t *testing.T) {
 // pointers: the winner's error is the one recorded; the event commits
 // exactly once and every caller sees the same result.
 func TestConcurrentEndErrorPointer(t *testing.T) {
-	for round := 0; round < 25; round++ {
+	for round := range 25 {
 		ts := NewTestSink()
 		rt := MustCompile(Config{Sink: ts, SamplingRate: 1})
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "err-race"})
 		results := make([]bool, 8)
 		var wg sync.WaitGroup
-		for i := 0; i < 8; i++ {
+		for i := range 8 {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
@@ -739,7 +740,6 @@ func rtConfigFor(s Sink) Config { return Config{Sink: s, SamplingRate: 1} }
 // defer source (the documented usage) and the deferred-function source.
 func TestPanicValuePermutations(t *testing.T) {
 	for _, p := range panicPayloads() {
-		p := p
 		t.Run("direct-"+p.name, func(t *testing.T) {
 			ev, rePanicked := capturePanicEvent(t, func(op *Operation) {
 				defer op.End(nil) // direct defer: observes the panic
@@ -846,7 +846,6 @@ func eventMember(t *testing.T, ev lifeCapture, key string) (map[string]any, bool
 // the in-flight panic (documented) and must not corrupt the pool.
 func TestSinkPanicPermutations(t *testing.T) {
 	for _, p := range panicPayloads() {
-		p := p
 		run := func(t *testing.T, handlerPanic any) {
 			t.Helper()
 			sink := &captureThenPanicSink{payload: p.value}

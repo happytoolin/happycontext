@@ -55,7 +55,7 @@ func genOrderPairs(rng *rand.Rand) ([]orderPair, map[string]any) {
 	n := 8 + rng.IntN(12)
 	pairs := make([]orderPair, 0, n)
 	expected := map[string]any{}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		k := fmt.Sprintf("f%02d", i)
 		switch i % 7 {
 		case 0:
@@ -182,7 +182,7 @@ func orderValueEqual(got, want any) bool {
 func TestSinkOrderPreservationProperty(t *testing.T) {
 	rng := rand.New(rand.NewPCG(0x0AD0A5eed, 0x8A7E5EED))
 	builders := sinkBuilders()
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		pairs, expected := genOrderPairs(rng)
 		userKeys := make([]string, 0, len(pairs))
 		for _, p := range pairs {
