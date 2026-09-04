@@ -5,8 +5,8 @@ import (
 )
 
 // contextKey carries the request's WAL handle. The accessors are
-// unexported: the in-flight WAL is written by the hc.Add helpers and read
-// once at End — nothing reads it mid-flight by design.
+// unexported: the in-flight WAL is written by the hc.Add helpers and
+// read once at End — nothing reads it mid-flight by design.
 type contextKey struct{}
 
 func eventFromContext(ctx context.Context) *walRef {

@@ -34,7 +34,6 @@ import (
 	"unicode/utf8"
 )
 
-// ---------------------------------------------------------------------------
 // Program encoding
 //
 // A program is a byte stream decoded by a cursor. The first two bytes
@@ -333,7 +332,6 @@ func progValue(vk lifeValueKind, c *progCursor) any {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Execution
 
 // lifeCapture is one captured event: the level/message the sink saw
@@ -437,7 +435,6 @@ func executeProgramOn(prog lifeProgram, op *Operation) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // The model — an independent implementation of the spec
 
 // lifeModel tracks the event the program SHOULD produce, derived only
@@ -692,7 +689,6 @@ func (m *lifeModel) wrote(key string) bool {
 	return false
 }
 
-// ---------------------------------------------------------------------------
 // Wire comparison helpers (shared with the dedupe fuzz and property
 // tests in this package)
 
@@ -934,7 +930,6 @@ func foldLastWrites(appends []Field) []Field {
 	return out
 }
 
-// ---------------------------------------------------------------------------
 // Oracle
 
 // verifyLifecycle checks one executed program against the model. The
@@ -1020,7 +1015,6 @@ func memberFields(fields []Field) []string {
 	return out
 }
 
-// ---------------------------------------------------------------------------
 // Seed corpus and fuzz target
 
 // seedPrograms are the curated corpus streams from action plan P1,

@@ -1,32 +1,27 @@
 package hc
 
-// Loom-lite: exhaustive WAL interleaving simulation (dst-research §4.4,
-// action plan "Loom-lite exhaustive WAL interleaving"). The real event
-// uses atomics, a mutex, and sync.Pool — none of which can be
-// deterministically scheduled — so this harness simulates the WAL
-// protocol on a SHADOW event (plain values, no atomics) and enumerates
-// EVERY interleaving of the protocol actors with a cooperative
-// scheduler. The schedules are then REPLAYED against the real event
-// (each schedule is a deterministic sequential execution), and the
-// shadow's end state, snapshots, and message must match the real
-// event's — for every interleaving. The 60,060-schedule state space
-// from the research (6+4+3 steps) is reproduced by the scenario actor
-// shapes below (73k schedules across five scenarios, enumerable in
-// well under a second).
+// Loom-lite: exhaustive WAL interleaving simulation. The real event
+// uses atomics, a mutex, and sync.Pool — none deterministically
+// schedulable — so this harness simulates the WAL protocol on a SHADOW
+// event (plain values, no atomics) and enumerates EVERY interleaving
+// with a cooperative scheduler. Each schedule is then REPLAYED against
+// the real event and the shadow's end state, snapshots, and message
+// must match, for every interleaving (~73k schedules across five
+// scenarios).
 //
-// The one preemption-sensitive fragment in the real protocol is the
-// straggler's append: its single state load happens, then it acts.
-// Between load and act the owner may seal or recycle, so the straggler
-// steps are split (load / act) exactly at that boundary; the act
-// replays the real post-load fragment (live: direct append — the
-// documented residual; armed: lock + recheck + append).
+// The one preemption-sensitive fragment is the straggler's append: its
+// single state load happens, then it acts. Between load and act the
+// owner may seal or recycle, so the straggler steps are split
+// (load / act) exactly at that boundary; the act replays the real
+// post-load fragment (live: direct append — the documented residual;
+// armed: lock + recheck + append).
 //
 // Invariants checked at the end of every schedule:
 //
 //  1. A straggler whose load observed a sealed state or a mismatched
 //     generation never lands; live-load landings may land late (the
-//     documented nanosecond-scale residual) but always land exactly
-//     once; armed-load landings depend on the in-lock recheck.
+//     documented nanosecond-scale residual) but always exactly once;
+//     armed-load landings depend on the in-lock recheck.
 //  2. The owner's post-seal writes (appendSealed) always land.
 //  3. Snapshots are never torn: each equals the field prefix at its
 //     copy point.
@@ -36,8 +31,7 @@ package hc
 //     deadlock-free.
 //  6. Linearizability: the final fields (LWW-folded) equal an
 //     independent ordered reference map that applies every successful
-//     append at its landing point — every interleaving has a
-//     sequential equivalent.
+//     append at its landing point.
 
 import (
 	"slices"
@@ -45,7 +39,6 @@ import (
 	"testing"
 )
 
-// ---------------------------------------------------------------------------
 // Shadow event
 
 // simEvent mirrors the real event's observable protocol state: the
@@ -142,7 +135,6 @@ func (s *sim) clone() *sim {
 	return &c
 }
 
-// ---------------------------------------------------------------------------
 // Shadow protocol operations (each mirrors one wal.go function; the
 // mirror mapping is annotated so a production change to the real
 // protocol must update the mirror or the replay comparison fails).
@@ -293,7 +285,6 @@ func (s *sim) setterAct(plan int) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Scheduler
 
 // simStep is one preemption-free protocol step. runnable gates the
@@ -386,7 +377,6 @@ func reportScheduleResults(t *testing.T, res scheduleResult, want int) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Real-event replay
 
 // replayAndCompare runs the executed schedule against a REAL event
@@ -457,7 +447,6 @@ func equalStrings(a, b []string) bool {
 
 func scheduleLog(s *sim) string { return strings.Join(s.log, " | ") }
 
-// ---------------------------------------------------------------------------
 // Shared schedule verification (invariants + linearizability)
 
 // verifySchedule runs the invariant checks for one completed schedule:
@@ -559,7 +548,6 @@ func foldKeys(keys []string) []string {
 	return out
 }
 
-// ---------------------------------------------------------------------------
 // Scenario builders and helpers
 
 // genOf reads the current generation of a real event (gen units).
@@ -729,7 +717,6 @@ func runScenario(t *testing.T, label string, actors []simActor, base *sim, repla
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Scenario tests
 
 // TestLoomLiteSealRace: unarmed owner sealing while two current-gen

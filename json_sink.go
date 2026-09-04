@@ -7,13 +7,10 @@ import (
 
 // JSONSink is a first-party sink that writes one canonical JSON line per
 // event with a single Write call to the underlying writer — no logger
-// dependency required. The line is the record's Encoded() form: lowercase
-// level, the event fields (last-write-wins) in order, RFC3339 completion
-// time, message last — byte-identical to the v0.6 zerolog-parity sink.
-//
-// A JSONSink is safe for concurrent use. Write errors are ignored
-// (events are best-effort, like the bridges). The writer must not retain
-// the byte slice past Write — the record owns it (copy if you keep it).
+// dependency required. The line is the record's Encoded() form, byte-
+// identical to the v0.6 zerolog-parity sink. A JSONSink is safe for
+// concurrent use; Write errors are ignored (events are best-effort, like
+// the bridges).
 type JSONSink struct {
 	w io.Writer
 }

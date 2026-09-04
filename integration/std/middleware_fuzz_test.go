@@ -29,7 +29,6 @@ import (
 	hc "github.com/happytoolin/happycontext"
 )
 
-// ---------------------------------------------------------------------------
 // Interface-masked ResponseWriter
 
 // fuzzBaseWriter is the fake network: it records what the middleware
@@ -165,7 +164,6 @@ func maskedWriterFor(mask byte) http.ResponseWriter {
 
 var errHijackUnavailable = errors.New("hijack unavailable")
 
-// ---------------------------------------------------------------------------
 // Script decoding
 
 // mwAction is one handler behavior.
@@ -263,7 +261,6 @@ func decodeScript(b []byte) (mask byte, actions []mwAction) {
 	return mask, actions
 }
 
-// ---------------------------------------------------------------------------
 // The model — independent re-derivation of the middleware contract
 
 // mwModel is the expected event state for one executed request.
@@ -362,7 +359,6 @@ func (m *mwModel) finalize() (outcome hc.Outcome, level hc.Level, status int) {
 	return outcome, level, status
 }
 
-// ---------------------------------------------------------------------------
 // Fuzz target
 
 func FuzzMiddlewareRequest(f *testing.F) {

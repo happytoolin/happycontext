@@ -30,9 +30,9 @@ func Middleware(rt *hc.Runtime) func(http.Handler) http.Handler {
 			ww := promoteOptional(w, core)
 
 			defer func() {
-				// snapshot the tracker state before it returns to the
-				// pool: another request's getTracker may reset it the
-				// moment release() lands
+				// Snapshot the tracker state before it returns to the pool:
+				// another request's getTracker may reset it the moment
+				// release() lands.
 				statusCode, wroteHeader := core.statusCode, core.wroteHeader
 				core.release()
 				recovered := recover()
@@ -54,12 +54,10 @@ func Middleware(rt *hc.Runtime) func(http.Handler) http.Handler {
 // wrapper the v0 middleware used: one pooled allocation instead of the
 // hook-closure chain.
 //
-// Optional-interface fidelity note: the wrappers below make Flusher,
-// Hijacker, Pusher, CloseNotifier, and ReaderFrom assertable whenever
-// the tracker is promoted; methods are safe no-ops (or io.Copy
-// fallbacks) when the underlying writer lacks the capability — a
-// documented superset of httpsnoop's per-instance exactness, matching
-// how stdlib's own test writers behave.
+// Optional-interface fidelity: the wrappers make Flusher, Hijacker,
+// Pusher, CloseNotifier, and ReaderFrom assertable whenever the tracker
+// is promoted; methods are safe no-ops (or io.Copy fallbacks) when the
+// underlying writer lacks the capability.
 type responseWriter struct {
 	http.ResponseWriter
 	statusCode  int

@@ -10,21 +10,14 @@ import (
 
 // jsonMarshal is the fallback marshaller used by AppendInterface for
 // values without a dedicated append method. It mirrors zerolog's default
-// InterfaceMarshalFunc (globals.go): encoding/json with HTML escaping
-// disabled, and json.Encoder.Encode's trailing newline trimmed — so
-// any-fallback bytes match the zerolog adapter byte-for-byte (std
-// json.Marshal would emit \u003c for <, which parses equal but differs
-// on the wire). A variable keeps the vendored seam (JSONMarshalFunc)
-// swappable in tests.
+// InterfaceMarshalFunc: encoding/json with HTML escaping disabled and
+// Encode's trailing newline trimmed, so any-fallback bytes match the
+// zerolog adapter byte-for-byte. A variable keeps the seam swappable in
+// tests.
 //
-// Panic policy (slog precedent: log/slog handler.go appendValue — the
-// recover at handler.go:586 catches panics escaping appendJSONMarshal's
-// json.Marshal): a user MarshalJSON panic must not unwind End —
-// encoding/json lets it propagate (both the classic implementation and
-// the go1.27 json/v2 default), so it is recovered here into the
-// documented fallback string. This pins the wire behavior identically
-// across the Go 1.25–1.27 matrix; the error-return path keeps the
-// vendored zerolog shape.
+// Panic policy (the slog precedent): a user MarshalJSON panic must not
+// unwind End — encoding/json lets it propagate, so it is recovered here
+// into the documented fallback string.
 var jsonMarshal = func(v any) (b []byte, err error) {
 	defer func() {
 		if r := recover(); r != nil {

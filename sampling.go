@@ -37,7 +37,7 @@ func (in SampleInput) Lookup(key string) (any, bool) {
 }
 
 // Fields returns a read-only view of the request's fields in insertion
-// order — the v0 EventFields iteration capability, restored (amendment 8).
+// order (amendment 8).
 func (in SampleInput) Fields() []Field {
 	if in.ev == nil {
 		return nil

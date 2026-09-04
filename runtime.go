@@ -54,13 +54,11 @@ type Runtime struct {
 	policies   map[Domain]OperationPolicy
 	message    string
 
-	// alwaysKeep is the compiled keep-everything fast path: sampling
-	// rate exactly 1.0 with no sampler, no per-level rates, and no
-	// domain policies. Healthy events can then never be sampled out,
-	// so commit skips the whole sampling gate (shouldWriteHealthy and
-	// any custom sampler) — the decision is compile-time constant.
-	// Error events bypass sampling structurally anyway (amendment 4),
-	// so they are unaffected by this flag.
+	// alwaysKeep is the compiled keep-everything fast path: rate
+	// exactly 1.0 with no sampler, per-level rates, or policies means
+	// healthy events can never be sampled out, so commit skips the
+	// whole gate. Error events bypass sampling structurally anyway
+	// (amendment 4), so the flag is unaffected by them.
 	alwaysKeep bool
 }
 
@@ -115,11 +113,7 @@ func Compile(cfg Config) (*Runtime, error) {
 		}
 	}
 
-	// alwaysKeep fast path: with rate exactly 1.0 and no sampler,
-	// per-level rates, or policies, the healthy-event decision is
-	// compile-time constant — every event is kept. (Error and panic
-	// events bypass the gate structurally, amendment 4, so the flag
-	// only short-circuits the healthy branch below.)
+	// Compiled keep-everything fast path (see the field comment).
 	rt.alwaysKeep = rt.rate == 1.0 && rt.sampler == nil && len(rt.policies) == 0 && len(rt.levelRates) == 0
 
 	return rt, nil

@@ -25,12 +25,12 @@ func appendBytesTable(dst, s []byte) []byte {
 			return append(dst, '"')
 		}
 	}
+	// Clean string: appended in bulk.
 	dst = append(dst, s...)
 	return append(dst, '"')
 }
 
-// appendBytesComplex is a mirror of the appendStringComplex
-// with []byte arg. Vendored verbatim from zerolog.
+// appendBytesComplex is a mirror of appendStringComplex with []byte arg.
 func appendBytesComplex(dst, s []byte, i int) []byte {
 	start := 0
 	for i < len(s) {
@@ -38,6 +38,8 @@ func appendBytesComplex(dst, s []byte, i int) []byte {
 		if b >= utf8.RuneSelf {
 			r, size := utf8.DecodeRune(s[i:])
 			if r == utf8.RuneError && size == 1 {
+				// Invalid sequence: append the pending simple prefix and
+				// the replacement character.
 				if start < i {
 					dst = append(dst, s[start:i]...)
 				}
@@ -53,10 +55,8 @@ func appendBytesComplex(dst, s []byte, i int) []byte {
 			i++
 			continue
 		}
-		// We encountered a character that needs to be encoded.
-		// Let's append the previous simple characters to the byte slice
-		// and switch our operation to read and encode the remainder
-		// characters byte-by-byte.
+		// Needs encoding: append the pending simple prefix, then the
+		// escaped byte.
 		if start < i {
 			dst = append(dst, s[start:i]...)
 		}
