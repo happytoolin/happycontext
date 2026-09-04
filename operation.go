@@ -134,16 +134,14 @@ claimed:
 	// record handed to sinks, or the encode (amendment 20's threat model
 	// is the sink-read window, which this closes; release() re-seals
 	// idempotently before pooling).
-	code := 0
-	outcome := OutcomeSuccess
 	now := time.Now() // one clock read: completion stamp + duration base
 	duration := now.Sub(ev.startedAt)
 	annotateOperationFailures(ev, &op.ref, err, recovered)
 	ev.seal()
 
 	scan := scanWAL(ev)
-	code = scan.code
-	outcome = resolveOutcomeV2(err, recovered, code, scan.outcome)
+	code := scan.code
+	outcome := resolveOutcomeV2(err, recovered, code, scan.outcome)
 	annotatePostSeal(ev, &op.ref, start, duration, normalizeDomain(start.Domain) == DomainHTTP, scan, outcome)
 
 	emitted = op.commit(ev, rt, start, outcome, code, duration, now, err, recovered != nil, scan)
@@ -386,9 +384,6 @@ func buildSampleInput(ev *event, start OperationStart, outcome Outcome, code int
 		Level:      level,
 		HasError:   hasError,
 		ev:         ev,
-	}
-	if scan.hasCode {
-		in.StatusCode = scan.code
 	}
 	return in
 }

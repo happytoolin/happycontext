@@ -131,7 +131,7 @@ func rtFieldValue(rng *rand.Rand, kind FieldKind) any {
 	case KindErr:
 		switch rng.IntN(3) {
 		case 0:
-			return errors.New(fmt.Sprintf("boom-%d", rng.IntN(1e6)))
+			return fmt.Errorf("boom-%d", rng.IntN(1e6))
 		case 1:
 			return errString("plain")
 		default:
@@ -838,7 +838,6 @@ func TestChainSamplerProperty(t *testing.T) {
 type poolState struct {
 	fields      []Field
 	msg         string
-	hasMsg      bool
 	level       Level
 	hasLevel    bool
 	hasErr      bool
@@ -852,7 +851,6 @@ func snapshotState(ev *event) poolState {
 	return poolState{
 		fields:      append([]Field(nil), ev.fields...),
 		msg:         ev.msg,
-		hasMsg:      ev.hasMsg,
 		level:       ev.requestedLevel,
 		hasLevel:    ev.hasRequestedLvl,
 		hasErr:      ev.hasErr,
@@ -862,7 +860,7 @@ func snapshotState(ev *event) poolState {
 }
 
 func statesEqual(a, b poolState) bool {
-	return a.msg == b.msg && a.hasMsg == b.hasMsg && a.level == b.level &&
+	return a.msg == b.msg && a.level == b.level &&
 		a.hasLevel == b.hasLevel && a.hasErr == b.hasErr &&
 		a.sealed == b.sealed && a.sealedArmed == b.sealedArmed &&
 		reflect.DeepEqual(a.fields, b.fields)

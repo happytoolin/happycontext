@@ -58,7 +58,6 @@ type simEvent struct {
 
 	fields []string // keys in landing order (reset clears)
 	msg    string
-	hasMsg bool
 }
 
 // stragglerMode is the decision a load step records for the later act.
@@ -194,7 +193,6 @@ func (s *sim) simReset() {
 	s.ev.state = walLive
 	s.ev.fields = nil
 	s.ev.msg = ""
-	s.ev.hasMsg = false
 	s.landings = nil
 }
 
@@ -283,13 +281,11 @@ func (s *sim) setterAct(plan int) {
 	switch p.mode {
 	case modeSetLive:
 		s.ev.msg = p.msg
-		s.ev.hasMsg = true
 		p.landed = true
 	case modeSetArmed:
 		s.acquireMu()
 		if s.ev.gen == p.refGen && s.ev.state == walArmed {
 			s.ev.msg = p.msg
-			s.ev.hasMsg = true
 			p.landed = true
 		}
 		s.releaseMu()
@@ -315,11 +311,6 @@ type simStep struct {
 type simActor struct {
 	name  string
 	steps []simStep
-}
-
-// step builds a step with no gating.
-func step(name string, run func(s *sim)) simStep {
-	return simStep{name: name, run: run}
 }
 
 // scheduleResult summarizes one enumeration run.
@@ -427,9 +418,8 @@ func replayAndCompare(t *testing.T, s *sim) {
 	if got := ev.state.Load() >> walStateBits; got != s.ev.gen {
 		t.Fatalf("real gen %d != shadow gen %d\nschedule: %s", got, s.ev.gen, scheduleLog(s))
 	}
-	if ev.msg != s.ev.msg || ev.hasMsg != s.ev.hasMsg {
-		t.Fatalf("real msg %q/%v != shadow %q/%v\nschedule: %s",
-			ev.msg, ev.hasMsg, s.ev.msg, s.ev.hasMsg, scheduleLog(s))
+	if ev.msg != s.ev.msg {
+		t.Fatalf("real msg %q != shadow %q\nschedule: %s", ev.msg, s.ev.msg, scheduleLog(s))
 	}
 	// Snapshots must match the shadow's copies.
 	if len(s.realSnapshots) != len(s.snapshots) {
@@ -578,37 +568,7 @@ func containsKey(keys []string, k string) bool {
 }
 
 // ---------------------------------------------------------------------------
-// Scenario builders
-
-// sched is the per-scenario wiring.
-type sched struct {
-	actors []simActor
-	base   *sim
-	replay bool
-	want   int // expected schedule count (-1 = unconstrained by order rules)
-}
-
-// ownerActor builds the owner's step list with a shared key counter.
-func ownerActor(name string, addKeys, postKeys []string, armed bool) simActor {
-	steps := []simStep{}
-	addStep := func(n string, run func(*sim)) simStep { return simStep{name: n, run: run} }
-	if armed {
-		steps = append(steps, addStep("arm", func(s *sim) { s.simArm() }))
-	}
-	for _, k := range addKeys {
-		k := k
-		steps = append(steps, addStep("add-"+k, func(s *sim) { s.simAppend(k) }))
-	}
-	steps = append(steps, addStep("seal", func(s *sim) { s.simSeal() }))
-	for _, k := range postKeys {
-		k := k
-		steps = append(steps, addStep("post-"+k, func(s *sim) { s.simAppendSealed(k) }))
-	}
-	return simActor{name: name, steps: steps}
-}
-
-// ---------------------------------------------------------------------------
-// Scenario helpers
+// Scenario builders and helpers
 
 // genOf reads the current generation of a real event (gen units).
 func genOf(ev *event) uint64 { return ev.state.Load() >> walStateBits }
@@ -717,13 +677,11 @@ func setterSteps(name string, plan int, refGen uint64, msg string) []simStep {
 				switch p.mode {
 				case modeSetLive:
 					ev.msg = msg
-					ev.hasMsg = true
 				case modeSetArmed:
 					ev.mu.Lock()
 					if cur := ev.state.Load(); cur>>walStateBits == p.refGen &&
 						walState(cur&walStateMask) == walArmed {
 						ev.msg = msg
-						ev.hasMsg = true
 					}
 					ev.mu.Unlock()
 				}

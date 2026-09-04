@@ -182,7 +182,3 @@ func TestSinkConcurrentWrites(t *testing.T) {
 		t.Fatalf("entries = %d, want 800", logs.Len())
 	}
 }
-
-type errBoom struct{}
-
-func (errBoom) Error() string { return "boom" }

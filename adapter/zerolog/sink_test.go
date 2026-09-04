@@ -110,7 +110,7 @@ func TestSinkTypedFieldsAndDedupe(t *testing.T) {
 	if payload["d"] != 1500.0 { // zerolog Dur default: float ms
 		t.Fatalf("d = %v", payload["d"])
 	}
-	if payload["k"] != "second" || strings.Count(string(buf.Bytes()), `"k":`) != 1 {
+	if payload["k"] != "second" || strings.Count(buf.String(), `"k":`) != 1 {
 		t.Fatalf("dedupe broken: k = %v", payload["k"])
 	}
 	if raw, ok := payload["meta"].(map[string]any); !ok || raw["raw"] != true {

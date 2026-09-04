@@ -451,7 +451,6 @@ type lifeModel struct {
 	appends []Field
 
 	msg         string
-	hasMsg      bool
 	level       Level
 	hasLevel    bool
 	errOp       bool // an hc.Error op executed while live
@@ -495,7 +494,6 @@ func buildModel(prog lifeProgram) *lifeModel {
 		case opSetMsg:
 			if msg := o.val.(string); msg != "" {
 				m.msg = msg
-				m.hasMsg = true
 			}
 		case opSetLevel:
 			if lvl := o.val.(Level); IsValidLevel(lvl) {
@@ -620,7 +618,7 @@ func (m *lifeModel) resolveLevel(outcome Outcome) Level {
 // message applies the SetMessage → config → domain-default chain (the
 // fuzz configs never set a default message).
 func (m *lifeModel) message() string {
-	if m.hasMsg {
+	if m.msg != "" {
 		return m.msg
 	}
 	if normalizeDomain(m.start) == DomainHTTP {

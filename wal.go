@@ -27,8 +27,6 @@ const (
 	// writes and (future) watchdog snapshots still serialize under mu
 )
 
-func packState(gen uint64, state walState) uint64 { return gen | uint64(state) }
-
 // event is the per-request write-ahead log: an append-only slice of typed
 // fields, request-confined, pooled. One writer (the request goroutine) on
 // the unarmed fast path; armed events serialize appends and snapshots
@@ -43,7 +41,6 @@ type event struct {
 
 	fields []Field // append-only, insertion order; backing array owned for pooling
 	msg    string
-	hasMsg bool
 
 	hasErr          bool
 	requestedLevel  Level
@@ -78,7 +75,6 @@ func (e *event) reset() {
 	e.state.Store(s&^walStateMask | uint64(walLive))
 	e.fields = e.fields[:0]
 	e.msg = ""
-	e.hasMsg = false
 	e.hasErr = false
 	e.requestedLevel = 0
 	e.hasRequestedLvl = false
@@ -186,10 +182,6 @@ func (e *event) appendStr(gen uint64, key, value string) {
 	e.append(gen, Field{key: key, kind: KindString, str: value})
 }
 
-func (e *event) appendInt64(gen uint64, key string, value int64) {
-	e.append(gen, Field{key: key, kind: KindInt, num: value})
-}
-
 func (e *event) appendAny(gen uint64, key string, value any) {
 	e.append(gen, Field{key: key, kind: KindAny, val: value})
 }
@@ -243,11 +235,9 @@ func (e *event) setMessage(ref *walRef, msg string) {
 		defer e.mu.Unlock()
 		if cur := e.state.Load(); cur>>walStateBits == ref.gen && walState(cur&walStateMask) == walArmed {
 			e.msg = msg
-			e.hasMsg = true
 		}
 	case walLive:
 		e.msg = msg
-		e.hasMsg = true
 	}
 }
 

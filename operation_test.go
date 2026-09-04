@@ -34,8 +34,7 @@ func TestLifecycleBasicEmit(t *testing.T) {
 	ctx := op.Context()
 	Add(ctx, "user_id", "u_1", "attempt_no", 2)
 	Add(ctx, "took", 1500*time.Millisecond)
-	var err error
-	err = errors.New("db down")
+	err := errors.New("db down")
 	if !op.End(&err) {
 		t.Fatal("event not emitted")
 	}
@@ -277,7 +276,7 @@ func TestErrorsBypassSampling(t *testing.T) {
 
 	// failing request still emits; the sampler never ran
 	op := Start(context.Background(), rt, OperationStart{})
-	var err error = errors.New("boom")
+	err := errors.New("boom")
 	if !op.End(&err) {
 		t.Fatal("error event was sampled away")
 	}
@@ -714,13 +713,6 @@ func panicPayloads() []panicPayload {
 		{"typed-nil", (*typedNilErr)(nil)},
 		{"runtime-error", runtimeStyleError("runtime-style")},
 	}
-}
-
-// runPanic executes fn inside a recover and returns what escaped.
-func runPanic(fn func()) (recovered any) {
-	defer func() { recovered = recover() }()
-	fn()
-	return nil
 }
 
 // capturePanicEvent runs a panicking lifecycle and returns the capture

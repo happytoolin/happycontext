@@ -76,9 +76,6 @@ func fieldOf(f hc.Field) zap.Field {
 	if d, ok := f.Duration(); ok {
 		return zap.Duration(f.Key(), d)
 	}
-	if err, ok := f.Err(); ok {
-		return zap.String(f.Key(), err.Error())
-	}
 	return zap.Any(f.Key(), f.Any())
 }
 

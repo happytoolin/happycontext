@@ -37,15 +37,13 @@ import (
 // tracker's own delegation paths are exercised (the middleware tracker
 // always exposes ReaderFrom/CloseNotify itself).
 type fuzzBaseWriter struct {
-	header     http.Header
-	code       int
-	body       bytes.Buffer
-	flushed    bool
-	hijacked   bool
-	pushed     bool
-	hijackErr  error
-	hijackConn io.ReadWriteCloser
-	readFromN  int64
+	header    http.Header
+	code      int
+	body      bytes.Buffer
+	flushed   bool
+	hijacked  bool
+	pushed    bool
+	readFromN int64
 }
 
 func (w *fuzzBaseWriter) Header() http.Header { return w.header }

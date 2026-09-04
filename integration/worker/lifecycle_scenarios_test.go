@@ -27,7 +27,7 @@ func TestWorkerRetryMetadata(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var err error = errors.New("retryable")
+	err := errors.New("retryable")
 	op := Start(ctx, rt, JobMeta{Name: "sync", Attempt: 3, MaxAttempts: 5})
 	op.End(&err)
 
@@ -64,7 +64,7 @@ func TestWorkerCancellation(t *testing.T) {
 		rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: rate})
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // canceled before the job starts
-		var err error = context.Canceled
+		err := context.Canceled
 		op := Start(ctx, rt, JobMeta{Name: "cancel"})
 		op.End(&err)
 		if len(ts.Events()) != 1 {
@@ -88,7 +88,7 @@ func TestWorkerDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
 	defer cancel()
 	time.Sleep(time.Millisecond) // let the deadline expire
-	var err error = context.DeadlineExceeded
+	err := context.DeadlineExceeded
 	op := Start(ctx, rt, JobMeta{Name: "slow"})
 	op.End(&err)
 	ev := ts.Events()[0]

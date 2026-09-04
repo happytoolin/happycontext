@@ -160,7 +160,7 @@ func TestWALSetters(t *testing.T) {
 	}
 
 	ev.setMessage(ref, "custom")
-	if !ev.hasMsg || ev.msg != "custom" {
+	if ev.msg != "custom" {
 		t.Error("message not set")
 	}
 	ev.setMessage(ref, "") // empty is unset
@@ -272,8 +272,8 @@ func TestWALStaleSettersAfterReset(t *testing.T) {
 	ev.setMessage(owner, "own")
 	ev.setLevel(owner, LevelWarn)
 	ev.setError(owner, errors.New("own error"))
-	if !ev.hasMsg || ev.msg != "own" {
-		t.Fatalf("owner setMessage lost: msg=%q hasMsg=%v", ev.msg, ev.hasMsg)
+	if ev.msg != "own" {
+		t.Fatalf("owner setMessage lost: msg=%q", ev.msg)
 	}
 	if !ev.hasRequestedLvl || ev.requestedLevel != LevelWarn {
 		t.Fatalf("owner setLevel lost: level=%v has=%v", ev.requestedLevel, ev.hasRequestedLvl)
@@ -294,8 +294,8 @@ func TestWALStaleSettersAfterReset(t *testing.T) {
 	ev.setMessage(stale, "!BUG stale message")
 	ev.setLevel(stale, LevelError)
 	ev.setError(stale, errors.New("!BUG stale error"))
-	if ev.hasMsg || ev.msg != "" {
-		t.Fatalf("stale setMessage landed on the reset event: msg=%q hasMsg=%v", ev.msg, ev.hasMsg)
+	if ev.msg != "" {
+		t.Fatalf("stale setMessage landed on the reset event: msg=%q", ev.msg)
 	}
 	if ev.hasRequestedLvl || ev.requestedLevel != 0 {
 		t.Fatalf("stale setLevel landed on the reset event: level=%v has=%v", ev.requestedLevel, ev.hasRequestedLvl)
@@ -314,8 +314,8 @@ func TestWALStaleSettersAfterReset(t *testing.T) {
 	fresh := &walRef{ev: ev, gen: freshGen}
 	ev.setMessage(fresh, "new-owner")
 	ev.setLevel(fresh, LevelDebug)
-	if !ev.hasMsg || ev.msg != "new-owner" {
-		t.Fatalf("fresh setMessage lost: msg=%q hasMsg=%v", ev.msg, ev.hasMsg)
+	if ev.msg != "new-owner" {
+		t.Fatalf("fresh setMessage lost: msg=%q", ev.msg)
 	}
 	if !ev.hasRequestedLvl || ev.requestedLevel != LevelDebug {
 		t.Fatalf("fresh setLevel lost: level=%v has=%v", ev.requestedLevel, ev.hasRequestedLvl)
