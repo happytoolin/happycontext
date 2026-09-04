@@ -125,7 +125,7 @@ func stagedEnd(op *Operation, fireAt matrixPhase, fire func(ctx context.Context)
 	if fireAt == phasePrePostSeal {
 		fire(op.Context())
 	}
-	annotatePostSeal(ev, &op.ref, duration, normalizeDomain(start.Domain) == DomainHTTP, scan, outcome)
+	annotatePostSeal(ev, &op.ref, start, duration, normalizeDomain(start.Domain) == DomainHTTP, scan, outcome)
 	if fireAt == phasePreCommit {
 		fire(op.Context())
 	}

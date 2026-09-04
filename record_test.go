@@ -19,6 +19,15 @@ func recOf(level Level, msg string, fields ...Field) *Record {
 	return &Record{level: level, msg: msg, fields: fields, completedAt: time.Date(2026, 9, 1, 10, 0, 0, 0, time.Local)}
 }
 
+func TestRecordTimeAccessor(t *testing.T) {
+	at := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	r := recOf(LevelInfo, "m", fieldStr("k", "v"))
+	r.completedAt = at
+	if got := r.Time(); !got.Equal(at) {
+		t.Fatalf("Time() = %v, want %v", got, at)
+	}
+}
+
 func TestRecordFieldsZeroCopy(t *testing.T) {
 	fields := []Field{fieldOf("a", 1), fieldOf("b", 2)}
 	r := recOf(LevelInfo, "m", fields...)
