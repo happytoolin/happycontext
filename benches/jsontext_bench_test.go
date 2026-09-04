@@ -123,7 +123,7 @@ var rtFork = hc.MustCompile(hc.Config{Sink: hc.NewJSONSink(io.Discard), Sampling
 func BenchmarkJSONSinkJsontextComparator(b *testing.B) {
 	cap := &recordCapture{}
 	rt := hc.MustCompile(hc.Config{Sink: cap, SamplingRate: 1})
-	for i := range 64 {
+	for range 64 {
 		op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainHTTP, Name: "GET /api/v1/orders/:id"})
 		benchmarkFields(op.Context(), 12)
 		op.End(nil)
