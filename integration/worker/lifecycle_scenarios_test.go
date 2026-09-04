@@ -27,7 +27,7 @@ func TestWorkerRetryMetadata(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var err error = errors.New("retryable")
+	err := errors.New("retryable")
 	op := Start(ctx, rt, JobMeta{Name: "sync", Attempt: 3, MaxAttempts: 5})
 	op.End(&err)
 
@@ -64,7 +64,7 @@ func TestWorkerCancellation(t *testing.T) {
 		rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: rate})
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // canceled before the job starts
-		var err error = context.Canceled
+		err := context.Canceled
 		op := Start(ctx, rt, JobMeta{Name: "cancel"})
 		op.End(&err)
 		if len(ts.Events()) != 1 {
@@ -88,7 +88,7 @@ func TestWorkerDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
 	defer cancel()
 	time.Sleep(time.Millisecond) // let the deadline expire
-	var err error = context.DeadlineExceeded
+	err := context.DeadlineExceeded
 	op := Start(ctx, rt, JobMeta{Name: "slow"})
 	op.End(&err)
 	ev := ts.Events()[0]
@@ -178,7 +178,7 @@ func TestWorkerConsecutiveJobs(t *testing.T) {
 	ts := hc.NewTestSink()
 	rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: 1})
 	const jobs = 32
-	for i := 0; i < jobs; i++ {
+	for i := range jobs {
 		op := Start(context.Background(), rt, JobMeta{Name: "job", ID: string(rune('a' + i))})
 		hc.Add(op.Context(), "index", i)
 		var err error
@@ -204,11 +204,11 @@ func TestWorkerConcurrentJobs(t *testing.T) {
 	ts := hc.NewTestSink()
 	rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: 1})
 	var wg sync.WaitGroup
-	for w := 0; w < 12; w++ {
+	for w := range 12 {
 		wg.Add(1)
 		go func(w int) {
 			defer wg.Done()
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				op := Start(context.Background(), rt, JobMeta{Name: "worker", ID: "w"})
 				hc.Add(op.Context(), "worker", w, "seq", i)
 				var err error

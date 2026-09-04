@@ -23,12 +23,10 @@ func init() {
 const swarMinLen = 16
 
 // AppendString encodes the input string to json and appends the encoded
-// string to the input byte slice.
-//
-// Strings of swarMinLen bytes or more are first scanned with the SWAR fast
-// path; clean printable-ASCII strings are appended in bulk, everything else
-// (short strings included) goes through appendStringTable, which produces
-// the reference (zerolog) encoding.
+// string to the input byte slice. Strings of swarMinLen bytes or more
+// are first scanned with the SWAR fast path; clean printable-ASCII
+// strings are appended in bulk, everything else goes through
+// appendStringTable, the reference (zerolog) encoding.
 func (e Encoder) AppendString(dst []byte, s string) []byte {
 	if len(s) >= swarMinLen && isCleanASCII(s) {
 		return append(append(append(dst, '"'), s...), '"')
@@ -38,33 +36,24 @@ func (e Encoder) AppendString(dst []byte, s string) []byte {
 
 // appendStringTable is the vendored zerolog v1.34.0 AppendString: a
 // byte-by-byte scan over noEscapeTable with a complex path for anything
-// that needs escaping. It is the correctness oracle for the SWAR fast path
-// (property and fuzz tests) and its fallback.
+// that needs escaping. It is the correctness oracle for the SWAR fast
+// path (property and fuzz tests).
 func appendStringTable(dst []byte, s string) []byte {
-	// Start with a double quote.
 	dst = append(dst, '"')
-	// Loop through each character in the string.
 	for i := 0; i < len(s); i++ {
-		// Check if the character needs encoding. Control characters, slashes,
-		// and the double quote need json encoding. Bytes above the ascii
-		// boundary needs utf8 encoding.
 		if !noEscapeTable[s[i]] {
-			// We encountered a character that needs to be encoded. Switch
-			// to complex version of the algorithm.
 			dst = appendStringComplex(dst, s, i)
 			return append(dst, '"')
 		}
 	}
-	// The string has no need for encoding and therefore is directly
-	// appended to the byte slice.
+	// Clean string: appended in bulk.
 	dst = append(dst, s...)
-	// End with a double quote
 	return append(dst, '"')
 }
 
 // appendStringComplex is used by appendStringTable to take over an in
-// progress JSON string encoding that encountered a character that needs to
-// be encoded. Vendored verbatim from zerolog.
+// progress JSON string encoding that encountered a character that needs
+// to be encoded.
 func appendStringComplex(dst []byte, s string, i int) []byte {
 	start := 0
 	for i < len(s) {
@@ -72,9 +61,8 @@ func appendStringComplex(dst []byte, s string, i int) []byte {
 		if b >= utf8.RuneSelf {
 			r, size := utf8.DecodeRuneInString(s[i:])
 			if r == utf8.RuneError && size == 1 {
-				// In case of error, first append previous simple characters to
-				// the byte slice if any and append a replacement character code
-				// in place of the invalid sequence.
+				// Invalid sequence: append the pending simple prefix and
+				// the replacement character.
 				if start < i {
 					dst = append(dst, s[start:i]...)
 				}
@@ -90,10 +78,8 @@ func appendStringComplex(dst []byte, s string, i int) []byte {
 			i++
 			continue
 		}
-		// We encountered a character that needs to be encoded.
-		// Let's append the previous simple characters to the byte slice
-		// and switch our operation to read and encode the remainder
-		// characters byte-by-byte.
+		// Needs encoding: append the pending simple prefix, then the
+		// escaped byte.
 		if start < i {
 			dst = append(dst, s[start:i]...)
 		}
@@ -124,10 +110,10 @@ func appendStringComplex(dst []byte, s string, i int) []byte {
 
 // isCleanASCII reports whether every byte of s is printable ASCII that
 // needs no JSON escaping (0x20..0x7e except '"' and '\\'), using a SWAR
-// scan of 8 bytes per iteration. It is conservative: any suspicious chunk
-// (including chunks that only look suspicious because of SWAR borrow
-// artifacts) returns false and the caller falls back to the table path, so
-// a false positive costs performance, never correctness.
+// scan of 8 bytes per iteration. It is conservative: any suspicious
+// chunk (including chunks that only look suspicious because of SWAR
+// borrow artifacts) returns false, so a false positive costs
+// performance, never correctness.
 func isCleanASCII(s string) bool {
 	for len(s) >= 8 {
 		if !chunkIsClean(binary.LittleEndian.Uint64([]byte(s[:8]))) {
@@ -149,13 +135,12 @@ func isCleanASCII(s string) bool {
 //	((x - 0x2020..) | (0x7e7e.. - x)) & 0x8080..
 //
 // flags every byte outside [0x20,0x7e] in one pass: control bytes
-// (<0x20) underflow the first subtraction, DEL and non-ASCII (>=0x7f)
-// underflow the second. It never misses: the two subtractions can borrow
-// into a byte independently, but a borrow can strip the high bit only
-// when the no-borrow result is exactly 0x80, and no byte value makes both
-// terms land there at once — so at least one term keeps its high bit for
-// every out-of-range byte. Borrow-induced hits on in-range bytes are
-// false positives, which only send the string to the table path.
+// underflow the first subtraction, DEL and non-ASCII the second. A
+// borrow can strip a high bit only when the no-borrow result is exactly
+// 0x80, and no byte value makes both terms land there at once — so at
+// least one term keeps its high bit for every out-of-range byte.
+// Borrow-induced hits on in-range bytes are false positives, which only
+// send the string to the table path.
 func chunkIsClean(x uint64) bool {
 	if ((x-0x2020202020202020)|(0x7e7e7e7e7e7e7e7e-x))&swarHighs != 0 {
 		return false // control, DEL, or non-ASCII
@@ -179,12 +164,11 @@ const (
 //
 //	(x - 0x0101010101010101) &^ x & 0x8080808080808080
 //
-// A common "simplification" that drops the &^ x term (or replaces &^ with
-// &) compiles, runs, and even benchmarks several times faster — because it
-// never detects anything: a zero byte clears its own high bit in x, so the
-// masked result is always zero and escaping is silently skipped entirely.
-// V2_PLAN.md §05 documents the incident; the property test in this package
-// fails any such regression.
+// Dropping the &^ x term compiles and runs several times faster —
+// because it never detects anything: a zero byte clears its own high
+// bit in x, so the masked result is always zero and escaping is
+// silently skipped. V2_PLAN.md §05 documents the incident; the property
+// test in this package fails any such regression.
 func hasZero64(x uint64) bool {
 	return (x-swarOnes)&^x&swarHighs != 0
 }

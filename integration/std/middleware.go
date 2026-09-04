@@ -1,3 +1,6 @@
+// Package stdhappycontext provides the net/http happycontext
+// middleware: one canonical event per request with optional-interface
+// response-writer fidelity (Flusher/Hijacker/Pusher/ReaderFrom).
 package stdhappycontext
 
 import (
@@ -27,9 +30,9 @@ func Middleware(rt *hc.Runtime) func(http.Handler) http.Handler {
 			ww := promoteOptional(w, core)
 
 			defer func() {
-				// snapshot the tracker state before it returns to the
-				// pool: another request's getTracker may reset it the
-				// moment release() lands
+				// Snapshot the tracker state before it returns to the pool:
+				// another request's getTracker may reset it the moment
+				// release() lands.
 				statusCode, wroteHeader := core.statusCode, core.wroteHeader
 				core.release()
 				recovered := recover()
@@ -51,12 +54,10 @@ func Middleware(rt *hc.Runtime) func(http.Handler) http.Handler {
 // wrapper the v0 middleware used: one pooled allocation instead of the
 // hook-closure chain.
 //
-// Optional-interface fidelity note: the wrappers below make Flusher,
-// Hijacker, Pusher, CloseNotifier, and ReaderFrom assertable whenever
-// the tracker is promoted; methods are safe no-ops (or io.Copy
-// fallbacks) when the underlying writer lacks the capability — a
-// documented superset of httpsnoop's per-instance exactness, matching
-// how stdlib's own test writers behave.
+// Optional-interface fidelity: the wrappers make Flusher, Hijacker,
+// Pusher, CloseNotifier, and ReaderFrom assertable whenever the tracker
+// is promoted; methods are safe no-ops (or io.Copy fallbacks) when the
+// underlying writer lacks the capability.
 type responseWriter struct {
 	http.ResponseWriter
 	statusCode  int
@@ -97,6 +98,7 @@ func (ow onlyWriter) Write(p []byte) (int, error) { return ow.rw.Write(p) }
 // CloseNotify keeps the deprecated interface assertable for v0 users;
 // it is a no-op when the underlying writer does not implement it.
 func (rw *responseWriter) CloseNotify() <-chan bool {
+	//lint:ignore SA1019 v0 parity: keep the deprecated interface assertable for existing users
 	if cn, ok := rw.ResponseWriter.(http.CloseNotifier); ok {
 		return cn.CloseNotify()
 	}

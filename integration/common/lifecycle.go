@@ -29,8 +29,8 @@ func StartRequest(baseCtx context.Context, rt *hc.Runtime, method, path string) 
 // recovered is the panic the middleware's defer captured (nil in the
 // normal case). Because the middleware — not End — performed the
 // recover, the panic reaches the event through the public write API:
-// the canonical panic field, an error field carrying "panic: …", and an
-// explicit op.outcome=panic (End is called with a nil error so the
+// the canonical panic field, an error field carrying "panic: …", and
+// an explicit op.outcome=panic (End is called with a nil error so the
 // explicit outcome wins). The resulting wire fields are identical to
 // End's own panic handling.
 func FinalizeRequest(op *hc.Operation, route string, statusCode int, err error, recovered any) {
@@ -40,16 +40,14 @@ func FinalizeRequest(op *hc.Operation, route string, statusCode int, err error, 
 	if route != "" {
 		hc.Add(op.Context(), "http.route", route)
 		// v0 parity: the operation's name is the resolved route template
-		// (the locked plan's wire sample: "op.name":"GET /orders/{id}");
-		// last-write-wins keeps this over StartRequest's "request".
+		// (last-write-wins keeps this over StartRequest's "request").
 		hc.Add(op.Context(), "op.name", route)
 	}
 	hc.Add(op.Context(), "http.status", statusCode)
 
 	if recovered != nil {
 		hc.Add(op.Context(), "panic", PanicField(recovered))
-		// the real error (if any) wins over the synthetic panic one —
-		// End's own annotateOperationFailures precedence
+		// The real error (if any) wins over the synthetic panic one.
 		if err != nil {
 			hc.Error(op.Context(), err)
 		} else {

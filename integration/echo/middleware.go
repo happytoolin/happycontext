@@ -1,3 +1,6 @@
+// Package echohappycontext provides the Echo happycontext middleware:
+// one canonical event per request, with errors, panics, status, and
+// route resolved from the Echo context.
 package echohappycontext
 
 import (

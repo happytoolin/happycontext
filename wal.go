@@ -7,10 +7,10 @@ import (
 )
 
 // The WAL state word packs a generation counter (high bits) and a state
-// (low bits). Mutations perform one atomic load and compare both: the
+// (low bits). Mutations do one atomic load and compare both: the
 // generation defeats the recycle ABA (a straggler holding a recycled
-// event sees a stale generation and no-ops even after the event has been
-// reset for a new request), and the state implements sealing and arming.
+// event sees a stale generation and no-ops), and the state implements
+// sealing and arming.
 const (
 	walStateBits = 2
 	walStateMask = uint64(1<<walStateBits) - 1
@@ -27,15 +27,13 @@ const (
 	// writes and (future) watchdog snapshots still serialize under mu
 )
 
-func packState(gen uint64, state walState) uint64 { return gen | uint64(state) }
-
-// event is the per-request write-ahead log: an append-only slice of typed
-// fields, request-confined, pooled. One writer (the request goroutine) on
-// the unarmed fast path; armed events serialize appends and snapshots
-// under mu (amendment 1). After End the event is sealed — straggler
-// writes from async work must never touch a recycled buffer (amendment
-// 20), which the generation check guarantees even after the pool hands
-// the event to a new request.
+// event is the per-request write-ahead log: an append-only slice of
+// typed fields, request-confined, pooled. One writer (the request
+// goroutine) on the unarmed fast path; armed events serialize appends
+// and snapshots under mu (amendment 1). After End the event is sealed —
+// straggler writes from async work must never touch a recycled buffer
+// (amendment 20), which the generation check guarantees even after the
+// pool hands the event to a new request.
 type event struct {
 	state atomic.Uint64
 
@@ -43,7 +41,6 @@ type event struct {
 
 	fields []Field // append-only, insertion order; backing array owned for pooling
 	msg    string
-	hasMsg bool
 
 	hasErr          bool
 	requestedLevel  Level
@@ -78,7 +75,6 @@ func (e *event) reset() {
 	e.state.Store(s&^walStateMask | uint64(walLive))
 	e.fields = e.fields[:0]
 	e.msg = ""
-	e.hasMsg = false
 	e.hasErr = false
 	e.requestedLevel = 0
 	e.hasRequestedLvl = false
@@ -119,17 +115,17 @@ func (e *event) arm() {
 	e.mu.Unlock()
 }
 
-// append adds one field for the given generation. One atomic load decides
-// the path: stale generation or sealed drops the write, armed serializes
-// under the mutex (rechecking there, since sealing also takes the mutex),
-// live appends directly on the request-confined fast path.
+// append adds one field for the given generation. One atomic load
+// decides the path: stale generation or sealed drops the write, armed
+// serializes under the mutex (rechecking there, since sealing also
+// takes the mutex), live appends directly on the request-confined fast
+// path.
 //
 // Residual (accepted by the design, amendments 1/20): a straggler that
-// loads state as live and is then preempted across End+seal+recycle can
-// still complete its append into the recycled buffer — a nanosecond-scale
-// torn window inherent to the single-load protocol. The WAL is
-// request-confined (one writer); stragglers are only guaranteed no-ops
-// for writes initiated after End seals.
+// loads state as live and is preempted across End+seal+recycle can
+// still complete its append into the recycled buffer — a nanosecond-
+// scale torn window inherent to the single-load protocol. Stragglers
+// are only guaranteed no-ops for writes initiated after End seals.
 func (e *event) append(gen uint64, f Field) {
 	s := e.state.Load()
 	if s>>walStateBits != gen {
@@ -186,10 +182,6 @@ func (e *event) appendStr(gen uint64, key, value string) {
 	e.append(gen, Field{key: key, kind: KindString, str: value})
 }
 
-func (e *event) appendInt64(gen uint64, key string, value int64) {
-	e.append(gen, Field{key: key, kind: KindInt, num: value})
-}
-
 func (e *event) appendAny(gen uint64, key string, value any) {
 	e.append(gen, Field{key: key, kind: KindAny, val: value})
 }
@@ -224,11 +216,9 @@ func (e *event) setError(ref *walRef, err error) {
 }
 
 // setMessage overrides the event message. Only walLive and walArmed
-// are mutable: walSealedArmed is sealed — the owner's post-seal writes
-// go through appendSealed under mu, never through the setter family —
-// so a setter landing on a sealedArmed event would be a post-seal
-// straggler write (the P5 matrix pins this). Armed events write under
-// mu.
+// are mutable: a setter landing on a sealedArmed event would be a
+// post-seal straggler write (the P5 matrix pins this). Armed events
+// write under mu.
 func (e *event) setMessage(ref *walRef, msg string) {
 	if msg == "" {
 		return
@@ -243,11 +233,9 @@ func (e *event) setMessage(ref *walRef, msg string) {
 		defer e.mu.Unlock()
 		if cur := e.state.Load(); cur>>walStateBits == ref.gen && walState(cur&walStateMask) == walArmed {
 			e.msg = msg
-			e.hasMsg = true
 		}
 	case walLive:
 		e.msg = msg
-		e.hasMsg = true
 	}
 }
 

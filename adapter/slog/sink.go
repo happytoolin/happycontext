@@ -1,8 +1,12 @@
+// Package slogadapter bridges happycontext records into log/slog: a
+// Sink that forwards each finalized record as typed slog attributes on
+// the logger's own level threshold.
 package slogadapter
 
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"sync"
 
 	"github.com/happytoolin/happycontext"
@@ -95,10 +99,9 @@ func attrOf(f hc.Field) slog.Attr {
 		return slog.Uint64(f.Key(), u)
 	}
 	if fl, ok := f.Float(); ok {
-		// float32 renders widened through slog on Go >= 1.24 (AnyValue
-		// converts to Float64Value; slog has no Float32 constructor) —
-		// the same shape the v0 adapter produced. The JSON sink and the
-		// zap/zerolog bridges preserve 32-bit precision.
+		// slog widens float32 (no Float32 constructor) — the v0 adapter's
+		// shape; the JSON sink and zap/zerolog bridges keep 32-bit
+		// precision.
 		return slog.Float64(f.Key(), fl)
 	}
 	if b, ok := f.Bool(); ok {
@@ -116,8 +119,7 @@ func attrOf(f hc.Field) slog.Attr {
 // lastOccurrences returns the indices of each key's last write, in
 // forward emission order — the same duplicate resolution the core
 // encoder applies (linear scan for narrow events, backward seen-set
-// collection for wide ones so the 128-field matrix point stays linear
-// and last-write-wins holds at every width).
+// collection for wide ones).
 func lastOccurrences(fields []hc.Field) []int {
 	if len(fields) <= 24 {
 		var stack [24]int // allocation-free narrow path
@@ -146,9 +148,7 @@ func lastOccurrences(fields []hc.Field) []int {
 		seen[fields[i].Key()] = struct{}{}
 		kept = append(kept, i)
 	}
-	for i, j := 0, len(kept)-1; i < j; i, j = i+1, j-1 {
-		kept[i], kept[j] = kept[j], kept[i]
-	}
+	slices.Reverse(kept)
 	return kept
 }
 

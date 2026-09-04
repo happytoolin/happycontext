@@ -79,7 +79,7 @@ func dedupeFieldsFromBytes(keyBytes, valBytes []byte) []Field {
 		size = 1 + int(keyBytes[1])%len(dedupeKeys) // 1-8 keys
 	}
 	fields := make([]Field, 0, width)
-	for i := 0; i < width; i++ {
+	for i := range width {
 		var kb byte
 		if len(keyBytes) > 1 {
 			kb = keyBytes[1+i%(len(keyBytes)-1)]
@@ -183,19 +183,19 @@ func TestDedupeFieldsProperty(t *testing.T) {
 	rng := rand.New(rand.NewPCG(0xDEDE5eed, 0xF1E1D5E))
 	check := func(width int, size int) {
 		fields := make([]Field, 0, width)
-		for i := 0; i < width; i++ {
+		for i := range width {
 			key := dedupeKeys[rng.IntN(size)]
 			fields = append(fields, dedupeField(key, byte(rng.Uint64()), i))
 		}
 		verifyDedupeFields(t, fields)
 	}
-	for width := 0; width <= 80; width++ {
+	for width := range 81 {
 		for _, size := range []int{1, 2, 4, 8} {
 			check(width, size)
 		}
 	}
 	// random extra sweeps
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		check(rng.IntN(81), 1+rng.IntN(8))
 	}
 }

@@ -1,3 +1,6 @@
+// Package fiberv3happycontext provides the Fiber v3 happycontext
+// middleware: one canonical event per request, with errors, panics,
+// status, and route resolved from the Fiber context.
 package fiberv3happycontext
 
 import (
@@ -56,9 +59,8 @@ func Middleware(rt *hc.Runtime) fiber.Handler {
 }
 
 // statusFromFiberError extracts the HTTP status code from a Fiber error.
-// This function is duplicated from the fiber v2 middleware because the
-// context types are incompatible between fiber v2 (*fiber.Ctx) and v3 (fiber.Ctx).
-// The Error type is compatible, but the middleware signatures differ.
+// Duplicated from the fiber v2 middleware: the Error type is compatible,
+// but the context types are not.
 func statusFromFiberError(err error) int {
 	if err == nil {
 		return 0

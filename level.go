@@ -1,8 +1,8 @@
 package hc
 
 // Level is the event severity, int-backed with slog-compatible ranks.
-// The wire format is unchanged: sinks render the same names they emitted
-// in v0 (lowercase on the JSON wire, uppercase from String).
+// The wire format is unchanged: lowercase on the JSON wire, uppercase
+// from String.
 type Level int
 
 const (
@@ -38,14 +38,10 @@ func IsValidLevel(level Level) bool {
 	}
 }
 
-// levelFloor returns the more severe of auto and requested (when set);
-// the internal successor of v0's MergeLevelWithFloor.
+// levelFloor returns the more severe of auto and requested (when set).
 func levelFloor(auto Level, requested Level, hasRequested bool) Level {
 	if !hasRequested || !IsValidLevel(requested) {
 		return auto
 	}
-	if requested > auto {
-		return requested
-	}
-	return auto
+	return max(auto, requested)
 }

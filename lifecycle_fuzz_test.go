@@ -34,7 +34,6 @@ import (
 	"unicode/utf8"
 )
 
-// ---------------------------------------------------------------------------
 // Program encoding
 //
 // A program is a byte stream decoded by a cursor. The first two bytes
@@ -333,7 +332,6 @@ func progValue(vk lifeValueKind, c *progCursor) any {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Execution
 
 // lifeCapture is one captured event: the level/message the sink saw
@@ -437,7 +435,6 @@ func executeProgramOn(prog lifeProgram, op *Operation) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // The model — an independent implementation of the spec
 
 // lifeModel tracks the event the program SHOULD produce, derived only
@@ -451,7 +448,6 @@ type lifeModel struct {
 	appends []Field
 
 	msg         string
-	hasMsg      bool
 	level       Level
 	hasLevel    bool
 	errOp       bool // an hc.Error op executed while live
@@ -495,7 +491,6 @@ func buildModel(prog lifeProgram) *lifeModel {
 		case opSetMsg:
 			if msg := o.val.(string); msg != "" {
 				m.msg = msg
-				m.hasMsg = true
 			}
 		case opSetLevel:
 			if lvl := o.val.(Level); IsValidLevel(lvl) {
@@ -620,7 +615,7 @@ func (m *lifeModel) resolveLevel(outcome Outcome) Level {
 // message applies the SetMessage → config → domain-default chain (the
 // fuzz configs never set a default message).
 func (m *lifeModel) message() string {
-	if m.hasMsg {
+	if m.msg != "" {
 		return m.msg
 	}
 	if normalizeDomain(m.start) == DomainHTTP {
@@ -694,7 +689,6 @@ func (m *lifeModel) wrote(key string) bool {
 	return false
 }
 
-// ---------------------------------------------------------------------------
 // Wire comparison helpers (shared with the dedupe fuzz and property
 // tests in this package)
 
@@ -936,7 +930,6 @@ func foldLastWrites(appends []Field) []Field {
 	return out
 }
 
-// ---------------------------------------------------------------------------
 // Oracle
 
 // verifyLifecycle checks one executed program against the model. The
@@ -1022,7 +1015,6 @@ func memberFields(fields []Field) []string {
 	return out
 }
 
-// ---------------------------------------------------------------------------
 // Seed corpus and fuzz target
 
 // seedPrograms are the curated corpus streams from action plan P1,
@@ -1069,7 +1061,7 @@ func seedPrograms() []seedProg {
 	// duplicate keys at the dedupe width boundaries (keys cycle k0-k4).
 	for _, w := range []int{1, 24, 25, 32, 33, 80} {
 		ops := make([]lifeOp, 0, w+1)
-		for i := 0; i < w-1; i++ {
+		for i := range w - 1 {
 			ops = append(ops, strOp(fmt.Sprintf("k%d", i%5), fmt.Sprintf("v%d", i)))
 		}
 		ops = append(ops, strOp("k0", "last-wins"), endErr(nil))
@@ -1236,7 +1228,7 @@ func valuesEqual(a, b any) bool {
 // honest without the fuzzer.
 func TestLifecyclePropertyRandom(t *testing.T) {
 	rng := rand.New(rand.NewPCG(0x11FE5eed, 0x9A11FE5))
-	for i := 0; i < 2000; i++ {
+	for range 2000 {
 		buf := make([]byte, 2+rng.IntN(260))
 		for j := range buf {
 			buf[j] = byte(rng.Uint64())
@@ -1327,12 +1319,12 @@ func encodeProgram(prog lifeProgram) []byte {
 				break
 			}
 			err := o.val.(error)
-			switch {
-			case err == nil:
+			switch err {
+			case nil:
 				b = append(b, 0)
-			case err == context.Canceled:
+			case context.Canceled:
 				b = append(b, 2)
-			case err == context.DeadlineExceeded:
+			case context.DeadlineExceeded:
 				b = append(b, 3)
 			default:
 				msg := err.Error()

@@ -1,14 +1,12 @@
 package hc
 
-// P8 goleak integration (action plan P8): every test in this package
-// runs under goleak.VerifyTestMain, which fails the suite if any
-// goroutine is still running after the tests finish. This catches
-// leaks from panicking sinks, armed-event machinery, or any future
-// async work (e.g. a watchdog) — the lifecycle and straggler suites
-// exercise exactly the paths that would leak.
+// P8 goleak integration: every test in this package runs under
+// goleak.VerifyTestMain, failing the suite on any leaked goroutine —
+// the lifecycle and straggler suites exercise exactly the paths that
+// would leak (panicking sinks, armed events, future watchdog).
 //
-// goleak is a TEST-ONLY dependency: nothing outside _test.go imports
-// it, and the root module's production build stays dependency-free.
+// goleak is TEST-ONLY: nothing outside _test.go imports it, and the
+// root module's production build stays dependency-free.
 
 import (
 	"testing"

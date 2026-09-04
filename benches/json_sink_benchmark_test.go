@@ -22,7 +22,7 @@ func (c *recordCapture) Write(_ context.Context, rec *hc.Record) {
 func captureRecords(n int, fields int) []*hc.Record {
 	cap := &recordCapture{}
 	rt := hc.MustCompile(hc.Config{Sink: cap, SamplingRate: 1})
-	for i := 0; i < n; i++ {
+	for range n {
 		op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainHTTP, Name: "GET /api/v1/orders/:id"})
 		benchmarkFields(op.Context(), fields)
 		op.End(nil)

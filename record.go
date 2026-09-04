@@ -58,9 +58,7 @@ func (r *Record) Encoded() []byte {
 		return e.b
 	}
 	e := &encodedLine{b: r.encode()}
-	// Concurrent first callers race benignly (amendment 6): the winner's
-	// publish wins the CAS and every caller — including losers — returns
-	// the same buffer.
+	// The winner's publish wins the CAS; losers return the same buffer.
 	if !r.encoded.CompareAndSwap(nil, e) {
 		return r.encoded.Load().b
 	}
@@ -88,15 +86,12 @@ func (r *Record) encode() []byte {
 
 // Canonical-key collision policy (the logrus precedent, §5 of the T5
 // plan): a user field named "message", "time", or "level" would collide
-// with the canonical envelope members the encoder appends around the
-// fields, producing duplicate JSON keys that parsers disagree on. The
-// colliding user keys are therefore RENAMED to "fields.message",
-// "fields.time", and "fields.level" on the wire — the logrus
-// Fields.*-prefix convention. The rename happens after the event is
-// sealed, on the encoded line only: Record.Fields() and Lookup keep
-// returning the user's original key. The dedupe runs over the aliased
-// keys, so a user "message" and a user "fields.message" resolve as one
-// last-write-wins member, and the canonical envelope stays unique.
+// with the canonical envelope members, producing duplicate JSON keys
+// that parsers disagree on. The colliding user keys are RENAMED to
+// "fields.message", "fields.time", and "fields.level" on the wire only:
+// Record.Fields() and Lookup keep returning the user's original key.
+// The dedupe runs over the aliased keys, so a user "message" and a user
+// "fields.message" resolve as one last-write-wins member.
 
 var aliasKey = map[string]string{
 	"message": "fields.message",
@@ -112,7 +107,7 @@ func aliasedFieldKey(key string) string {
 }
 
 // needsFieldAliasing reports whether any field key collides with the
-// envelope (cheap scan on the sealed WAL).
+// envelope.
 func needsFieldAliasing(fields []Field) bool {
 	for _, f := range fields {
 		if _, ok := aliasKey[f.key]; ok {
@@ -140,9 +135,8 @@ const dedupeScanLimit = 24
 
 // appendDedupedFields emits each key once — its last value, at its last
 // position (amendment 3). Narrow events use the allocation-free scan;
-// wide events track seen keys in a stack array first and fall back to a
-// map only past its capacity, so allocation is tied to genuinely wide
-// (or duplicate-heavy) events rather than crossing a fixed threshold.
+// wide events track seen keys in a stack array and fall back to a map
+// past its capacity, so allocation is tied to genuinely wide events.
 func appendDedupedFields(dst []byte, fields []Field) []byte {
 	if len(fields) <= dedupeScanLimit {
 		for i := range fields {
@@ -168,7 +162,7 @@ func appendDedupedFields(dst []byte, fields []Field) []byte {
 	for i := len(fields) - 1; i >= 0; i-- {
 		key := fields[i].key
 		dup := false
-		for j := 0; j < n; j++ {
+		for j := range n {
 			if seenArr[j] == key {
 				dup = true
 				break
@@ -185,7 +179,7 @@ func appendDedupedFields(dst []byte, fields []Field) []byte {
 			n++
 		} else if seen == nil {
 			seen = make(map[string]struct{}, len(fields))
-			for j := 0; j < n; j++ {
+			for j := range n {
 				seen[seenArr[j]] = struct{}{}
 			}
 			seen[key] = struct{}{}

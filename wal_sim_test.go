@@ -1,32 +1,27 @@
 package hc
 
-// Loom-lite: exhaustive WAL interleaving simulation (dst-research §4.4,
-// action plan "Loom-lite exhaustive WAL interleaving"). The real event
-// uses atomics, a mutex, and sync.Pool — none of which can be
-// deterministically scheduled — so this harness simulates the WAL
-// protocol on a SHADOW event (plain values, no atomics) and enumerates
-// EVERY interleaving of the protocol actors with a cooperative
-// scheduler. The schedules are then REPLAYED against the real event
-// (each schedule is a deterministic sequential execution), and the
-// shadow's end state, snapshots, and message must match the real
-// event's — for every interleaving. The 60,060-schedule state space
-// from the research (6+4+3 steps) is reproduced by the scenario actor
-// shapes below (73k schedules across five scenarios, enumerable in
-// well under a second).
+// Loom-lite: exhaustive WAL interleaving simulation. The real event
+// uses atomics, a mutex, and sync.Pool — none deterministically
+// schedulable — so this harness simulates the WAL protocol on a SHADOW
+// event (plain values, no atomics) and enumerates EVERY interleaving
+// with a cooperative scheduler. Each schedule is then REPLAYED against
+// the real event and the shadow's end state, snapshots, and message
+// must match, for every interleaving (~73k schedules across five
+// scenarios).
 //
-// The one preemption-sensitive fragment in the real protocol is the
-// straggler's append: its single state load happens, then it acts.
-// Between load and act the owner may seal or recycle, so the straggler
-// steps are split (load / act) exactly at that boundary; the act
-// replays the real post-load fragment (live: direct append — the
-// documented residual; armed: lock + recheck + append).
+// The one preemption-sensitive fragment is the straggler's append: its
+// single state load happens, then it acts. Between load and act the
+// owner may seal or recycle, so the straggler steps are split
+// (load / act) exactly at that boundary; the act replays the real
+// post-load fragment (live: direct append — the documented residual;
+// armed: lock + recheck + append).
 //
 // Invariants checked at the end of every schedule:
 //
 //  1. A straggler whose load observed a sealed state or a mismatched
 //     generation never lands; live-load landings may land late (the
-//     documented nanosecond-scale residual) but always land exactly
-//     once; armed-load landings depend on the in-lock recheck.
+//     documented nanosecond-scale residual) but always exactly once;
+//     armed-load landings depend on the in-lock recheck.
 //  2. The owner's post-seal writes (appendSealed) always land.
 //  3. Snapshots are never torn: each equals the field prefix at its
 //     copy point.
@@ -36,15 +31,14 @@ package hc
 //     deadlock-free.
 //  6. Linearizability: the final fields (LWW-folded) equal an
 //     independent ordered reference map that applies every successful
-//     append at its landing point — every interleaving has a
-//     sequential equivalent.
+//     append at its landing point.
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
 
-// ---------------------------------------------------------------------------
 // Shadow event
 
 // simEvent mirrors the real event's observable protocol state: the
@@ -58,7 +52,6 @@ type simEvent struct {
 
 	fields []string // keys in landing order (reset clears)
 	msg    string
-	hasMsg bool
 }
 
 // stragglerMode is the decision a load step records for the later act.
@@ -142,7 +135,6 @@ func (s *sim) clone() *sim {
 	return &c
 }
 
-// ---------------------------------------------------------------------------
 // Shadow protocol operations (each mirrors one wal.go function; the
 // mirror mapping is annotated so a production change to the real
 // protocol must update the mirror or the replay comparison fails).
@@ -194,7 +186,6 @@ func (s *sim) simReset() {
 	s.ev.state = walLive
 	s.ev.fields = nil
 	s.ev.msg = ""
-	s.ev.hasMsg = false
 	s.landings = nil
 }
 
@@ -283,20 +274,17 @@ func (s *sim) setterAct(plan int) {
 	switch p.mode {
 	case modeSetLive:
 		s.ev.msg = p.msg
-		s.ev.hasMsg = true
 		p.landed = true
 	case modeSetArmed:
 		s.acquireMu()
 		if s.ev.gen == p.refGen && s.ev.state == walArmed {
 			s.ev.msg = p.msg
-			s.ev.hasMsg = true
 			p.landed = true
 		}
 		s.releaseMu()
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Scheduler
 
 // simStep is one preemption-free protocol step. runnable gates the
@@ -315,11 +303,6 @@ type simStep struct {
 type simActor struct {
 	name  string
 	steps []simStep
-}
-
-// step builds a step with no gating.
-func step(name string, run func(s *sim)) simStep {
-	return simStep{name: name, run: run}
 }
 
 // scheduleResult summarizes one enumeration run.
@@ -394,7 +377,6 @@ func reportScheduleResults(t *testing.T, res scheduleResult, want int) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Real-event replay
 
 // replayAndCompare runs the executed schedule against a REAL event
@@ -427,9 +409,8 @@ func replayAndCompare(t *testing.T, s *sim) {
 	if got := ev.state.Load() >> walStateBits; got != s.ev.gen {
 		t.Fatalf("real gen %d != shadow gen %d\nschedule: %s", got, s.ev.gen, scheduleLog(s))
 	}
-	if ev.msg != s.ev.msg || ev.hasMsg != s.ev.hasMsg {
-		t.Fatalf("real msg %q/%v != shadow %q/%v\nschedule: %s",
-			ev.msg, ev.hasMsg, s.ev.msg, s.ev.hasMsg, scheduleLog(s))
+	if ev.msg != s.ev.msg {
+		t.Fatalf("real msg %q != shadow %q\nschedule: %s", ev.msg, s.ev.msg, scheduleLog(s))
 	}
 	// Snapshots must match the shadow's copies.
 	if len(s.realSnapshots) != len(s.snapshots) {
@@ -466,7 +447,6 @@ func equalStrings(a, b []string) bool {
 
 func scheduleLog(s *sim) string { return strings.Join(s.log, " | ") }
 
-// ---------------------------------------------------------------------------
 // Shared schedule verification (invariants + linearizability)
 
 // verifySchedule runs the invariant checks for one completed schedule:
@@ -486,13 +466,13 @@ func verifySchedule(t *testing.T, s *sim, replay bool) {
 	for i := range s.plans {
 		p := &s.plans[i]
 		want := false
-		switch {
-		case p.mode == modeLive || p.mode == modeSetLive:
+		switch p.mode {
+		case modeLive, modeSetLive:
 			// A live load with a matching generation lands
 			// unconditionally at act — even across a seal or recycle
 			// (the documented residual).
 			want = p.loadGen == p.refGen
-		case p.mode == modeArmed || p.mode == modeSetArmed:
+		case modeArmed, modeSetArmed:
 			// An armed load lands iff the act-time recheck still sees
 			// the same generation in the armed state.
 			want = p.actGen == p.refGen && p.actState == walArmed
@@ -503,7 +483,7 @@ func verifySchedule(t *testing.T, s *sim, replay bool) {
 		}
 		if !p.landed {
 			// A dropped attempt must not appear on the wire.
-			if key := p.key; key != "" && containsKey(s.ev.fields, key) {
+			if key := p.key; key != "" && slices.Contains(s.ev.fields, key) {
 				t.Fatalf("straggler %d key %q landed despite a drop decision\nschedule: %s",
 					i, key, scheduleLog(s))
 			}
@@ -512,7 +492,7 @@ func verifySchedule(t *testing.T, s *sim, replay bool) {
 
 	// Invariant 2: the owner's post-seal writes always land.
 	for _, k := range s.postKeys {
-		if !containsKey(s.ev.fields, k) {
+		if !slices.Contains(s.ev.fields, k) {
 			t.Fatalf("owner post-seal write %q missing from %v\nschedule: %s",
 				k, s.ev.fields, scheduleLog(s))
 		}
@@ -568,47 +548,7 @@ func foldKeys(keys []string) []string {
 	return out
 }
 
-func containsKey(keys []string, k string) bool {
-	for _, x := range keys {
-		if x == k {
-			return true
-		}
-	}
-	return false
-}
-
-// ---------------------------------------------------------------------------
-// Scenario builders
-
-// sched is the per-scenario wiring.
-type sched struct {
-	actors []simActor
-	base   *sim
-	replay bool
-	want   int // expected schedule count (-1 = unconstrained by order rules)
-}
-
-// ownerActor builds the owner's step list with a shared key counter.
-func ownerActor(name string, addKeys, postKeys []string, armed bool) simActor {
-	steps := []simStep{}
-	addStep := func(n string, run func(*sim)) simStep { return simStep{name: n, run: run} }
-	if armed {
-		steps = append(steps, addStep("arm", func(s *sim) { s.simArm() }))
-	}
-	for _, k := range addKeys {
-		k := k
-		steps = append(steps, addStep("add-"+k, func(s *sim) { s.simAppend(k) }))
-	}
-	steps = append(steps, addStep("seal", func(s *sim) { s.simSeal() }))
-	for _, k := range postKeys {
-		k := k
-		steps = append(steps, addStep("post-"+k, func(s *sim) { s.simAppendSealed(k) }))
-	}
-	return simActor{name: name, steps: steps}
-}
-
-// ---------------------------------------------------------------------------
-// Scenario helpers
+// Scenario builders and helpers
 
 // genOf reads the current generation of a real event (gen units).
 func genOf(ev *event) uint64 { return ev.state.Load() >> walStateBits }
@@ -717,13 +657,11 @@ func setterSteps(name string, plan int, refGen uint64, msg string) []simStep {
 				switch p.mode {
 				case modeSetLive:
 					ev.msg = msg
-					ev.hasMsg = true
 				case modeSetArmed:
 					ev.mu.Lock()
 					if cur := ev.state.Load(); cur>>walStateBits == p.refGen &&
 						walState(cur&walStateMask) == walArmed {
 						ev.msg = msg
-						ev.hasMsg = true
 					}
 					ev.mu.Unlock()
 				}
@@ -779,7 +717,6 @@ func runScenario(t *testing.T, label string, actors []simActor, base *sim, repla
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Scenario tests
 
 // TestLoomLiteSealRace: unarmed owner sealing while two current-gen

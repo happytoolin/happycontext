@@ -254,7 +254,7 @@ func TestStragglerPoolIntegrity(t *testing.T) {
 	sink := &matrixSink{}
 	rt := MustCompile(Config{Sink: sink, SamplingRate: 1})
 	// churn a few requests so the pool recycles
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "churn"})
 		stragglerWrite(op.Context()) // pre-seal: lands (owner-equivalent)
 		op.End(nil)
@@ -332,7 +332,7 @@ func verifyPoolCleanLine(t *testing.T, lines [][]byte) bool {
 // assertions are interleaving-tolerant (each write either lands
 // pre-seal or drops post-seal; never a torn state).
 func TestStragglerArmedBurst(t *testing.T) {
-	for round := 0; round < 50; round++ {
+	for round := range 50 {
 		sink := &matrixSink{}
 		rt := MustCompile(Config{Sink: sink, SamplingRate: 1})
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "burst"})
@@ -344,7 +344,7 @@ func TestStragglerArmedBurst(t *testing.T) {
 		released, ready := false, 0
 		const stragglers = 4
 		var wg sync.WaitGroup
-		for i := 0; i < stragglers; i++ {
+		for range stragglers {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -432,7 +432,7 @@ func TestStragglerSealedErrorNoLatch(t *testing.T) {
 // seals. The assertions (single event, sane message) hold under both
 // the fixed and the reverted code; the race detector is the oracle.
 func TestArmedSetterSerialization(t *testing.T) {
-	for round := 0; round < 40; round++ {
+	for round := range 40 {
 		sink := &matrixSink{}
 		rt := MustCompile(Config{Sink: sink, SamplingRate: 1})
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "setter-race"})
@@ -442,11 +442,11 @@ func TestArmedSetterSerialization(t *testing.T) {
 		const setters = 6
 		const writes = 2000
 		var wg sync.WaitGroup
-		for i := 0; i < setters; i++ {
+		for i := range setters {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
-				for j := 0; j < writes; j++ {
+				for range writes {
 					SetMessage(ctx, fmt.Sprintf("msg-%d", i))
 					SetLevel(ctx, LevelWarn)
 				}

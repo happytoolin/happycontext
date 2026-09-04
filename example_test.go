@@ -136,7 +136,7 @@ func ExampleError() {
 		Sink:    printSink{os.Stdout},
 		Sampler: func(hc.SampleInput) bool { return false },
 	})
-	var err error = errors.New("db timeout")
+	err := errors.New("db timeout")
 	op := hc.Start(context.Background(), rt, hc.OperationStart{})
 	op.End(&err) // still emitted: error bypass is structural
 	// Output:

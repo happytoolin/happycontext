@@ -40,11 +40,11 @@ func TestMiddlewareConcurrentStatusIntegrity(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for g := 0; g < 8; g++ {
+	for g := range 8 {
 		wg.Add(1)
 		go func(g int) {
 			defer wg.Done()
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				code := []string{"201", "404", "500", ""}[(g+i)%4]
 				req := httptest.NewRequest(http.MethodGet, "/x?code="+code, nil).WithContext(context.Background())
 				rr := httptest.NewRecorder()

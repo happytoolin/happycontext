@@ -26,20 +26,15 @@ type Operation struct {
 	ev    *event
 
 	// record is the pooled Record view for this operation's single
-	// commit. The Record's lifetime (inside sink.Write) is a subset of
-	// the Operation's — only the winning End caller writes it, and only
-	// during commit — so embedding it replaces the per-commit heap
-	// allocation of &Record{...} with one that dies with the operation.
+	// commit: embedding it replaces the per-commit &Record{...}
+	// allocation with one that dies with the operation.
 	record Record
 
 	// endState is the one-shot claim word: 0 open, 1 claimed by the
-	// winning End caller, 2 published (emitted is valid). End is
-	// documented request-confined, but concurrent misuse must still be
-	// safe: exactly one caller CASes 0→1 and commits; the others wait
-	// for publication (characterized by
-	// TestConcurrentEndCharacterization). emitted stays a plain bool —
-	// it is only read after observing endState == 2, which happens-
-	// after the winner's store of 2, so the read is race-free.
+	// winning End caller, 2 published (emitted is valid). Exactly one
+	// caller CASes 0→1 and commits; the others wait for publication
+	// (characterized by TestConcurrentEndCharacterization). emitted is
+	// read only after observing 2, so the read is race-free.
 	endState atomic.Uint32
 	emitted  bool
 }
@@ -58,10 +53,8 @@ func Start(ctx context.Context, rt *Runtime, start OperationStart) *Operation {
 		ev:    ev,
 	}
 	op.ctx = context.WithValue(ctx, contextKey{}, &op.ref)
-	// Start metadata (op.domain/op.name/...) is appended lazily at End
-	// (annotatePostSeal): the live WAL carries no start fields during
-	// the request, so Add-time appends, watchdog snapshots, and
-	// straggler windows stay free of them.
+	// Start metadata is appended lazily at End (annotatePostSeal), so
+	// the live WAL carries no start fields during the request.
 	return op
 }
 
@@ -76,31 +69,22 @@ func (op *Operation) Context() context.Context {
 
 // End finalizes the operation from the deferred error pointer and panic
 // state, committing exactly one event, and returns whether an event was
-// emitted (kept by the sampler and written). It is one-shot: a second
-// call is a no-op returning the first result. If the surrounding
-// function is panicking, End records the panic, commits, and re-panics.
+// emitted. One-shot: a second call is a no-op returning the first
+// result. If the surrounding function is panicking, End records the
+// panic, commits, and re-panics.
 //
-// End MUST be deferred directly — recover() only observes a panic when
-// called by the directly-deferred function:
-//
-//	defer op.End(&err)
-//
-// The closure form (defer func() { op.End(&err) }()) compiles but
-// silently disables panic capture. Note also that a sink which panics
-// during Write replaces an in-flight original panic.
-//
-// Reentrant use is NOT supported: End must not be called again from
-// inside a sink's Write (or any code the winning End invocation runs)
-// on the same operation — the one-shot claim would wait on itself and
-// deadlock. Concurrent first calls from multiple goroutines are safe
-// (characterized by TestConcurrentEndCharacterization): exactly one
-// wins, the rest return its published result.
+// End MUST be deferred directly (defer op.End(&err)) — the closure form
+// silently disables panic capture. Reentrant use is not supported: a
+// second End from inside a sink's Write deadlocks on the one-shot
+// claim. Concurrent first calls are safe (characterized by
+// TestConcurrentEndCharacterization): exactly one wins, the rest
+// return its published result.
 func (op *Operation) End(errp *error) (emitted bool) {
 	if op == nil {
 		return false
 	}
-	// Claim the one-shot. A published state returns the cached result;
-	// a claimed state means another caller is committing — wait for it.
+	// Claim the one-shot: published returns the cached result, claimed
+	// means another caller is committing — wait for it.
 	for {
 		switch op.endState.Load() {
 		case 2:
@@ -113,9 +97,8 @@ func (op *Operation) End(errp *error) (emitted bool) {
 		runtime.Gosched()
 	}
 claimed:
-	// Publish on every exit path, including panics (a panicking sink
-	// or the re-panic below), so waiting callers can never spin on a
-	// winner that died mid-commit.
+	// Publish on every exit path, including panics, so waiting callers
+	// can never spin on a winner that died mid-commit.
 	defer func() { op.endState.Store(2) }()
 	defer func() { op.ev.release() }()
 
@@ -129,21 +112,18 @@ claimed:
 	start := op.start
 	rt := op.rt
 
-	// The owner's final writes, then SEAL before any WAL read: from here
-	// on the event is immutable, so stragglers cannot race the scan, the
-	// record handed to sinks, or the encode (amendment 20's threat model
-	// is the sink-read window, which this closes; release() re-seals
-	// idempotently before pooling).
-	code := 0
-	outcome := OutcomeSuccess
+	// The owner's final writes, then SEAL before any WAL read: from
+	// here on the event is immutable, so stragglers cannot race the
+	// scan, the record handed to sinks, or the encode (amendment 20's
+	// threat model is the sink-read window, which this closes).
 	now := time.Now() // one clock read: completion stamp + duration base
 	duration := now.Sub(ev.startedAt)
 	annotateOperationFailures(ev, &op.ref, err, recovered)
 	ev.seal()
 
 	scan := scanWAL(ev)
-	code = scan.code
-	outcome = resolveOutcomeV2(err, recovered, code, scan.outcome)
+	code := scan.code
+	outcome := resolveOutcomeV2(err, recovered, code, scan.outcome)
 	annotatePostSeal(ev, &op.ref, start, duration, normalizeDomain(start.Domain) == DomainHTTP, scan, outcome)
 
 	emitted = op.commit(ev, rt, start, outcome, code, duration, now, err, recovered != nil, scan)
@@ -158,10 +138,9 @@ claimed:
 // walScan is the single backward walk over the sealed WAL collecting
 // everything End needs: explicit outcome, HTTP status, the sampler
 // scalars (first — i.e. last-written — values win), and whether the
-// request wrote any of the start-metadata keys itself (lazy start
-// fields must not clobber a user write that already overrode them —
-// the old wire let the user's later append win the LWW fold, and
-// suppressing the canonical append reproduces that exactly).
+// request wrote any start-metadata key itself (lazy start fields must
+// not clobber a user override — suppressing the canonical append
+// reproduces the old LWW fold exactly).
 type walScan struct {
 	outcome    Outcome
 	hasOutcome bool
@@ -238,11 +217,11 @@ func (op *Operation) commit(ev *event, rt *Runtime, start OperationStart, outcom
 
 	in := buildSampleInput(ev, start, outcome, code, duration, level, err, panicked, scan)
 
-	// The keep-everything fast path (rate == 1.0 and no sampler, level
-	// rates, or policies): every healthy event is kept, so the sampling
-	// gate below is skipped entirely. Error/panic events never entered
-	// the gate (amendment 4 bypass), so the flag only short-circuits
-	// the healthy branch.
+	// The keep-everything fast path (rate == 1.0, no sampler, no level
+	// rates, no policies): healthy events can never be dropped, so the
+	// gate is skipped entirely. Error/panic events bypass the gate
+	// structurally (amendment 4), so the flag only short-circuits the
+	// healthy branch.
 	if !rt.alwaysKeep {
 		if !in.HasError {
 			if rt.sampler != nil {
@@ -256,11 +235,9 @@ func (op *Operation) commit(ev *event, rt *Runtime, start OperationStart, outcom
 	}
 
 	msg := resolveEventMessage(rt.message, start.Domain, ev.msg)
-	// Pooled record: op.record is owned by this commit (see the field
-	// comment on Operation). Reset the lazy-encode cache — the record
-	// is embedded, so a stale atomic pointer from a previous generation
-	// would otherwise keep an old line alive and, if the operation were
-	// ever committed again, serve stale bytes.
+	// Reset the lazy-encode cache: the record is embedded, so a stale
+	// atomic pointer from a previous generation would otherwise serve
+	// old bytes if the operation were ever committed again.
 	rec := &op.record
 	rec.level = level
 	rec.msg = msg
@@ -283,14 +260,12 @@ func shouldWriteHealthy(rt *Runtime, policy OperationPolicy, in SampleInput) boo
 	return shouldSample(rate)
 }
 
-// applyOperationStartFields appends the normalized start metadata.
-// These are lazy: Start leaves them out of the live WAL; End writes
-// them post-seal (via annotatePostSeal) so the record carries them in
-// the canonical start-metadata → completion order without the request
-// paying for them while it runs. A key the request already wrote is
-// skipped — its later position would otherwise flip the last-write-wins
-// fold and clobber the user's override (the v0-parity route-name
-// contract in the HTTP integrations depends on this).
+// applyOperationStartFields appends the normalized start metadata,
+// lazily: End writes it post-seal so the record keeps the canonical
+// start-metadata → completion order without the request paying for it
+// while it runs. A key the request already wrote is skipped — appending
+// later would flip the LWW fold and clobber the user's override (the
+// route-name contract in the HTTP integrations depends on this).
 func applyOperationStartFields(ev *event, ref *walRef, start OperationStart, scan walScan) {
 	gen := ref.gen
 	if !scan.hasDomain {
@@ -324,19 +299,14 @@ func annotateOperationFailures(ev *event, ref *walRef, err error, recovered any)
 	}
 }
 
-// annotatePostSeal appends the completion fields after sealing. The
-// writes belong to the owner (the request goroutine) and cannot race
-// stragglers: everything else is already sealed off.
+// annotatePostSeal appends the completion fields after sealing; the
+// owner's post-seal writes cannot race stragglers. Start metadata
+// joins first, keeping the wire's start-metadata → completion order
+// with only the WAL position of the start fields moved.
 //
-// The start metadata joins here too (lazy start fields) — before the
-// completion fields, so the record's insertion order stays
-// start-metadata → completion. The wire field set is unchanged; only
-// the WAL position of the start metadata moves from request start to
-// commit.
-//
-// Canonical fields: HTTP operations carry http.status (op.code is
-// non-HTTP only, from the explicit op.code field); non-HTTP operations
-// surface their explicit op.code here (ledger: canonical fields).
+// Canonical fields: HTTP operations carry http.status; non-HTTP
+// operations surface their explicit op.code here (ledger: canonical
+// fields).
 func annotatePostSeal(ev *event, ref *walRef, start OperationStart, duration time.Duration, isHTTP bool, scan walScan, outcome Outcome) {
 	gen := ref.gen
 	applyOperationStartFields(ev, ref, start, scan)
@@ -386,9 +356,6 @@ func buildSampleInput(ev *event, start OperationStart, outcome Outcome, code int
 		Level:      level,
 		HasError:   hasError,
 		ev:         ev,
-	}
-	if scan.hasCode {
-		in.StatusCode = scan.code
 	}
 	return in
 }

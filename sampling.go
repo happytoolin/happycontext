@@ -37,7 +37,7 @@ func (in SampleInput) Lookup(key string) (any, bool) {
 }
 
 // Fields returns a read-only view of the request's fields in insertion
-// order — the v0 EventFields iteration capability, restored (amendment 8).
+// order (amendment 8).
 func (in SampleInput) Fields() []Field {
 	if in.ev == nil {
 		return nil
@@ -92,9 +92,7 @@ func KeepErrors() SamplerMiddleware {
 //
 // Negative durations are treated as zero.
 func KeepSlowerThan(minDuration time.Duration) SamplerMiddleware {
-	if minDuration < 0 {
-		minDuration = 0
-	}
+	minDuration = max(minDuration, 0)
 	return func(next Sampler) Sampler {
 		return func(in SampleInput) bool {
 			return in.Duration >= minDuration || next(in)

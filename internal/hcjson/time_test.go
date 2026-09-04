@@ -83,11 +83,11 @@ func TestAppendTimeRFC3339Cached(t *testing.T) {
 func TestAppendTimeRFC3339CachedConcurrent(t *testing.T) {
 	base := time.Now().Truncate(time.Second)
 	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < 1000; j++ {
+			for j := range 1000 {
 				tt := base.Add(time.Duration(j%1000) * time.Millisecond)
 				got := string(AppendTimeRFC3339(nil, tt))
 				want := `"` + tt.Format(time.RFC3339) + `"`

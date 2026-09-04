@@ -108,19 +108,19 @@ func TestWALArmingProtocol(t *testing.T) {
 	wg.Add(3)
 	go func() { // watchdog-style snapshots
 		defer wg.Done()
-		for i := 0; i < 2000; i++ {
+		for range 2000 {
 			_ = ev.snapshotFields()
 		}
 	}()
 	go func() { // guarded appends
 		defer wg.Done()
-		for i := 0; i < 2000; i++ {
+		for i := range 2000 {
 			ev.append(ref.gen, fieldOf("guarded", i))
 		}
 	}()
 	go func() { // stragglers with stale generations
 		defer wg.Done()
-		for i := 0; i < 2000; i++ {
+		for i := range 2000 {
 			ev.append(ref.gen+7, fieldOf("stale", i))
 		}
 	}()
@@ -160,7 +160,7 @@ func TestWALSetters(t *testing.T) {
 	}
 
 	ev.setMessage(ref, "custom")
-	if !ev.hasMsg || ev.msg != "custom" {
+	if ev.msg != "custom" {
 		t.Error("message not set")
 	}
 	ev.setMessage(ref, "") // empty is unset
@@ -272,8 +272,8 @@ func TestWALStaleSettersAfterReset(t *testing.T) {
 	ev.setMessage(owner, "own")
 	ev.setLevel(owner, LevelWarn)
 	ev.setError(owner, errors.New("own error"))
-	if !ev.hasMsg || ev.msg != "own" {
-		t.Fatalf("owner setMessage lost: msg=%q hasMsg=%v", ev.msg, ev.hasMsg)
+	if ev.msg != "own" {
+		t.Fatalf("owner setMessage lost: msg=%q", ev.msg)
 	}
 	if !ev.hasRequestedLvl || ev.requestedLevel != LevelWarn {
 		t.Fatalf("owner setLevel lost: level=%v has=%v", ev.requestedLevel, ev.hasRequestedLvl)
@@ -294,8 +294,8 @@ func TestWALStaleSettersAfterReset(t *testing.T) {
 	ev.setMessage(stale, "!BUG stale message")
 	ev.setLevel(stale, LevelError)
 	ev.setError(stale, errors.New("!BUG stale error"))
-	if ev.hasMsg || ev.msg != "" {
-		t.Fatalf("stale setMessage landed on the reset event: msg=%q hasMsg=%v", ev.msg, ev.hasMsg)
+	if ev.msg != "" {
+		t.Fatalf("stale setMessage landed on the reset event: msg=%q", ev.msg)
 	}
 	if ev.hasRequestedLvl || ev.requestedLevel != 0 {
 		t.Fatalf("stale setLevel landed on the reset event: level=%v has=%v", ev.requestedLevel, ev.hasRequestedLvl)
@@ -314,8 +314,8 @@ func TestWALStaleSettersAfterReset(t *testing.T) {
 	fresh := &walRef{ev: ev, gen: freshGen}
 	ev.setMessage(fresh, "new-owner")
 	ev.setLevel(fresh, LevelDebug)
-	if !ev.hasMsg || ev.msg != "new-owner" {
-		t.Fatalf("fresh setMessage lost: msg=%q hasMsg=%v", ev.msg, ev.hasMsg)
+	if ev.msg != "new-owner" {
+		t.Fatalf("fresh setMessage lost: msg=%q", ev.msg)
 	}
 	if !ev.hasRequestedLvl || ev.requestedLevel != LevelDebug {
 		t.Fatalf("fresh setLevel lost: level=%v has=%v", ev.requestedLevel, ev.hasRequestedLvl)
@@ -406,14 +406,14 @@ func TestStragglerSettersAfterRecycle(t *testing.T) {
 func TestSealDuringArmedAppend(t *testing.T) {
 	rt := MustCompile(Config{Sink: NewTestSink(), SamplingRate: 1})
 	var wg sync.WaitGroup
-	for round := 0; round < 200; round++ {
+	for range 200 {
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "r"})
 		ctx := op.Context()
 		op.ev.arm() // arm BEFORE End to force the guarded path
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i := 0; i < 50; i++ {
+			for i := range 50 {
 				Add(ctx, "armed", i)
 			}
 		}()
@@ -511,7 +511,7 @@ func TestStragglerStartLine(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		enter()
-		for i := 0; i < rounds; i++ {
+		for i := range rounds {
 			op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "churn"})
 			Add(op.Context(), "owner", i)
 			op.End(nil)
@@ -520,11 +520,11 @@ func TestStragglerStartLine(t *testing.T) {
 
 	// Stragglers: replay the full stale-write vocabulary against the
 	// recycled event, released at the same instant as the owner.
-	for s := 0; s < stragglers; s++ {
+	for s := range stragglers {
 		go func(s int) {
 			defer wg.Done()
 			enter()
-			for i := 0; i < rounds; i++ {
+			for i := range rounds {
 				key := fmt.Sprintf("!BUG-straggler-%d", s)
 				Add(stale, key, i)
 				if i%3 == 0 {
@@ -562,7 +562,7 @@ func TestStragglerStartLine(t *testing.T) {
 		}
 	}
 	for i, ev := range events {
-		for s := 0; s < stragglers; s++ {
+		for s := range stragglers {
 			if _, ok := ev.Lookup(fmt.Sprintf("!BUG-straggler-%d", s)); ok {
 				t.Fatalf("event %d contains a straggler write — stale context "+
 					"mutated a sealed/recycled event (amendment 20)", i)
