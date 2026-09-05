@@ -70,7 +70,8 @@ func (op *Operation) Context() context.Context {
 // End finalizes the operation from the deferred error pointer and panic
 // state, committing exactly one event, and returns whether an event was
 // emitted. One-shot: a second call is a no-op returning the first
-// result. If the surrounding function is panicking, End records the
+// result (false, by definition, if the first call crashed mid-commit —
+// a panic in the sampler or a sink never publishes an emission). If the surrounding function is panicking, End records the
 // panic, commits, and re-panics.
 //
 // End MUST be deferred directly (defer op.End(&err)) — the closure form
