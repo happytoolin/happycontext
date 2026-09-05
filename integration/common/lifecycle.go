@@ -32,7 +32,8 @@ func StartRequest(baseCtx context.Context, rt *hc.Runtime, method, path string) 
 // the canonical panic field, an error field carrying "panic: …", and
 // an explicit op.outcome=panic (End is called with a nil error so the
 // explicit outcome wins). The resulting wire fields are identical to
-// End's own panic handling.
+// End's own panic handling. The non-panic error path needs no explicit
+// hc.Error: End(&err) records it.
 func FinalizeRequest(op *hc.Operation, route string, statusCode int, err error, recovered any) {
 	if op == nil {
 		return
@@ -58,7 +59,10 @@ func FinalizeRequest(op *hc.Operation, route string, statusCode int, err error, 
 		return
 	}
 	if err != nil {
-		hc.Error(op.Context(), err)
+		// No explicit hc.Error here: End(&err) writes the canonical
+		// error field itself (annotateOperationFailures). The v0 map
+		// folded a double write invisibly; the append-only WAL would
+		// keep both entries in Fields().
 	}
 	_ = op.End(&err)
 }

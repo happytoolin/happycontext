@@ -31,7 +31,7 @@ jobs:
           branch: v2
 
       - name: Checkout
-        if: ${{ steps.release.outputs.releases_created == 'true' }}
+        if: ${{ steps.release.outputs.release_created == 'true' }}
         uses: actions/checkout@v6.0.2
 
       - name: Configure git
@@ -47,6 +47,10 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
         run: |
           set -euo pipefail
+          if [[ -z "${RELEASE_TAG}" ]]; then
+            echo "release_created is true but tag_name is empty" >&2
+            exit 1
+          fi
 
           ./scripts/sync-lockstep-release.sh "$RELEASE_TAG"
 
@@ -55,18 +59,8 @@ jobs:
             exit 0
           fi
 
-          git add \
-            adapter/slog/go.mod \
-            adapter/zap/go.mod \
-            adapter/zerolog/go.mod \
-            integration/echo/go.mod \
-            integration/fiber/go.mod \
-            integration/fiberv3/go.mod \
-            integration/gin/go.mod \
-            integration/std/go.mod \
-            integration/worker/go.mod \
-            benches/go.mod \
-            cmd/examples/go.mod
+          # Same discovery list as scripts/lockstep-modules.sh
+          git add $(git ls-files 'adapter/*/go.mod' 'integration/*/go.mod' 'benches/go.mod' 'cmd/examples/go.mod')
 
           git commit -m "chore: sync lockstep modules for ${RELEASE_TAG}"
           git push origin HEAD:v2
@@ -79,15 +73,23 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
         run: |
           set -euo pipefail
+          if [[ -z "${RELEASE_TAG}" ]]; then
+            echo "release_created is true but tag_name is empty" >&2
+            exit 1
+          fi
           ./scripts/publish-lockstep-release.sh --push --github-releases "$RELEASE_TAG"
 
       - name: Refresh Go module indexes
-        if: ${{ steps.release.outputs.releases_created == 'true' }}
+        if: ${{ steps.release.outputs.release_created == 'true' }}
         shell: bash
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
         run: |
           set -euo pipefail
+          if [[ -z "${RELEASE_TAG}" ]]; then
+            echo "release_created is true but tag_name is empty" >&2
+            exit 1
+          fi
 
           refresh_module() {
             local module_path="$1"

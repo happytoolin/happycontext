@@ -310,8 +310,14 @@ func TestSinkCustomizedFieldNamesFallsBackToTypedPath(t *testing.T) {
 	if payload["msg"] != rec.Message() {
 		t.Fatalf("msg = %v, want the customized message member", payload["msg"])
 	}
+	if _, ok := payload["ts"]; !ok {
+		t.Fatalf("ts missing: customized TimestampFieldName was ignored: %v", payload)
+	}
 	if _, ok := payload["level"]; ok {
 		t.Fatalf("canonical %q member leaked onto a customized pipeline: %v", "level", payload)
+	}
+	if _, ok := payload["time"]; ok {
+		t.Fatalf("canonical %q member leaked onto a customized pipeline: %v", "time", payload)
 	}
 	if _, ok := payload["message"]; ok {
 		t.Fatalf("canonical %q member leaked onto a customized pipeline: %v", "message", payload)
@@ -345,6 +351,36 @@ func TestSinkTypedPathStampsRecordCompletionTime(t *testing.T) {
 	// RFC3339 seconds precision, so compare at that granularity.
 	if want := rec.Time().Truncate(time.Second); !got.Equal(want) {
 		t.Fatalf("typed path stamped %v, want the record's completion time %v", got, want)
+	}
+}
+
+// TestSinkTypedPathAliasesEnvelopeKeys pins Encoded() parity on the
+// typed path: user keys that collide with the envelope are renamed to
+// fields.* so encoding/json last-wins cannot drop them.
+func TestSinkTypedPathAliasesEnvelopeKeys(t *testing.T) {
+	rec := bridgeRecord(t, func(ctx context.Context) {
+		hc.Add(ctx, "time", "user-time", "message", "user-msg", "level", "user-level")
+	})
+
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf).With().Str("svc", "payments").Logger()
+	New(&logger).Write(context.Background(), rec)
+
+	payload := lastPayload(t, &buf)
+	if payload["fields.time"] != "user-time" {
+		t.Fatalf("fields.time = %v, user time was dropped or not aliased", payload["fields.time"])
+	}
+	if payload["fields.message"] != "user-msg" {
+		t.Fatalf("fields.message = %v", payload["fields.message"])
+	}
+	if payload["fields.level"] != "user-level" {
+		t.Fatalf("fields.level = %v", payload["fields.level"])
+	}
+	if _, ok := payload["time"].(string); !ok {
+		t.Fatalf("envelope time missing: %v", payload["time"])
+	}
+	if payload["message"] != rec.Message() {
+		t.Fatalf("envelope message = %v", payload["message"])
 	}
 }
 
@@ -396,3 +432,41 @@ func (w lockedWriter) Write(p []byte) (int, error) {
 type errBoom struct{}
 
 func (errBoom) Error() string { return "boom" }
+
+// TestSinkTimestampHookDoesNotDuplicateTime pins the .With().Timestamp()
+// logger shape — the README's recommended zerolog setup. The hook would
+// stamp a second "time" member onto the typed path (zerolog's own NOTE:
+// "It won't dedupe the time key"), and did before detection was added.
+func TestSinkTimestampHookDoesNotDuplicateTime(t *testing.T) {
+	rec := bridgeRecord(t, func(ctx context.Context) {
+		hc.Add(ctx, "k", "v")
+	})
+
+	t.Run("fast path serves the canonical line", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := zerolog.New(&buf).With().Timestamp().Logger()
+		New(&logger).Write(context.Background(), rec)
+		line := bytes.TrimRight(buf.Bytes(), "\n")
+		if n := bytes.Count(line, []byte(`"time":`)); n != 1 {
+			t.Fatalf("time members = %d, want 1: %s", n, line)
+		}
+		if want := bytes.TrimRight(rec.Encoded(), "\n"); !bytes.Equal(line, want) {
+			t.Fatalf("line = %s, want the canonical Encoded() bytes", line)
+		}
+	})
+
+	t.Run("typed path lets the hook stamp once", func(t *testing.T) {
+		var buf bytes.Buffer
+		// Context fields force the typed path while keeping the hook.
+		logger := zerolog.New(&buf).With().Timestamp().Str("svc", "payments").Logger()
+		New(&logger).Write(context.Background(), rec)
+		line := bytes.TrimRight(buf.Bytes(), "\n")
+		if n := bytes.Count(line, []byte(`"time":`)); n != 1 {
+			t.Fatalf("time members = %d, want 1: %s", n, line)
+		}
+		payload := lastPayload(t, &buf)
+		if payload["svc"] != "payments" {
+			t.Fatalf("context field missing: %v", payload["svc"])
+		}
+	})
+}

@@ -34,8 +34,8 @@ func New(l *zerolog.Logger) *Sink {
 // the view is only consulted for the fast-path decision — every other
 // path goes through zerolog's public API.
 //
-// The layout is identical in zerolog v1.34.0 (pinned) and v1.35.1 (MVS
-// in benches); only the first six fields are read.
+// The layout is identical in zerolog v1.34.0 and v1.35.1 (both pinned
+// to v1.35.1 here and in benches); only the first six fields are read.
 type loggerView struct {
 	w       zerolog.LevelWriter
 	level   zerolog.Level
@@ -57,14 +57,59 @@ func checkLoggerLayout() {
 }
 
 // plain reports whether the logger is the zerolog.New(w) shape (at most
-// a level filter): no contextual fields, hooks, sampler, or caller-stack
-// state. Such loggers add nothing around the record, so rec.Encoded()
-// is byte-for-byte the event they should emit; loggers built with
-// With()/Hook()/Sample() augment every event and take the typed path.
-// The view is re-read on every Write, so mutating *z.logger between
-// writes is observed.
+// a level filter): no contextual fields, non-timestamp hooks, sampler,
+// or caller-stack state. Such loggers add nothing around the record, so
+// rec.Encoded() is byte-for-byte the event they should emit; loggers
+// built with With()/Hook()/Sample() augment every event and take the
+// typed path. The view is re-read on every Write, so mutating
+// *z.logger between writes is observed.
+//
+// A logger whose only augmentation is the Timestamp() hook counts as
+// plain: the canonical line already carries the timestamp those hooks
+// stamp, and the fast path bypasses hooks entirely, so serving it is
+// the duplicate-free rendering of that shape.
 func (v *loggerView) plain() bool {
-	return v.w != nil && v.sampler == nil && len(v.context) <= 1 && len(v.hooks) == 0 && !v.stack
+	return v.w != nil && v.sampler == nil && len(v.context) <= 1 && onlyTimestampHooks(v.hooks) && !v.stack
+}
+
+// timestampHookSample is zerolog's unexported Timestamp() hook
+// (context.go: type timestampHook struct{}), captured through the
+// public API: a probe logger's hook slice, read via loggerView, holds
+// the singleton zerolog installs for every .With().Timestamp().
+// Interface comparison then detects it the way zerolog's own slog
+// bridge detects it internally (hasTimestampHook). A nil probe (layout
+// drift) conservatively disables both detection paths.
+var timestampHookSample = func() (hook zerolog.Hook) {
+	l := zerolog.New(nil).With().Timestamp().Logger()
+	view := (*loggerView)(unsafe.Pointer(&l))
+	if len(view.hooks) > 0 {
+		hook = view.hooks[0]
+	}
+	return hook
+}()
+
+// onlyTimestampHooks reports whether every hook is the Timestamp()
+// hook (or the slice is empty).
+func onlyTimestampHooks(hooks []zerolog.Hook) bool {
+	for _, h := range hooks {
+		if timestampHookSample == nil || h != timestampHookSample {
+			return false
+		}
+	}
+	return true
+}
+
+// hasTimestampHook reports whether any hook is the Timestamp() hook.
+func hasTimestampHook(hooks []zerolog.Hook) bool {
+	if timestampHookSample == nil {
+		return false
+	}
+	for _, h := range hooks {
+		if h == timestampHookSample {
+			return true
+		}
+	}
+	return false
 }
 
 // enabled mirrors zerolog's own gate (Logger.should) for a plain
@@ -97,8 +142,7 @@ func defaultFieldNames() bool {
 // zerolog.ErrorHandler; custom member-name globals and augmented
 // loggers are rejected (defaultFieldNames, plain) and take the typed
 // path.
-func (z *Sink) writeEncoded(rec *hc.Record) bool {
-	view := (*loggerView)(unsafe.Pointer(z.logger))
+func (z *Sink) writeEncoded(view *loggerView, rec *hc.Record) bool {
 	if !view.plain() || !view.enabled(rec.Level()) || !defaultFieldNames() {
 		return false
 	}
@@ -121,7 +165,8 @@ func (z *Sink) Write(ctx context.Context, rec *hc.Record) {
 	if z == nil || z.logger == nil || rec == nil {
 		return
 	}
-	if z.writeEncoded(rec) {
+	view := (*loggerView)(unsafe.Pointer(z.logger))
+	if z.writeEncoded(view, rec) {
 		return
 	}
 
@@ -136,8 +181,15 @@ func (z *Sink) Write(ctx context.Context, rec *hc.Record) {
 	}
 	// Stamp the record's own completion time (rec.Time) rather than a
 	// fresh write-time read, so the typed path stays symmetric with
-	// the fast path and the canonical line.
-	event.Time("time", rec.Time())
+	// the fast path and the canonical line. Use the live global so
+	// customized TimestampFieldName is honored (the fast path already
+	// refused to run when the globals are not the defaults). Skip the
+	// stamp when the logger stamps time itself (.With().Timestamp()):
+	// the hook fires at Msg and would duplicate the member — the same
+	// guard zerolog's own slog bridge applies.
+	if !hasTimestampHook(view.hooks) {
+		event.Time(zerolog.TimestampFieldName, rec.Time())
+	}
 	event.Msg(rec.Message())
 }
 
@@ -175,7 +227,8 @@ func zlvlFor(level hc.Level) zerolog.Level {
 // float milliseconds via zerolog defaults, time → RFC3339 string),
 // with RawJSON appending pre-encoded bytes verbatim.
 func appendField(event *zerolog.Event, f hc.Field) *zerolog.Event {
-	key := f.Key()
+	// WireKey matches Encoded(): colliding envelope keys become fields.*.
+	key := f.WireKey()
 	if str, ok := f.Str(); ok {
 		return event.Str(key, str)
 	}
@@ -220,7 +273,7 @@ func lastOccurrences(fields []hc.Field) []int {
 		for i := range fields {
 			last := true
 			for j := i + 1; j < len(fields); j++ {
-				if fields[j].Key() == fields[i].Key() {
+				if fields[j].WireKey() == fields[i].WireKey() {
 					last = false
 					break
 				}
@@ -235,10 +288,10 @@ func lastOccurrences(fields []hc.Field) []int {
 	seen := make(map[string]struct{}, len(fields)*2)
 	kept := make([]int, 0, len(fields))
 	for i := len(fields) - 1; i >= 0; i-- {
-		if _, dup := seen[fields[i].Key()]; dup {
+		if _, dup := seen[fields[i].WireKey()]; dup {
 			continue
 		}
-		seen[fields[i].Key()] = struct{}{}
+		seen[fields[i].WireKey()] = struct{}{}
 		kept = append(kept, i)
 	}
 	slices.Reverse(kept)

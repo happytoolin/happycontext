@@ -51,7 +51,7 @@ panic capture.
 | v0 | v1 |
 |---|---|
 | `hc.Add(ctx, k, v)` returning `bool` | same call, returns nothing (silent no-op without an event — the `slog` helper idiom) |
-| `hc.EventFields(e)` / `EventMessage` / `EventHasMessage` / `EventHasError` / `EventStartTime` | gone; sinks receive `*hc.Record` (`Fields()`, `Lookup`, `Message()`, `Level()`); samplers receive `SampleInput.Fields()`/`Lookup` |
+| `hc.EventFields(e)` / `EventMessage` / `EventHasMessage` / `EventHasError` / `EventStartTime` | gone; sinks receive `*hc.Record` (`Fields()`, `Lookup`, `Message()`, `Level()`); samplers receive `SampleInput.Fields()`/`Lookup`. HTTP `SampleInput.Operation` is the last-write `op.name` (the route template), not the Start name `"request"`. |
 | `hc.NewContext(ctx)` / `hc.FromContext(ctx)` | gone (internal) |
 | `hc.AddRaw(ctx, k, raw)` | `hc.AddRawJSON(ctx, k, raw)` |
 | — | `hc.SetLevel(ctx, level)` unchanged in shape; `GetLevel` removed |

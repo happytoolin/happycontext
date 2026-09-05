@@ -153,6 +153,7 @@ type walScan struct {
 
 	hasDomain      bool // user wrote op.domain/op.name/... (any kind)
 	hasName        bool
+	name           string // last-write op.name (string), if any
 	hasID          bool
 	hasSource      bool
 	hasAttempt     bool
@@ -193,6 +194,9 @@ func scanWAL(ev *event) walScan {
 			s.hasDomain = true
 		case "op.name":
 			s.hasName = true
+			if s.name == "" && f.kind == KindString {
+				s.name = f.str
+			}
 		case "op.id":
 			s.hasID = true
 		case "op.source":
@@ -344,9 +348,13 @@ func resolveOutcomeV2(err error, recovered any, code int, explicit Outcome) Outc
 
 func buildSampleInput(ev *event, start OperationStart, outcome Outcome, code int, duration time.Duration, level Level, err error, panicked bool, scan walScan) SampleInput {
 	hasError := err != nil || panicked || ev.hasErr || outcome != OutcomeSuccess
+	opName := start.Name
+	if scan.name != "" {
+		opName = scan.name
+	}
 	in := SampleInput{
 		Domain:     normalizeDomain(start.Domain),
-		Operation:  start.Name,
+		Operation:  opName,
 		Outcome:    outcome,
 		Code:       code,
 		StatusCode: code,

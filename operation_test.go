@@ -297,6 +297,30 @@ func TestErrorsBypassSampling(t *testing.T) {
 	}
 }
 
+// TestSampleInputUsesWALOpName pins v0 HTTP parity: a last-write
+// op.name on the WAL (the route template) is what Sampler sees as
+// Operation, not the original Start name ("request").
+func TestSampleInputUsesWALOpName(t *testing.T) {
+	var got string
+	rt, ts := testRT(t, func(c *Config) {
+		c.Sampler = func(in SampleInput) bool {
+			got = in.Operation
+			return true
+		}
+	})
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
+	Add(op.Context(), "op.name", "GET /orders/{id}")
+	if !op.End(nil) {
+		t.Fatal("event dropped")
+	}
+	if got != "GET /orders/{id}" {
+		t.Fatalf("SampleInput.Operation = %q, want the WAL op.name", got)
+	}
+	if v, ok := ts.Events()[0].Lookup("op.name"); !ok || v != "GET /orders/{id}" {
+		t.Fatalf("wire op.name = %v", v)
+	}
+}
+
 // TestNonHTTPOpCode pins the canonical-field rule: op.code is non-HTTP
 // only, surfaced from the explicit op.code field the caller wrote.
 func TestNonHTTPOpCode(t *testing.T) {

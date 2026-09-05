@@ -578,10 +578,8 @@ func TestJSONSinkEscapesAndUnicode(t *testing.T) {
 }
 
 func TestJSONSinkConcurrency(t *testing.T) {
-	var mu sync.Mutex
 	var buf bytes.Buffer
-	w := lockedTestWriter{mu: &mu, buf: &buf}
-	sink := NewJSONSink(w)
+	sink := NewJSONSink(&buf)
 	var wg sync.WaitGroup
 	for g := range 8 {
 		wg.Add(1)
@@ -594,8 +592,6 @@ func TestJSONSinkConcurrency(t *testing.T) {
 		}(g)
 	}
 	wg.Wait()
-	mu.Lock()
-	defer mu.Unlock()
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	if len(lines) != 800 {
 		t.Fatalf("lines = %d", len(lines))
@@ -612,17 +608,6 @@ func TestJSONSinkNilSafety(t *testing.T) {
 	var sink *JSONSink
 	sink.Write(context.Background(), recOf(LevelInfo, "m")) // no panic
 	NewJSONSink(nil).Write(context.Background(), recOf(LevelInfo, "m"))
-}
-
-type lockedTestWriter struct {
-	mu  *sync.Mutex
-	buf *bytes.Buffer
-}
-
-func (w lockedTestWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.buf.Write(p)
 }
 
 func TestTestSinkCapture(t *testing.T) {

@@ -19,8 +19,12 @@ branch is `v2` (§9 amendment); release-please runs on v2 pushes only.
 - THEN the merge halts until the manifest and commit history reconcile
 
 ### Requirement: Lockstep module tags
-Every root release SHALL tag all nested modules at the same version via
-the lockstep scripts, with branch-local `replace` directives removed.
+Every root release SHALL tag all nested `adapter/*` and `integration/*`
+modules at the same version via the lockstep scripts. Sync, `git add`,
+and publish SHALL share one discovery list (`git ls-files` globs).
+Branch-local `replace` directives stay in the repository so CI can
+test against the local root; GOPROXY consumers ignore `replace` and
+resolve the updated `require` line.
 
 #### Scenario: Nested module discovery
 - GIVEN the v1.0.0 release completed

@@ -21,13 +21,12 @@ func TestRouterGinMiddleware(t *testing.T) {
 	sink := sloghc.New(logger)
 
 	r := gin.New()
-	r.Use(ginhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	r.Use(ginhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
 	r.GET("/users/:id", func(c *gin.Context) {
 		ctx := c.Request.Context()
 		id := c.Param("id")
 
 		hc.Add(ctx, "router", "gin")
-		hc.Add(ctx, "event_attached", hc.FromContext(ctx) != nil)
 		hc.Add(
 			ctx,
 			"user", map[string]any{
@@ -43,9 +42,7 @@ func TestRouterGinMiddleware(t *testing.T) {
 
 		if c.Query("debug") == "1" {
 			hc.SetLevel(ctx, hc.LevelDebug)
-		}
-		if level, ok := hc.GetLevel(ctx); ok {
-			hc.Add(ctx, "requested_level", level)
+			hc.Add(ctx, "requested_level", hc.LevelDebug)
 		}
 		if c.Query("fail") == "1" {
 			hc.Error(ctx, errors.New("demo failure"))

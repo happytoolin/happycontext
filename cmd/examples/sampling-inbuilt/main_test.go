@@ -19,7 +19,7 @@ func TestSamplingInbuiltMiddleware(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 	sink := sloghc.New(logger)
 
-	mw := stdhc.Middleware(hc.Config{
+	mw := stdhc.Middleware(hc.MustCompile(hc.Config{
 		Sink: sink,
 		Sampler: hc.ChainSampler(
 			hc.RateSampler(0.05),
@@ -27,7 +27,7 @@ func TestSamplingInbuiltMiddleware(t *testing.T) {
 			hc.KeepPathPrefix("/users/vip"),
 			hc.KeepSlowerThan(250*time.Millisecond),
 		),
-	})
+	}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {

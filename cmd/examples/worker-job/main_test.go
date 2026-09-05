@@ -17,10 +17,10 @@ func TestWorkerJobExecution(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 	sink := sloghc.New(logger)
-	cfg := hc.Config{
+	rt := hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}
+	})
 
 	meta := workerhc.JobMeta{
 		Name:        "billing.reconcile",
@@ -33,7 +33,7 @@ func TestWorkerJobExecution(t *testing.T) {
 
 	t.Run("successful job execution", func(t *testing.T) {
 		buf.Reset()
-		err := runJob(context.Background(), cfg, meta)
+		err := runJob(context.Background(), rt, meta)
 		if err != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
@@ -61,7 +61,7 @@ func TestWorkerJobExecution(t *testing.T) {
 			ScheduledAt: time.Now().UTC(),
 		}
 
-		err := runJob(context.Background(), cfg, customMeta)
+		err := runJob(context.Background(), rt, customMeta)
 		if err != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
@@ -101,15 +101,15 @@ func TestWorkerJobMetaValidation(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 	sink := sloghc.New(logger)
-	cfg := hc.Config{
+	rt := hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}
+	})
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf.Reset()
-			err := runJob(context.Background(), cfg, tt.meta)
+			err := runJob(context.Background(), rt, tt.meta)
 			if err != nil {
 				t.Errorf("expected no error, got %v", err)
 			}

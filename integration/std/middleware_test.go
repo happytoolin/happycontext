@@ -185,10 +185,15 @@ func TestMiddlewarePanicAfterCommittedStatusKeepsCommittedStatus(t *testing.T) {
 }
 
 func TestMiddlewareSetsRouteFromRequestPattern(t *testing.T) {
+	var sampledOp string
 	sink := newMemorySink()
 	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
+		Sampler: func(in hc.SampleInput) bool {
+			sampledOp = in.Operation
+			return true
+		},
 	}))
 
 	mux := http.NewServeMux()
@@ -207,6 +212,12 @@ func TestMiddlewareSetsRouteFromRequestPattern(t *testing.T) {
 	route, ok := events[0].Fields["http.route"].(string)
 	if !ok || route == "" {
 		t.Fatalf("expected route template, got %#v", events[0].Fields["http.route"])
+	}
+	if name, _ := events[0].Fields["op.name"].(string); name != route {
+		t.Fatalf("wire op.name = %q, want route %q", name, route)
+	}
+	if sampledOp != route {
+		t.Fatalf("SampleInput.Operation = %q, want route %q", sampledOp, route)
 	}
 }
 
