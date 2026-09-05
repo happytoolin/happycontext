@@ -1,10 +1,12 @@
 package zerologadapter
 
-// Agent E (adapters leg) — nil and garbage abuse against the bridge,
-// including disabled loggers and every logger shape.
+// Bridge robustness tests: nil/garbage abuse and typed-nil error
+// containment.
 
 import (
+	"bytes"
 	"context"
+	"os"
 	"testing"
 
 	hc "github.com/happytoolin/happycontext"
@@ -42,4 +44,18 @@ func TestCrashNilAbuse(t *testing.T) {
 
 	sampled := ts.Sample(&zerolog.BurstSampler{Burst: 1, Period: 1e9})
 	New(&sampled).Write(context.Background(), rec)
+}
+
+func TestCrashTypedNilErrorField(t *testing.T) {
+	var pe *os.PathError
+	var buf bytes.Buffer
+	s := &recSink{}
+	rt := hc.MustCompile(hc.Config{Sink: s, SamplingRate: 1})
+	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "j"})
+	hc.Add(op.Context(), "e", pe)
+	hc.Error(op.Context(), pe)
+	_ = op.End(nil)
+	rec := s.rec
+	zl := zerolog.New(&buf)
+	New(&zl).Write(context.Background(), rec)
 }
