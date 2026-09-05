@@ -103,7 +103,7 @@ func drivePipeline(t *testing.T, sink gc.Sink, buf *bytes.Buffer, pipeline strin
 	srv.Close() // quiesce handlers before reading the buffer
 
 	out := make([]parsedWire, 0, len(wireCases))
-	for _, ln := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+	for ln := range strings.SplitSeq(strings.TrimSpace(buf.String()), "\n") {
 		if ln == "" {
 			continue
 		}

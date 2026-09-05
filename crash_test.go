@@ -2022,11 +2022,9 @@ func TestSynctestConcurrentEndGatedSink(t *testing.T) {
 		var wg sync.WaitGroup
 		first := make([]bool, racers)
 		for i := range racers {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
+			wg.Go(func() {
 				first[i] = op.End(nil)
-			}(i)
+			})
 		}
 		// The gate usually closes before the winner reaches Write, so
 		// the durable block is scheduling-dependent — the assertions
@@ -2068,9 +2066,7 @@ func TestSynctestArmedWritersAllExit(t *testing.T) {
 		stop := make(chan struct{})
 		var wg sync.WaitGroup
 		for w := range 6 {
-			wg.Add(1)
-			go func(w int) {
-				defer wg.Done()
+			wg.Go(func() {
 				for i := 0; ; i++ {
 					select {
 					case <-stop:
@@ -2079,7 +2075,7 @@ func TestSynctestArmedWritersAllExit(t *testing.T) {
 						Add(op.Context(), fmt.Sprintf("w%d", w), i)
 					}
 				}
-			}(w)
+			})
 		}
 		wg.Add(1)
 		go func() {
@@ -2170,11 +2166,9 @@ func TestSynctestStragglerStormBubble(t *testing.T) {
 			_ = op.End(nil)
 			var wg sync.WaitGroup
 			for s := range 8 {
-				wg.Add(1)
-				go func(s int) {
-					defer wg.Done()
+				wg.Go(func() {
 					Add(op.Context(), "straggler", s)
-				}(s)
+				})
 			}
 			wg.Wait()
 		}
