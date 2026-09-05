@@ -191,7 +191,6 @@ func TestRecordEncodedOnce(t *testing.T) {
 	for i := range 8 {
 		wg.Go(func() {
 			first[i] = r.Encoded()
-
 		})
 	}
 	wg.Wait()
@@ -587,7 +586,6 @@ func TestJSONSinkConcurrency(t *testing.T) {
 				rec := recOf(LevelInfo, "concurrent", fieldOf("g", g), fieldOf("i", i))
 				sink.Write(context.Background(), rec)
 			}
-
 		})
 	}
 	wg.Wait()

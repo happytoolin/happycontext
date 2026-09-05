@@ -6,10 +6,10 @@ package hc
 type Level int
 
 const (
-	LevelDebug Level = -4
-	LevelInfo  Level = 0
+	LevelDebug Level = -4 // lower on the wire: "debug"
+	LevelInfo  Level = 0  // the success default
 	LevelWarn  Level = 4
-	LevelError Level = 8
+	LevelError Level = 8 // the failure and panic default
 )
 
 // String renders the classic level names.

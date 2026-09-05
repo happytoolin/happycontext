@@ -606,7 +606,6 @@ func concurrentEnd(t *testing.T, rate float64, n int) ([]bool, int) {
 			}
 			mu.Unlock()
 			results[i] = op.End(nil)
-
 		})
 	}
 	mu.Lock()
@@ -684,7 +683,6 @@ func TestConcurrentEndArmed(t *testing.T) {
 					Add(ctx, "async", i) // guarded append racing the seal
 					results[i] = false
 				}
-
 			})
 		}
 		mu.Lock()
@@ -730,7 +728,6 @@ func TestConcurrentEndErrorPointer(t *testing.T) {
 			wg.Go(func() {
 				err := fmt.Errorf("caller-%d", i)
 				results[i] = op.End(&err)
-
 			})
 		}
 		wg.Wait()
@@ -1067,5 +1064,51 @@ func TestTypedNilErrorsContained(t *testing.T) {
 	}
 	if parsed["e"] != "<nil>" {
 		t.Fatalf("typed-nil field = %#v, want \"<nil>\"", parsed["e"])
+	}
+}
+
+// TestPanicWireShapeParity pins the two hand-maintained copies of the
+// canonical panic shape against each other: integration/common's
+// public PanicField/FinalizeRequest path (middleware-recovered
+// panics) and the core's own End path. They live in different
+// packages by design; this test fails if either drifts.
+func TestPanicWireShapeParity(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	recovered := any("wire-parity boom")
+
+	// Core path: End's own panic handling.
+	func() {
+		defer func() { _ = recover() }()
+		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "core"})
+		defer op.End(nil)
+		panic(recovered)
+	}()
+
+	// common path: middleware-style recover + explicit writes + End(nil).
+	op2 := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "common"})
+	Add(op2.Context(), "panic", structuredPanicField(recovered))
+	Error(op2.Context(), fmt.Errorf("panic: %v", recovered))
+	Add(op2.Context(), "op.outcome", string(OutcomePanic))
+	_ = op2.End(nil)
+
+	evs := ts.Events()
+	if len(evs) != 2 {
+		t.Fatalf("events = %d, want 2", len(evs))
+	}
+	for _, key := range []string{"panic", "error", "op.outcome"} {
+		a, okA := evs[0].Lookup(key)
+		b, okB := evs[1].Lookup(key)
+		if okA != okB {
+			t.Fatalf("key %q: core=%v common=%v", key, okA, okB)
+		}
+		if !okA {
+			t.Fatalf("key %q missing", key)
+		}
+		if fmt.Sprint(a) != fmt.Sprint(b) {
+			t.Fatalf("key %q diverges: core=%v common=%v", key, a, b)
+		}
+	}
+	if evs[0].Level() != evs[1].Level() || evs[0].Level() != LevelError {
+		t.Fatalf("levels = %v/%v, want error/error", evs[0].Level(), evs[1].Level())
 	}
 }

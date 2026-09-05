@@ -26,12 +26,7 @@ func (c CapturedEvent) Fields() []Field { return c.fields }
 
 // Lookup returns the last value written under key.
 func (c CapturedEvent) Lookup(key string) (any, bool) {
-	for i := len(c.fields) - 1; i >= 0; i-- {
-		if f := c.fields[i]; f.key == key {
-			return valueOf(f), true
-		}
-	}
-	return nil, false
+	return lookupField(c.fields, key)
 }
 
 // TestSink captures events in memory for tests, copying retained values
@@ -47,8 +42,13 @@ func NewTestSink() *TestSink {
 }
 
 // Write captures one event, deep-copying the field values that are
-// mutable (KindAny/KindRaw payloads); typed scalars are immutable by
-// construction.
+// mutable (maps, slices, arrays — including through reflect); typed
+// scalars are immutable by construction. Pointer payloads are NOT
+// cloned (the pointed-to value stays shared with the caller), except
+// that error identity is deliberately preserved so errors.Is works
+// on captured fields. Mutate-through-a-pointer after End is visible
+// in the capture — copy it yourself before End if you need a frozen
+// snapshot of pointer-bearing data.
 func (t *TestSink) Write(_ context.Context, rec *Record) {
 	if t == nil || rec == nil {
 		return

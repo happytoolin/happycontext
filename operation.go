@@ -77,9 +77,8 @@ func (op *Operation) Context() context.Context {
 // End MUST be deferred directly (defer op.End(&err)) — the closure form
 // silently disables panic capture. Reentrant use is not supported: a
 // second End from inside a sink's Write deadlocks on the one-shot
-// claim. Concurrent first calls are safe (characterized by
-// TestConcurrentEndCharacterization): exactly one wins, the rest
-// return its published result.
+// claim. Concurrent first calls are safe: exactly one wins the claim
+// and commits; the others wait and return the published result.
 func (op *Operation) End(errp *error) (emitted bool) {
 	if op == nil {
 		return false
@@ -115,8 +114,7 @@ claimed:
 
 	// The owner's final writes, then SEAL before any WAL read: from
 	// here on the event is immutable, so stragglers cannot race the
-	// scan, the record handed to sinks, or the encode (amendment 20's
-	// threat model is the sink-read window, which this closes).
+	// scan, the record handed to sinks, or the encode .
 	now := time.Now() // one clock read: completion stamp + duration base
 	duration := now.Sub(ev.startedAt)
 	annotateOperationFailures(ev, &op.ref, err, recovered)
@@ -238,7 +236,7 @@ func (op *Operation) commit(ev *event, rt *Runtime, start OperationStart, outcom
 	// The keep-everything fast path (rate == 1.0, no sampler, no level
 	// rates, no policies): healthy events can never be dropped, so the
 	// gate is skipped entirely. Error/panic events bypass the gate
-	// structurally (amendment 4), so the flag only short-circuits the
+	// structurally, so the flag only short-circuits the
 	// healthy branch.
 	if !rt.alwaysKeep {
 		if !in.HasError {
@@ -253,15 +251,11 @@ func (op *Operation) commit(ev *event, rt *Runtime, start OperationStart, outcom
 	}
 
 	msg := resolveEventMessage(rt.message, start.Domain, ev.msg)
-	// Reset the lazy-encode cache: the record is embedded, so a stale
-	// atomic pointer from a previous generation would otherwise serve
-	// old bytes if the operation were ever committed again.
 	rec := &op.record
 	rec.level = level
 	rec.msg = msg
 	rec.fields = ev.fields
 	rec.completedAt = now
-	rec.encoded.Store(nil)
 	rt.emit(op.ctx, rec)
 	return true
 }

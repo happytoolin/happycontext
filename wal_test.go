@@ -1822,7 +1822,6 @@ func TestStragglerArmedBurst(t *testing.T) {
 				}
 				mu.Unlock()
 				stragglerWrite(ctx) // armed: serialized under ev.mu
-
 			})
 		}
 		// release all stragglers at once (logrus start-line technique)

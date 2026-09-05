@@ -52,7 +52,6 @@ func TestMiddlewareConcurrentStatusIntegrity(t *testing.T) {
 					return
 				}
 			}
-
 		})
 	}
 	wg.Wait()

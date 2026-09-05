@@ -1,7 +1,6 @@
 package hc
 
 import (
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -41,8 +40,14 @@ func (r *Record) Fields() []Field { return r.fields }
 
 // Lookup returns the last value written under key.
 func (r *Record) Lookup(key string) (any, bool) {
-	for i := len(r.fields) - 1; i >= 0; i-- {
-		if f := r.fields[i]; f.key == key {
+	return lookupField(r.fields, key)
+}
+
+// lookupField is the single last-write-wins backward scan shared by
+// Record.Lookup, CapturedEvent.Lookup, and the event's live lookup.
+func lookupField(fields []Field, key string) (any, bool) {
+	for i := len(fields) - 1; i >= 0; i-- {
+		if f := fields[i]; f.key == key {
 			return valueOf(f), true
 		}
 	}
@@ -131,7 +136,10 @@ func aliasFields(fields []Field) []Field {
 }
 
 // dedupeScanLimit sets the crossover between the allocation-free
-// last-occurrence scan and the seen-set path for wide events.
+// last-occurrence scan and the seen-set path for wide events. It is a
+// cross-module contract: the adapters' lastOccurrences narrow path
+// uses the same literal 24 so bridges and the canonical line resolve
+// duplicates identically (pinned by the golden parity tests).
 const dedupeScanLimit = 24
 
 // appendDedupedFields emits each key once — its last value, at its last
@@ -218,13 +226,9 @@ func appendFieldJSON(dst []byte, f Field) []byte {
 	case KindDuration:
 		return jsonEnc.AppendDuration(dst, time.Duration(f.num), time.Millisecond, false, -1)
 	case KindErr:
-		err := f.val.(error)
-		if isTypedNilError(err) {
-			// Typed-nil errors must not reach Error(): nil deref
-			// would crash encode. fmt renders "<nil>" safely.
-			return jsonEnc.AppendString(dst, fmt.Sprint(err))
-		}
-		return jsonEnc.AppendString(dst, err.Error())
+		// safeErrorMessage fences typed-nils (direct or %w-wrapped)
+		// and panicking Error() implementations.
+		return jsonEnc.AppendString(dst, safeErrorMessage(f.val.(error)))
 	case KindRaw:
 		return append(dst, f.val.([]byte)...)
 	default:

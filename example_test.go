@@ -60,7 +60,7 @@ func ExampleCompile() {
 	}
 	hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "j"}).End(nil)
 	// Output:
-	// hc: sampling rate 1.5: hc: invalid rate
+	// hc: sampling rate 1.5: invalid rate
 	// true
 	// INFO operation_completed op.domain="job" op.name="j" op.outcome="success"
 }

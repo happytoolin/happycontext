@@ -186,12 +186,6 @@ func fieldOf(key string, value any) Field {
 func fieldStr(key, value string) Field     { return Field{key: key, kind: KindString, str: value} }
 func fieldInt64(key string, v int64) Field { return Field{key: key, kind: KindInt, num: v} }
 
-// fieldAny returns a KindAny field (used for the canonical structured
-// error/panic maps).
-func fieldAny(key string, value any) Field {
-	return Field{key: key, kind: KindAny, val: value}
-}
-
 // valueOf converts a Field back to an any, mirroring the v0 map-based
 // values (used by Lookup and the TestSink).
 func valueOf(f Field) any {

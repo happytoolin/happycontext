@@ -284,12 +284,7 @@ func (e *event) snapshotFields() []Field {
 // lookup returns the last value written under key (last-write-wins view
 // of the un-deduped WAL).
 func (e *event) lookup(key string) (any, bool) {
-	for i := len(e.fields) - 1; i >= 0; i-- {
-		if e.fields[i].key == key {
-			return valueOf(e.fields[i]), true
-		}
-	}
-	return nil, false
+	return lookupField(e.fields, key)
 }
 
 func (e *event) release() {

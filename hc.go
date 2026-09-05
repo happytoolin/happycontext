@@ -23,6 +23,11 @@ func eventFromContext(ctx context.Context) *walRef {
 //
 // Additional pairs may be passed variadically: Add(ctx, "a", 1, "b", 2).
 // Every pair key must be a string; malformed tails are skipped.
+//
+// The request goroutine is the sole writer: passing the enriched
+// context to child goroutines is fine, but hc.Add from a child
+// goroutine racing the request's own writes is a data race — fan
+// results back over a channel and Add them on the request goroutine.
 func Add(ctx context.Context, key string, value any, kv ...any) {
 	ref := eventFromContext(ctx)
 	if ref == nil {
@@ -38,7 +43,12 @@ func Add(ctx context.Context, key string, value any, kv ...any) {
 // AddRawJSON attaches pre-encoded JSON under key without re-escaping;
 // the escape scan is skipped entirely for blobs the caller already
 // encoded once.
+// A nil or empty blob is a no-op: appending zero bytes would leave a
+// bare "key": member and corrupt the canonical line.
 func AddRawJSON(ctx context.Context, key string, raw []byte) {
+	if len(raw) == 0 {
+		return
+	}
 	if ref := eventFromContext(ctx); ref != nil {
 		ref.ev.setRaw(ref, key, raw)
 	}

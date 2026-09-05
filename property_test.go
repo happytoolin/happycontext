@@ -2349,3 +2349,9 @@ func keyByte(k string) byte {
 	}
 	return 0
 }
+
+// fieldAny constructs a KindAny field (test-only; production uses
+// event.appendAny for the canonical structured maps).
+func fieldAny(key string, value any) Field {
+	return Field{key: key, kind: KindAny, val: value}
+}

@@ -58,6 +58,26 @@ func structuredErrorMessage(err error) string {
 		return message
 	}
 
+	return safeErrorMessage(err)
+}
+
+// safeErrorMessage extracts err's message without ever panicking:
+// typed-nil receivers and wrapped typed-nils (whose Error() nil-derefs)
+// and arbitrary panicking Error() implementations are all contained —
+// the same fence the encoder puts around user MarshalJSON. fmt.Sprint
+// recovers Error()-panics itself, so it is the fallback rendering.
+func safeErrorMessage(err error) (msg string) {
+	if err == nil {
+		return ""
+	}
+	if isTypedNilError(err) {
+		return fmt.Sprint(err) // renders "<nil>"
+	}
+	defer func() {
+		if recover() != nil {
+			msg = fmt.Sprint(err)
+		}
+	}()
 	return err.Error()
 }
 
@@ -74,7 +94,7 @@ func deepestUnwrappedError(err error) error {
 			}
 			seen[current] = struct{}{}
 		}
-		next := errors.Unwrap(current)
+		next := safeUnwrap(current)
 		if next == nil {
 			return current
 		}
@@ -103,6 +123,15 @@ func isComparableError(err error) bool {
 	return reflect.TypeOf(err).Comparable()
 }
 
+// frameworkStyleErrorMessage recognizes framework-shaped errors — any
+// error whose struct (possibly behind a pointer) has exported Code
+// (integer) and Message (string or fmt.Stringer) fields, the
+// echo.HTTPError and fiber.Error shape — and surfaces Message as the
+// canonical error.message instead of the wrapper's own Error() text.
+// This is deliberate wire behavior (v0 parity): framework errors log
+// the human message, not the wrapper text. Reflection is guarded
+// (invalid, nil, and unexported values are skipped); String() calls
+// are panic-fenced.
 func frameworkStyleErrorMessage(err error) (string, bool) {
 	value := reflect.ValueOf(err)
 	if !value.IsValid() {
@@ -160,7 +189,7 @@ func messageValue(field reflect.Value) (any, bool) {
 		}
 		return v, true
 	case fmt.Stringer:
-		text := v.String()
+		text := safeString(v)
 		if text == "" {
 			return nil, false
 		}
@@ -183,4 +212,26 @@ func isIntKind(kind reflect.Kind) bool {
 	default:
 		return false
 	}
+}
+
+// safeString calls s.String with the same panic fence safeErrorMessage
+// applies to Error.
+func safeString(s fmt.Stringer) (text string) {
+	defer func() {
+		if recover() != nil {
+			text = fmt.Sprint(s)
+		}
+	}()
+	return s.String()
+}
+
+// safeUnwrap fences errors.Unwrap: wrappers with state-reading Unwrap
+// methods panic on typed-nil receivers.
+func safeUnwrap(err error) (next error) {
+	defer func() {
+		if recover() != nil {
+			next = nil
+		}
+	}()
+	return errors.Unwrap(err)
 }

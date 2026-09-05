@@ -10,11 +10,11 @@ import (
 // Compile-time error contract (amendment 17).
 var (
 	// ErrInvalidRate wraps out-of-range sampling rates.
-	ErrInvalidRate = errors.New("hc: invalid rate")
+	ErrInvalidRate = errors.New("invalid rate")
 	// ErrInvalidLevel wraps unknown level keys in configuration maps.
-	ErrInvalidLevel = errors.New("hc: invalid level")
+	ErrInvalidLevel = errors.New("invalid level")
 	// ErrInvalidOutcome wraps unknown outcome keys in configuration maps.
-	ErrInvalidOutcome = errors.New("hc: invalid outcome")
+	ErrInvalidOutcome = errors.New("invalid outcome")
 )
 
 // Config describes how a Runtime finalizes events. Bad configuration is
@@ -36,7 +36,11 @@ type Config struct {
 	Sampler Sampler
 
 	// OperationPolicies optionally customizes lifecycle behavior by
-	// domain; a domain SamplingRate overrides generic rates.
+	// domain; a domain SamplingRate overrides generic rates (and, when
+	// both are set, overrides LevelSamplingRates for that domain — v0
+	// precedence, documented in the README). The "" key is an alias
+	// for the default domain ("operation"): it applies only there,
+	// and an explicit "operation" key beats it.
 	OperationPolicies map[Domain]OperationPolicy
 
 	// Message is the default final message, overriding the per-domain
