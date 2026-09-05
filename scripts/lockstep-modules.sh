@@ -12,3 +12,10 @@ lockstep_require_modfiles() {
 publishable_module_dirs() {
   git ls-files 'adapter/*/go.mod' 'integration/*/go.mod' | sed 's#/go\.mod$##' | sort
 }
+
+# Modules refreshed in the Go module proxy after a release: the root
+# plus the tagged nested modules (benches/examples are not published).
+published_modfiles() {
+  printf '%s\n' go.mod
+  git ls-files 'adapter/*/go.mod' 'integration/*/go.mod' | sort
+}

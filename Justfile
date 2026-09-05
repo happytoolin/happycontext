@@ -31,18 +31,11 @@ test:
   done < <(printf '%s\n' go.mod && git ls-files '**/go.mod')
 
 coverage:
-  go test ./... -cover
-  (cd adapter/slog && go test ./... -cover)
-  (cd adapter/zap && go test ./... -cover)
-  (cd adapter/zerolog && go test ./... -cover)
-  (cd integration/common && go test ./... -cover)
-  (cd integration/std && go test ./... -cover)
-  (cd integration/gin && go test ./... -cover)
-  (cd integration/echo && go test ./... -cover)
-  (cd integration/fiber && go test ./... -cover)
-  (cd integration/fiberv3 && go test ./... -cover)
-  (cd integration/worker && go test ./... -cover)
-  (cd cmd/examples && go test ./... -cover)
+  while IFS= read -r modfile; do \
+    moddir="$(dirname "$modfile")"; \
+    echo "== coverage $moddir =="; \
+    (cd "$moddir" && go test ./... -cover); \
+  done < <(printf '%s\n' go.mod && git ls-files '**/go.mod')
 
 bench:
   (cd benches && go test -run '^$' -bench . -benchmem ./...)
