@@ -1995,10 +1995,14 @@ func (errBoom2) Error() string { return "boom2" }
 // variant used a slowSink (time.Sleep) and hangs forever in a bubble.
 // End's one-shot wait spins with runtime.Gosched, and spinners are
 // never durably blocked, so synctest's clock cannot advance while the
-// winner sleeps — a live lock, not a detected deadlock. Any future
-// library path that sleeps while another goroutine spins (the v1.1
-// watchdog: keep this in mind) cannot be bubble-tested with real
-// time.Sleep in the winner's path. Use channel gates instead.
+// winner sleeps — a live lock, not a detected deadlock: a regressed
+// publish defer would HANG the bubble until the test timeout, never
+// fail it, because spinners are never durably blocked. Any future
+// library path that sleeps while another goroutine spins cannot be
+// bubble-tested with real time.Sleep in the winner's path — including
+// the v1.1 watchdog itself, which would sleep on real timers while
+// request writers spin in the armed-add path: the same livelock,
+// mirrored. Use channel gates instead.
 func TestSynctestConcurrentEndGatedSink(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		gate := make(chan struct{})
@@ -2015,8 +2019,14 @@ func TestSynctestConcurrentEndGatedSink(t *testing.T) {
 				first[i] = op.End(nil)
 			}(i)
 		}
+		// The gate usually closes before the winner reaches Write, so
+		// the durable block is scheduling-dependent — the assertions
+		// that matter are the publication result and exactly one write.
 		close(gate)
 		wg.Wait()
+		if !first[0] {
+			t.Fatal("first racer observed not-emitted (publication must report the winner's result)")
+		}
 		for i := 1; i < racers; i++ {
 			if first[i] != first[0] {
 				t.Fatalf("racer %d observed %v, racer 0 %v", i, first[i], first[0])
@@ -2105,28 +2115,33 @@ func TestSynctestWatchdogShape(t *testing.T) {
 		time.Sleep(500 * time.Millisecond) // virtual: instant, deterministic
 		snap := op.ev.snapshotFields()
 
-		// The request wakes and keeps writing, then commits.
-		Add(op.Context(), "phase2", "after-stall", "k", "v")
+		// The request wakes, REWRITES a snapshotted key, adds a new
+		// one, then commits. The rewrite is what makes the stability
+		// assertion real: the snapshot must still show the pre-rewrite
+		// value (a snapshot aliasing the live slice would fail here).
+		Add(op.Context(), "phase", "rewritten", "phase2", "after-stall", "k", "v")
 		_ = op.End(nil)
 
 		if len(snap) == 0 || len(snap) >= len(ts.Events()[0].Fields()) {
 			t.Fatalf("snapshot = %d fields, committed = %d (want a strict prefix)",
 				len(snap), len(ts.Events()[0].Fields()))
 		}
-		// Snapshot stability: every snapshotted field value must still
-		// appear unchanged in the committed event.
+		// Snapshot stability, made real by the rewrite: the snapshot
+		// still shows the pre-rewrite value...
+		snapPhase, ok := snapshotLookup(snap, "phase")
+		if !ok || snapPhase != "before-stall" {
+			t.Fatalf("snapshot phase = %v, want pre-rewrite \"before-stall\" (snapshot aliased the live slice?)", snapPhase)
+		}
+		// ...while the committed WAL carries the rewrite, and every
+		// snapshotted key still exists.
 		committed := ts.Events()[0]
+		if v, _ := committed.Lookup("phase"); v != "rewritten" {
+			t.Fatalf("committed phase = %v, want the rewrite", v)
+		}
 		for _, f := range snap {
-			got, ok := committed.Lookup(f.Key())
-			if !ok {
+			if _, ok := committed.Lookup(f.Key()); !ok {
 				t.Fatalf("snapshotted key %q missing from committed event", f.Key())
 			}
-			if fmt.Sprint(got) != fmt.Sprint(valueOf(f)) {
-				t.Fatalf("snapshotted %q mutated: %v -> %v", f.Key(), valueOf(f), got)
-			}
-		}
-		if v, _ := committed.Lookup("phase"); v != "before-stall" {
-			t.Fatalf("pre-snapshot field lost: %v", v)
 		}
 		if v, _ := committed.Lookup("phase2"); v != "after-stall" {
 			t.Fatalf("post-snapshot field lost: %v", v)
@@ -2164,4 +2179,13 @@ func TestSynctestStragglerStormBubble(t *testing.T) {
 			}
 		}
 	})
+}
+
+func snapshotLookup(fields []Field, key string) (any, bool) {
+	for _, f := range fields {
+		if f.key == key {
+			return valueOf(f), true
+		}
+	}
+	return nil, false
 }
