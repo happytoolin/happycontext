@@ -119,9 +119,7 @@ func TestWireMixedTrafficRealLogger(t *testing.T) {
 	const per = 15
 	var wg sync.WaitGroup
 	for w := range workers {
-		wg.Add(1)
-		go func(w int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range per {
 				id := fmt.Sprintf("w%d-%d", w, i)
 				for _, p := range []string{"/ok/", "/err/", "/panic/", "/stream/", "/kitchen/"} {
@@ -131,7 +129,7 @@ func TestWireMixedTrafficRealLogger(t *testing.T) {
 					}
 				}
 			}
-		}(w)
+		})
 	}
 	wg.Wait()
 	// Client returns precede the server's deferred emissions; Close
@@ -156,7 +154,7 @@ func TestWireMixedTrafficRealLogger(t *testing.T) {
 
 func nonEmptyLines(s string) []string {
 	var out []string
-	for _, ln := range strings.Split(s, "\n") {
+	for ln := range strings.SplitSeq(s, "\n") {
 		if strings.TrimSpace(ln) != "" {
 			out = append(out, ln)
 		}

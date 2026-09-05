@@ -528,6 +528,8 @@ func TestEncodedRoundTripProperty(t *testing.T) {
 // appears exactly once with its last value, in last-occurrence order —
 // checked against an independent reference fold, not the encoder's own
 // dedupe code.
+// TestEncodedRoundTripProperty: the encoded canonical line must
+// unmarshal to exactly the record's resolved members.
 //
 // Canonical-key collision follows the logrus rename policy (record.go
 // aliasKey, T5 decision): user fields named "level"/"time"/"message"
@@ -922,12 +924,14 @@ func TestPoolSafetyReplayProperty(t *testing.T) {
 	}
 }
 
+// The lifecycle model's wire oracle.
 //
 // The wire comparison pins the full canonical line: envelope level,
 // every user field at its last-occurrence position with its last value
 // (independent LWW fold), the resolved op.outcome, and the resolved
 // message. The members that depend on the wall clock (time,
 // duration_ms) are excluded.
+// FuzzEndLifecycle scope note.
 //
 // The canonical-key collision policy (user fields named "message"/
 // "time"/"level") is deliberately OUT of this target's key alphabet —
