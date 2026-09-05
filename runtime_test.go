@@ -569,6 +569,8 @@ func TestFanoutSinkOrder(t *testing.T) {
 	}
 }
 
+// FuzzCompileConfig fuzzes hc.Compile with extreme configurations; the
+// oracle checks the documented contract:
 //
 //  1. Compile never panics.
 //  2. err != nil ⇒ the error wraps one of the three sentinels

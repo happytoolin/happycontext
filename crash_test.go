@@ -19,6 +19,7 @@ package hc
 //   K  adversarial fuzz targets (values, armed interleavings)
 //   L  armed-mode DST (mixed writers vs single End, arm-vs-seal)
 //   N  testing/synctest bubbles (per-test goroutine hygiene, watchdog)
+//      (M was the ad-hoc live-chaos runs; intentionally not a file here)
 
 import (
 	"context"
@@ -560,6 +561,8 @@ func TestCrashCyclicAnyValue(t *testing.T) {
 }
 
 func TestCrashFloatEdgeValues(t *testing.T) {
+	// Untyped constant -0.0 is +0 (constants carry no sign) — Copysign
+	// is the only way to obtain a real negative zero.
 	negZero := math.Copysign(0, -1)
 	vals := []float64{math.NaN(), math.Inf(1), math.Inf(-1), math.SmallestNonzeroFloat64, math.MaxFloat64, negZero}
 	for _, v := range vals {
@@ -850,6 +853,12 @@ func TestCrashHostileRates(t *testing.T) {
 	inf := math.Inf(1)
 	if _, err := Compile(Config{OperationPolicies: map[Domain]OperationPolicy{"job": {SamplingRate: &inf}}}); err == nil {
 		t.Fatal("+Inf policy rate accepted")
+	}
+	// Nested NaN in the level map: TestCompileSentinels covers only the
+	// global rate and plain out-of-range map values — keep this one
+	// deterministic rather than fuzz-only.
+	if _, err := Compile(Config{LevelSamplingRates: map[Level]float64{LevelInfo: math.NaN()}}); err == nil {
+		t.Fatal("NaN level rate accepted")
 	}
 }
 

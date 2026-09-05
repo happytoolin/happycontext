@@ -1613,7 +1613,6 @@ func TestStragglerInjectionMatrix(t *testing.T) {
 	}
 	for _, phase := range phases {
 		for _, armed := range []bool{false, true} {
-			phase, armed := phase, armed
 			t.Run(fmt.Sprintf("phase=%s armed=%v", phase, armed), func(t *testing.T) {
 				live := phase.live()
 
@@ -1869,7 +1868,6 @@ func TestStragglerArmedBurst(t *testing.T) {
 func TestStragglerSealedErrorNoLatch(t *testing.T) {
 	for _, armed := range []bool{false, true} {
 		for _, phase := range []matrixPhase{phasePreScan, phasePrePostSeal, phasePreCommit} {
-			phase, armed := phase, armed
 			t.Run(fmt.Sprintf("phase=%s armed=%v", phase, armed), func(t *testing.T) {
 				sink := &matrixSink{}
 				rt := MustCompile(Config{Sink: sink, SamplingRate: 0}) // healthy drops
