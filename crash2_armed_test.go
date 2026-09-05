@@ -144,16 +144,22 @@ func TestCrashArmedErrorVsSeal(t *testing.T) {
 		if len(evs) != 1 {
 			t.Fatalf("round %d: events = %d", round, len(evs))
 		}
-		// Whether the racing error landed or not, the outcome must be
-		// coherent: either failure with an error field, or success
-		// without one.
+		// With End(nil) the outcome can only be success: outcome derives
+		// from the deferred error pointer, not the WAL error field, so a
+		// racing Error() that lands pre-seal yields success WITH an error
+		// field — a legitimate state. The oracle is the latch itself: if
+		// an error field is present it must be the racing error, and a
+		// post-seal Error() must never latch.
 		o, _ := evs[0].Lookup("op.outcome")
-		_, hasErr := evs[0].Lookup("error")
-		if o == string(OutcomeFailure) && !hasErr {
-			t.Fatalf("round %d: failure outcome without error field", round)
+		if o != string(OutcomeSuccess) {
+			t.Fatalf("round %d: outcome = %v, want success (outcome is errp-derived)", round, o)
 		}
-		if o == string(OutcomeSuccess) && hasErr {
-			t.Fatalf("round %d: success outcome with error field (latch leaked post-seal)", round)
+		if errVal, hasErr := evs[0].Lookup("error"); hasErr {
+			m, _ := errVal.(map[string]any)
+			msg, _ := m["message"].(string)
+			if msg != fmt.Sprintf("racing-%d", round) {
+				t.Fatalf("round %d: foreign error field latched: %#v", round, errVal)
+			}
 		}
 	}
 }

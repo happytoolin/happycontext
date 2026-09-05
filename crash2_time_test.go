@@ -6,7 +6,6 @@ package hc
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -173,5 +172,4 @@ func TestCrashSetRouteHostile(t *testing.T) {
 	if m["ok"] != float64(1) {
 		t.Fatalf("sibling lost: %v", m)
 	}
-	_ = fmt.Sprint()
 }

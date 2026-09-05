@@ -89,8 +89,8 @@ func TestCrashHugeString(t *testing.T) {
 	if err := json.Unmarshal(line, &m); err != nil {
 		t.Fatalf("huge line unparseable: %v", err)
 	}
-	if got, _ := m["big"].(string); len(got) < (1<<20)*6-8 {
-		t.Fatalf("huge string truncated: %d", len(got))
+	if got, _ := m["big"].(string); len(got) != len(big) {
+		t.Fatalf("huge string truncated: got %d want %d", len(got), len(big))
 	}
 }
 

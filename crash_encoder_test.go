@@ -64,7 +64,7 @@ func TestCrashCyclicAnyValue(t *testing.T) {
 
 	// Capture path (TestSink deep-copy) must also survive the cycle.
 	rt, ts := testRT(t, nil)
-	op := Start(nil2Ctx(), rt, OperationStart{Domain: DomainJob, Name: "j"})
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
 	Add(op.Context(), "cyc", m)
 	_ = op.End(nil)
 	if len(ts.Events()) != 1 {
@@ -210,5 +210,3 @@ func TestCrashTypedNilAndWeirdAny(t *testing.T) {
 		t.Fatal("both unmarshalable values vanished without a trace")
 	}
 }
-
-func nil2Ctx() context.Context { return context.Background() }

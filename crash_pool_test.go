@@ -95,7 +95,6 @@ func TestCrashWideEventPoolCapBoundary(t *testing.T) {
 // documented hazard), while the deep-copying TestSink does not. Pins
 // why amendment 9 says "copy anything you retain".
 func TestCrashRetainRawSliceVsCopy(t *testing.T) {
-	rt, _ := testRT(t, nil)
 	raw := &rawRetainingSink{}
 	rtRaw := MustCompile(Config{Sink: raw, SamplingRate: 1})
 
@@ -130,7 +129,6 @@ func TestCrashRetainRawSliceVsCopy(t *testing.T) {
 	for _, f := range retained {
 		_ = f.Key() // must not panic
 	}
-	_ = rt
 }
 
 type rawRetainingSink struct {

@@ -100,7 +100,6 @@ func TestCrashStragglerStormArmed(t *testing.T) {
 // Write, cached on the record). Recycling must never change what a
 // retained record yields from later Encoded() calls.
 func TestCrashRetainedEncodedBytesSurviveRecycling(t *testing.T) {
-	rt, _ := testRT(t, nil)
 	retain := &retainingSink{}
 	rt2 := MustCompile(Config{Sink: retain, SamplingRate: 1})
 
@@ -119,7 +118,6 @@ func TestCrashRetainedEncodedBytesSurviveRecycling(t *testing.T) {
 			t.Fatalf("record %d mutated after recycling: %s", i, line)
 		}
 	}
-	_ = rt
 }
 
 type retainingSink struct {

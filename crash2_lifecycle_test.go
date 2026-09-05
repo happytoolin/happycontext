@@ -6,9 +6,7 @@ package hc
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 )
@@ -134,30 +132,6 @@ func TestCrashStaleCtxAsParent(t *testing.T) {
 	}
 }
 
-// End called with an errp that is concurrently mutated by another
-// goroutine (the deferred-error idiom under abuse): the read happens
-// once, and the pipeline must stay race-free for the read it does.
-// The caller owns that pointer; we only require no corruption of the
-// event itself.
-func TestCrashErrPtrMutationStorm(t *testing.T) {
-	rt, ts := testRT(t, nil)
-	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
-	var shared error
-	stop := make(chan struct{})
-	go func() {
-		defer close(stop)
-		for i := range 1000 {
-			shared = errors.New(strings.Repeat("x", i%64))
-		}
-	}()
-	<-stop
-	shared = errors.New("final")
-	_ = op.End(&shared)
-	if len(ts.Events()) != 1 {
-		t.Fatal("event dropped")
-	}
-}
-
 // Start after Start on the same base ctx: both valid, independent.
 func TestCrashSiblingOpsSameBase(t *testing.T) {
 	rt, ts := testRT(t, nil)
@@ -179,5 +153,41 @@ func TestCrashSiblingOpsSameBase(t *testing.T) {
 	}
 	if !whos["a"] || !whos["b"] {
 		t.Fatalf("siblings crossed: %v", whos)
+	}
+}
+
+// Start on an already-canceled context: the operation must still run,
+// commit, and emit — the WAL is ctx-independent (cancellation surfaces
+// through the caller's error, not the context).
+func TestCrashStartOnCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rt, ts := testRT(t, nil)
+	op := Start(ctx, rt, OperationStart{Domain: DomainJob, Name: "j"})
+	Add(op.Context(), "k", "v")
+	if !op.End(nil) || len(ts.Events()) != 1 {
+		t.Fatal("canceled parent context broke the lifecycle")
+	}
+}
+
+// AddRawJSON keeps the caller's []byte by reference: mutating the blob
+// between Add and End is visible on the wire (torn JSON, silently).
+// Pin the lifetime contract: encode before you reuse the buffer.
+func TestCrashRawJSONBlobLifetime(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
+	blob := []byte(`{"v":1}`)
+	AddRawJSON(op.Context(), "raw", blob)
+	blob[5] = '9' // caller mutates before End
+	_ = op.End(nil)
+
+	ev := ts.Events()[0]
+	raw, ok := ev.Lookup("raw")
+	if !ok {
+		t.Fatal("raw field missing")
+	}
+	b, _ := raw.([]byte)
+	if string(b) != `{"v":9}` {
+		t.Fatalf("raw blob was copied at Add time: %q (lifetime contract is by-reference)", b)
 	}
 }

@@ -111,10 +111,8 @@ func FuzzCrashArmedInterleavings(f *testing.F) {
 				SetMessage(op.Context(), "override")
 			}
 		}
-		for i := range errorsN {
-			if i == 0 {
-				Error(op.Context(), errBoom2{})
-			}
+		for range errorsN {
+			Error(op.Context(), errBoom2{})
 		}
 		_ = op.End(nil)
 		if variant%3 == 0 {
