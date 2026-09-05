@@ -1,7 +1,6 @@
 package fiberhappycontext
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +13,7 @@ import (
 
 func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 	app := fiber.New()
-	sink := newMemorySink()
+	sink := hc.NewTestSink()
 	app.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
@@ -37,14 +36,14 @@ func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Fields["http.status"] != http.StatusNoContent {
-		t.Fatalf("expected status %d, got %v", http.StatusNoContent, events[0].Fields["http.status"])
+	if intField(events[0], "http.status") != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %v", http.StatusNoContent, intField(events[0], "http.status"))
 	}
-	if events[0].Fields["http.route"] != "/orders/:id" {
-		t.Fatalf("expected route template, got %v", events[0].Fields["http.route"])
+	if fieldOf(events[0], "http.route") != "/orders/:id" {
+		t.Fatalf("expected route template, got %v", fieldOf(events[0], "http.route"))
 	}
-	if events[0].Fields["user_id"] != "u_1" {
-		t.Fatalf("expected user_id field, got %v", events[0].Fields["user_id"])
+	if fieldOf(events[0], "user_id") != "u_1" {
+		t.Fatalf("expected user_id field, got %v", fieldOf(events[0], "user_id"))
 	}
 }
 
@@ -66,7 +65,7 @@ func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
 
 func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 	app := fiber.New()
-	sink := newMemorySink()
+	sink := hc.NewTestSink()
 	app.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 0,
@@ -90,13 +89,13 @@ func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level != hc.LevelError {
-		t.Fatalf("level = %s, want ERROR", events[0].Level)
+	if events[0].Level() != hc.LevelError {
+		t.Fatalf("level = %s, want ERROR", events[0].Level())
 	}
-	if events[0].Fields["http.status"] != http.StatusInternalServerError {
-		t.Fatalf("status = %v, want %d", events[0].Fields["http.status"], http.StatusInternalServerError)
+	if intField(events[0], "http.status") != http.StatusInternalServerError {
+		t.Fatalf("status = %v, want %d", intField(events[0], "http.status"), http.StatusInternalServerError)
 	}
-	if _, ok := events[0].Fields["error"].(map[string]any); !ok {
+	if _, ok := fieldOf(events[0], "error").(map[string]any); !ok {
 		t.Fatalf("expected structured error field")
 	}
 }
@@ -104,7 +103,7 @@ func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 	app := fiber.New()
 	app.Use(recovermw.New())
-	sink := newMemorySink()
+	sink := hc.NewTestSink()
 	app.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
@@ -120,20 +119,20 @@ func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Fields["http.route"] != "/panic/:id" {
-		t.Fatalf("route = %v", events[0].Fields["http.route"])
+	if fieldOf(events[0], "http.route") != "/panic/:id" {
+		t.Fatalf("route = %v", fieldOf(events[0], "http.route"))
 	}
-	if events[0].Fields["http.status"] != http.StatusInternalServerError {
-		t.Fatalf("status = %v, want %d", events[0].Fields["http.status"], http.StatusInternalServerError)
+	if intField(events[0], "http.status") != http.StatusInternalServerError {
+		t.Fatalf("status = %v, want %d", intField(events[0], "http.status"), http.StatusInternalServerError)
 	}
-	if _, ok := events[0].Fields["panic"].(map[string]any); !ok {
+	if _, ok := fieldOf(events[0], "panic").(map[string]any); !ok {
 		t.Fatalf("expected panic metadata")
 	}
 }
 
 func TestMiddlewareFiberErrorKeepsHTTPStatus(t *testing.T) {
 	app := fiber.New()
-	sink := newMemorySink()
+	sink := hc.NewTestSink()
 	app.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
@@ -149,17 +148,17 @@ func TestMiddlewareFiberErrorKeepsHTTPStatus(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Fields["http.status"] != http.StatusTooManyRequests {
-		t.Fatalf("status = %v, want %d", events[0].Fields["http.status"], http.StatusTooManyRequests)
+	if intField(events[0], "http.status") != http.StatusTooManyRequests {
+		t.Fatalf("status = %v, want %d", intField(events[0], "http.status"), http.StatusTooManyRequests)
 	}
-	if events[0].Level != hc.LevelError {
-		t.Fatalf("level = %s, want ERROR", events[0].Level)
+	if events[0].Level() != hc.LevelError {
+		t.Fatalf("level = %s, want ERROR", events[0].Level())
 	}
 }
 
 func TestMiddlewareCustomMessagePropagates(t *testing.T) {
 	app := fiber.New()
-	sink := newMemorySink()
+	sink := hc.NewTestSink()
 	app.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
@@ -176,8 +175,8 @@ func TestMiddlewareCustomMessagePropagates(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Message != "done" {
-		t.Fatalf("message = %q, want %q", events[0].Message, "done")
+	if events[0].Message() != "done" {
+		t.Fatalf("message = %q, want %q", events[0].Message(), "done")
 	}
 }
 
@@ -187,7 +186,7 @@ func TestMiddlewareLogsStatusFromCustomFiberErrorHandler(t *testing.T) {
 			return c.Status(http.StatusTeapot).SendString("handled")
 		},
 	})
-	sink := newMemorySink()
+	sink := hc.NewTestSink()
 	app.Use(Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
@@ -208,11 +207,11 @@ func TestMiddlewareLogsStatusFromCustomFiberErrorHandler(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Fields["http.status"] != http.StatusTeapot {
-		t.Fatalf("status = %v, want %d", events[0].Fields["http.status"], http.StatusTeapot)
+	if intField(events[0], "http.status") != http.StatusTeapot {
+		t.Fatalf("status = %v, want %d", intField(events[0], "http.status"), http.StatusTeapot)
 	}
-	if events[0].Level != hc.LevelError {
-		t.Fatalf("level = %s, want ERROR", events[0].Level)
+	if events[0].Level() != hc.LevelError {
+		t.Fatalf("level = %s, want ERROR", events[0].Level())
 	}
 }
 
@@ -223,7 +222,7 @@ func TestMiddlewareReturnsCustomFiberErrorHandlerFailure(t *testing.T) {
 			return handlerErr
 		},
 	})
-	sink := newMemorySink()
+	sink := hc.NewTestSink()
 	var upstreamErr error
 	app.Use(func(c *fiber.Ctx) error {
 		upstreamErr = c.Next()
@@ -248,7 +247,7 @@ func TestMiddlewareReturnsCustomFiberErrorHandlerFailure(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	errField, ok := events[0].Fields["error"].(map[string]any)
+	errField, ok := fieldOf(events[0], "error").(map[string]any)
 	if !ok {
 		t.Fatal("expected structured error field")
 	}
@@ -260,38 +259,15 @@ func TestMiddlewareReturnsCustomFiberErrorHandlerFailure(t *testing.T) {
 // capturedEvent mirrors the v0 test-facing shape (map fields, int
 // numerics) over the v2 TestSink capture, keeping the assertions below
 // unchanged from the v0 suite.
-type capturedEvent struct {
-	Level   hc.Level
-	Message string
-	Fields  map[string]any
+// Typed field access on captured events (Lookup carries int64; the
+// constants in these tests are ints).
+func fieldOf(ev hc.CapturedEvent, key string) any {
+	v, _ := ev.Lookup(key)
+	return v
 }
 
-type memorySink struct {
-	ts *hc.TestSink
-}
-
-func newMemorySink() *memorySink {
-	return &memorySink{ts: hc.NewTestSink()}
-}
-
-func (s *memorySink) Write(ctx context.Context, rec *hc.Record) {
-	s.ts.Write(ctx, rec)
-}
-
-func (s *memorySink) Events() []capturedEvent {
-	captured := s.ts.Events()
-	out := make([]capturedEvent, 0, len(captured))
-	for _, ev := range captured {
-		fields := make(map[string]any, len(ev.Fields())+4)
-		for _, f := range ev.Fields() {
-			v, _ := ev.Lookup(f.Key())
-			if i, ok := v.(int64); ok {
-				fields[f.Key()] = int(i)
-			} else {
-				fields[f.Key()] = v
-			}
-		}
-		out = append(out, capturedEvent{Level: ev.Level(), Message: ev.Message(), Fields: fields})
-	}
-	return out
+func intField(ev hc.CapturedEvent, key string) int64 {
+	v, _ := ev.Lookup(key)
+	n, _ := v.(int64)
+	return n
 }

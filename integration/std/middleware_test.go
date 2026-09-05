@@ -1,9 +1,11 @@
 package stdhappycontext
 
+// Middleware behavior tests: routes, statuses, optional interfaces,
+// flush commits, panics, and the nil-runtime passthrough.
+
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"errors"
 	"io"
 	"net"
@@ -16,7 +18,7 @@ import (
 )
 
 func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {
-	sink := newMemorySink()
+	sink := hc.NewTestSink()
 	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
@@ -35,19 +37,19 @@ func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Message != "done" {
-		t.Fatalf("expected message done, got %q", events[0].Message)
+	if events[0].Message() != "done" {
+		t.Fatalf("expected message done, got %q", events[0].Message())
 	}
-	if events[0].Fields["http.status"] != http.StatusAccepted {
-		t.Fatalf("expected status %d, got %v", http.StatusAccepted, events[0].Fields["http.status"])
+	if intField(events[0], "http.status") != http.StatusAccepted {
+		t.Fatalf("expected status %d, got %v", http.StatusAccepted, intField(events[0], "http.status"))
 	}
-	if events[0].Fields["example"] != "std-integration" {
-		t.Fatalf("expected example field, got %v", events[0].Fields["example"])
+	if fieldOf(events[0], "example") != "std-integration" {
+		t.Fatalf("expected example field, got %v", fieldOf(events[0], "example"))
 	}
 }
 
 func TestMiddlewareAppliesCustomMessageFromHandlerContext(t *testing.T) {
-	sink := newMemorySink()
+	sink := hc.NewTestSink()
 	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
@@ -66,16 +68,16 @@ func TestMiddlewareAppliesCustomMessageFromHandlerContext(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Message != "order shipped" {
-		t.Fatalf("expected message %q, got %q", "order shipped", events[0].Message)
+	if events[0].Message() != "order shipped" {
+		t.Fatalf("expected message %q, got %q", "order shipped", events[0].Message())
 	}
-	if events[0].Fields["http.status"] != http.StatusAccepted {
-		t.Fatalf("expected status %d, got %v", http.StatusAccepted, events[0].Fields["http.status"])
+	if intField(events[0], "http.status") != http.StatusAccepted {
+		t.Fatalf("expected status %d, got %v", http.StatusAccepted, intField(events[0], "http.status"))
 	}
 }
 
 func TestMiddlewarePanicPropagatesAndLogsError(t *testing.T) {
-	sink := newMemorySink()
+	sink := hc.NewTestSink()
 	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
@@ -103,19 +105,19 @@ func TestMiddlewarePanicPropagatesAndLogsError(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level != hc.LevelError {
-		t.Fatalf("expected error level, got %s", events[0].Level)
+	if events[0].Level() != hc.LevelError {
+		t.Fatalf("expected error level, got %s", events[0].Level())
 	}
-	if events[0].Fields["http.status"] != http.StatusInternalServerError {
-		t.Fatalf("expected status 500, got %v", events[0].Fields["http.status"])
+	if intField(events[0], "http.status") != http.StatusInternalServerError {
+		t.Fatalf("expected status 500, got %v", intField(events[0], "http.status"))
 	}
-	if _, ok := events[0].Fields["panic"].(map[string]any); !ok {
+	if _, ok := fieldOf(events[0], "panic").(map[string]any); !ok {
 		t.Fatalf("expected panic field in event")
 	}
 }
 
 func TestMiddlewareWriteHeaderTwiceLogsFirstCommittedStatus(t *testing.T) {
-	backend := newMemorySink()
+	backend := hc.NewTestSink()
 	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         backend,
 		SamplingRate: 1,
@@ -137,13 +139,13 @@ func TestMiddlewareWriteHeaderTwiceLogsFirstCommittedStatus(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Fields["http.status"] != http.StatusCreated {
-		t.Fatalf("expected logged status %d, got %v", http.StatusCreated, events[0].Fields["http.status"])
+	if intField(events[0], "http.status") != http.StatusCreated {
+		t.Fatalf("expected logged status %d, got %v", http.StatusCreated, intField(events[0], "http.status"))
 	}
 }
 
 func TestMiddlewarePanicAfterCommittedStatusKeepsCommittedStatus(t *testing.T) {
-	backend := newMemorySink()
+	backend := hc.NewTestSink()
 	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         backend,
 		SamplingRate: 1,
@@ -176,17 +178,17 @@ func TestMiddlewarePanicAfterCommittedStatusKeepsCommittedStatus(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level != hc.LevelError {
-		t.Fatalf("expected error level, got %s", events[0].Level)
+	if events[0].Level() != hc.LevelError {
+		t.Fatalf("expected error level, got %s", events[0].Level())
 	}
-	if events[0].Fields["http.status"] != http.StatusCreated {
-		t.Fatalf("expected logged status %d, got %v", http.StatusCreated, events[0].Fields["http.status"])
+	if intField(events[0], "http.status") != http.StatusCreated {
+		t.Fatalf("expected logged status %d, got %v", http.StatusCreated, intField(events[0], "http.status"))
 	}
 }
 
 func TestMiddlewareSetsRouteFromRequestPattern(t *testing.T) {
 	var sampledOp string
-	sink := newMemorySink()
+	sink := hc.NewTestSink()
 	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
@@ -209,11 +211,11 @@ func TestMiddlewareSetsRouteFromRequestPattern(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	route, ok := events[0].Fields["http.route"].(string)
+	route, ok := fieldOf(events[0], "http.route").(string)
 	if !ok || route == "" {
-		t.Fatalf("expected route template, got %#v", events[0].Fields["http.route"])
+		t.Fatalf("expected route template, got %#v", fieldOf(events[0], "http.route"))
 	}
-	if name, _ := events[0].Fields["op.name"].(string); name != route {
+	if name, _ := fieldOf(events[0], "op.name").(string); name != route {
 		t.Fatalf("wire op.name = %q, want route %q", name, route)
 	}
 	if sampledOp != route {
@@ -222,7 +224,7 @@ func TestMiddlewareSetsRouteFromRequestPattern(t *testing.T) {
 }
 
 func TestMiddlewarePreservesOptionalInterfaces(t *testing.T) {
-	sink := newMemorySink()
+	sink := hc.NewTestSink()
 	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
@@ -273,7 +275,7 @@ func TestMiddlewarePreservesOptionalInterfaces(t *testing.T) {
 }
 
 func TestMiddlewareWriteSetsStatusCode(t *testing.T) {
-	sink := newMemorySink()
+	sink := hc.NewTestSink()
 	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
@@ -293,13 +295,13 @@ func TestMiddlewareWriteSetsStatusCode(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Fields["http.status"] != http.StatusOK {
-		t.Fatalf("expected status 200, got %v", events[0].Fields["http.status"])
+	if intField(events[0], "http.status") != http.StatusOK {
+		t.Fatalf("expected status 200, got %v", intField(events[0], "http.status"))
 	}
 }
 
 func TestMiddlewareReadFromSetsStatusCode(t *testing.T) {
-	sink := newMemorySink()
+	sink := hc.NewTestSink()
 	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 1,
@@ -323,8 +325,8 @@ func TestMiddlewareReadFromSetsStatusCode(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Fields["http.status"] != http.StatusOK {
-		t.Fatalf("expected status 200, got %v", events[0].Fields["http.status"])
+	if intField(events[0], "http.status") != http.StatusOK {
+		t.Fatalf("expected status 200, got %v", intField(events[0], "http.status"))
 	}
 }
 
@@ -341,7 +343,7 @@ func TestMiddlewareNilSinkStillRunsHandler(t *testing.T) {
 }
 
 func TestMiddlewareSamplingDropForHealthyRequest(t *testing.T) {
-	sink := newMemorySink()
+	sink := hc.NewTestSink()
 	mw := Middleware(hc.MustCompile(hc.Config{
 		Sink:         sink,
 		SamplingRate: 0,
@@ -359,40 +361,17 @@ func TestMiddlewareSamplingDropForHealthyRequest(t *testing.T) {
 // capturedEvent mirrors the v0 test-facing shape (map fields, int
 // numerics) over the v2 TestSink capture, keeping the assertions below
 // unchanged from the v0 suite.
-type capturedEvent struct {
-	Level   hc.Level
-	Message string
-	Fields  map[string]any
+// Typed field access on captured events (Lookup carries int64; the
+// constants in these tests are ints).
+func fieldOf(ev hc.CapturedEvent, key string) any {
+	v, _ := ev.Lookup(key)
+	return v
 }
 
-type memorySink struct {
-	ts *hc.TestSink
-}
-
-func newMemorySink() *memorySink {
-	return &memorySink{ts: hc.NewTestSink()}
-}
-
-func (s *memorySink) Write(ctx context.Context, rec *hc.Record) {
-	s.ts.Write(ctx, rec)
-}
-
-func (s *memorySink) Events() []capturedEvent {
-	captured := s.ts.Events()
-	out := make([]capturedEvent, 0, len(captured))
-	for _, ev := range captured {
-		fields := make(map[string]any, len(ev.Fields())+4)
-		for _, f := range ev.Fields() {
-			v, _ := ev.Lookup(f.Key())
-			if i, ok := v.(int64); ok {
-				fields[f.Key()] = int(i)
-			} else {
-				fields[f.Key()] = v
-			}
-		}
-		out = append(out, capturedEvent{Level: ev.Level(), Message: ev.Message(), Fields: fields})
-	}
-	return out
+func intField(ev hc.CapturedEvent, key string) int64 {
+	v, _ := ev.Lookup(key)
+	n, _ := v.(int64)
+	return n
 }
 
 type testOptionalWriter struct {
@@ -513,4 +492,14 @@ func TestMiddlewareFlushCommitsStatus(t *testing.T) {
 			t.Fatalf("status = %v, want 200 after plain flush", st)
 		}
 	})
+}
+
+func TestCrashNilRuntimePassthrough(t *testing.T) {
+	mw := Middleware(nil)
+	handler := mw(http.NotFoundHandler())
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest("GET", "/x", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 (passthrough)", rec.Code)
+	}
 }

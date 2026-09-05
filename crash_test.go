@@ -4,8 +4,8 @@ package hc
 // consolidated from the two crash-testing rounds. Each section is one
 // independent workstream (agent) with its own charter; helpers and
 // fixtures are shared at package scope. The module-local legs (nil
-// abuse per bridge, std middleware passthrough) live beside their
-// modules in adapter/*/crash_test.go and integration/std/crash_test.go.
+// abuse per bridge) live in each adapter's crash_test.go; the std
+// passthrough tests live with the middleware and wire tests.
 //
 //   A  panic torture (sampler/marshal/sink panics, panic(nil), one-shot)
 //   B  concurrency hammer (straggler storms, recycling, shared runtime)
@@ -18,6 +18,7 @@ package hc
 //   J  sink contract edges (Encoded race, fanout, recycle hazards)
 //   K  adversarial fuzz targets (values, armed interleavings)
 //   L  armed-mode DST (mixed writers vs single End, arm-vs-seal)
+//   N  testing/synctest bubbles (per-test goroutine hygiene, watchdog)
 
 import (
 	"context"
@@ -28,6 +29,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 	"unicode/utf8"
 )
@@ -558,7 +560,8 @@ func TestCrashCyclicAnyValue(t *testing.T) {
 }
 
 func TestCrashFloatEdgeValues(t *testing.T) {
-	vals := []float64{math.NaN(), math.Inf(1), math.Inf(-1), math.SmallestNonzeroFloat64, math.MaxFloat64, -0.0}
+	negZero := math.Copysign(0, -1)
+	vals := []float64{math.NaN(), math.Inf(1), math.Inf(-1), math.SmallestNonzeroFloat64, math.MaxFloat64, negZero}
 	for _, v := range vals {
 		rec := recOf(LevelInfo, "f", fieldOf("f", v))
 		m := mustParseLine(t, rec.Encoded())
@@ -831,22 +834,18 @@ func (r *rawRetainingSink) Write(_ context.Context, rec *Record) {
 // Agent E — configuration and API misuse
 // ════════════════════════════════════════════════════════════════════
 
+// Plain out-of-range rates and NaN are pinned by TestCompileSentinels;
+// this covers the infinities and negative zero it omits.
 func TestCrashHostileRates(t *testing.T) {
-	bad := []float64{math.NaN(), math.Inf(1), math.Inf(-1), -0.1, 1.0000001, 2, -42}
-	for _, r := range bad {
+	for _, r := range []float64{math.Inf(1), math.Inf(-1)} {
 		if _, err := Compile(Config{SamplingRate: r}); err == nil {
 			t.Fatalf("rate %v accepted", r)
 		}
 	}
-	good := []float64{0, 1, 0.5, -0.0}
-	for _, r := range good {
+	for _, r := range []float64{0, 1, 0.5, math.Copysign(0, -1)} {
 		if _, err := Compile(Config{SamplingRate: r}); err != nil {
 			t.Fatalf("rate %v rejected: %v", r, err)
 		}
-	}
-	// Hostile values nested in the maps too.
-	if _, err := Compile(Config{LevelSamplingRates: map[Level]float64{LevelInfo: math.NaN()}}); err == nil {
-		t.Fatal("NaN level rate accepted")
 	}
 	inf := math.Inf(1)
 	if _, err := Compile(Config{OperationPolicies: map[Domain]OperationPolicy{"job": {SamplingRate: &inf}}}); err == nil {
@@ -901,19 +900,26 @@ func TestCrashNilReceiversAndArgs(t *testing.T) {
 		t.Fatal("nil op Context not nil")
 	}
 	// Start with nil runtime and nil ctx.
+	//lint:ignore SA1012 nil contexts are this test's charter
 	op := Start(nil, nil, OperationStart{})
 	if op.End(nil) {
 		t.Fatal("nil runtime emitted")
 	}
 	// Context helpers with nil/no-event ctx: silent no-ops.
+	//lint:ignore SA1012 nil contexts are this test's charter
 	Add(nil, "k", "v")
 	Add(context.Background(), "k", "v")
+	//lint:ignore SA1012 nil contexts are this test's charter
 	AddRawJSON(nil, "k", []byte(`{}`))
 	AddRawJSON(context.Background(), "k", nil)
+	//lint:ignore SA1012 nil contexts are this test's charter
 	Error(nil, nil)
 	Error(context.Background(), nil)
+	//lint:ignore SA1012 nil contexts are this test's charter
 	SetMessage(nil, "")
+	//lint:ignore SA1012 nil contexts are this test's charter
 	SetRoute(nil, "")
+	//lint:ignore SA1012 nil contexts are this test's charter
 	SetLevel(nil, Level(999))
 	// Sinks.
 	(*JSONSink)(nil).Write(context.Background(), nil)
@@ -994,7 +1000,7 @@ func TestCrashSetterGarbage(t *testing.T) {
 
 func TestCrashExtremeTimes(t *testing.T) {
 	times := []time.Time{
-		time.Time{}, // zero
+		{}, // zero
 		time.Date(-1, 1, 1, 0, 0, 0, 0, time.UTC),      // negative year
 		time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC),       // year 0
 		time.Date(12345, 6, 7, 8, 9, 10, 11, time.UTC), // five-digit year
@@ -1875,7 +1881,7 @@ func FuzzCrashAdversarialValues(f *testing.F) {
 		case 8:
 			val = strings.Repeat("\xff\x00", 5000)
 		case 9:
-			val = []any{math.MaxFloat64, math.SmallestNonzeroFloat64, -0.0, nil, true}
+			val = []any{math.MaxFloat64, math.SmallestNonzeroFloat64, math.Copysign(0, -1), nil, true}
 		case 10:
 			val = time.Date(-5, 13, 40, 25, 61, 61, -1, time.UTC)
 		case 11:
@@ -1968,3 +1974,218 @@ func key2(i int) string { return "k" + strings.Repeat("p", i%8) + string(rune('a
 type errBoom2 struct{}
 
 func (errBoom2) Error() string { return "boom2" }
+
+// ════════════════════════════════════════════════════════════════════
+// Agent N — testing/synctest bubbles (per-test goroutine hygiene)
+// ════════════════════════════════════════════════════════════════════
+//
+// goleak gates the whole suite at TestMain exit; synctest bubbles make
+// "every goroutine this test started has exited" a per-test assertion
+// (Test waits for bubble goroutines before returning) and replace real
+// sleeps with a virtual clock. Stable since go1.25 — the module floor —
+// so no build tags. Constraints respected: no t.Run/t.Parallel inside
+// a bubble, bubble channels stay inside.
+
+// Concurrent End against a gated sink: the winner durably blocks on a
+// channel inside the bubble (no wall or virtual time involved), the
+// losers spin in End's one-shot wait, every racer provably exits with
+// the bubble, and exactly one write lands.
+//
+// NOTE — virtual-clock incompatibility, pinned here: the original
+// variant used a slowSink (time.Sleep) and hangs forever in a bubble.
+// End's one-shot wait spins with runtime.Gosched, and spinners are
+// never durably blocked, so synctest's clock cannot advance while the
+// winner sleeps — a live lock, not a detected deadlock: a regressed
+// publish defer would HANG the bubble until the test timeout, never
+// fail it, because spinners are never durably blocked. Any future
+// library path that sleeps while another goroutine spins cannot be
+// bubble-tested with real time.Sleep in the winner's path — including
+// the v1.1 watchdog itself, which would sleep on real timers while
+// request writers spin in the armed-add path: the same livelock,
+// mirrored. Use channel gates instead.
+func TestSynctestConcurrentEndGatedSink(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		gate := make(chan struct{})
+		gated := &gateSink{gate: gate}
+		rt := MustCompile(Config{Sink: gated, SamplingRate: 1})
+		op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
+		const racers = 16
+		var wg sync.WaitGroup
+		first := make([]bool, racers)
+		for i := range racers {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				first[i] = op.End(nil)
+			}(i)
+		}
+		// The gate usually closes before the winner reaches Write, so
+		// the durable block is scheduling-dependent — the assertions
+		// that matter are the publication result and exactly one write.
+		close(gate)
+		wg.Wait()
+		if !first[0] {
+			t.Fatal("first racer observed not-emitted (publication must report the winner's result)")
+		}
+		for i := 1; i < racers; i++ {
+			if first[i] != first[0] {
+				t.Fatalf("racer %d observed %v, racer 0 %v", i, first[i], first[0])
+			}
+		}
+		if gated.writes != 1 {
+			t.Fatalf("sink writes = %d, want 1", gated.writes)
+		}
+	})
+}
+
+type gateSink struct {
+	gate   chan struct{}
+	writes int
+}
+
+func (s *gateSink) Write(_ context.Context, _ *Record) {
+	<-s.gate // durably blocks inside the bubble
+	s.writes++
+}
+
+// Armed-mode mixed writers plus a snapshotter against a single End:
+// the bubble returning proves every goroutine exited (a per-test leak
+// assertion), and the committed line is complete and valid.
+func TestSynctestArmedWritersAllExit(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rt, ts := testRT(t, nil)
+		op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
+		op.ev.arm()
+		stop := make(chan struct{})
+		var wg sync.WaitGroup
+		for w := range 6 {
+			wg.Add(1)
+			go func(w int) {
+				defer wg.Done()
+				for i := 0; ; i++ {
+					select {
+					case <-stop:
+						return
+					default:
+						Add(op.Context(), fmt.Sprintf("w%d", w), i)
+					}
+				}
+			}(w)
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					_ = op.ev.snapshotFields()
+				}
+			}
+		}()
+		Add(op.Context(), "owner", "final")
+		_ = op.End(nil)
+		close(stop)
+		wg.Wait()
+
+		evs := ts.Events()
+		if len(evs) != 1 {
+			t.Fatalf("events = %d, want 1", len(evs))
+		}
+		if v, ok := evs[0].Lookup("owner"); !ok || v != "final" {
+			t.Fatalf("owner field lost: %#v", v)
+		}
+	})
+}
+
+// The v1.1 watchdog shape, simulated deterministically under the
+// virtual clock: a stalled request gets armed (what the watchdog will
+// do), the watchdog takes a mid-flight snapshot after its stall
+// threshold, the request resumes writing, then commits. The snapshot
+// is a stable copy of a strict prefix of the committed WAL.
+func TestSynctestWatchdogShape(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rt, ts := testRT(t, nil)
+		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "stalled"})
+		Add(op.Context(), "phase", "before-stall")
+
+		// The watchdog arms a stalled request and snapshots it.
+		op.ev.arm()
+		time.Sleep(500 * time.Millisecond) // virtual: instant, deterministic
+		snap := op.ev.snapshotFields()
+
+		// The request wakes, REWRITES a snapshotted key, adds a new
+		// one, then commits. The rewrite is what makes the stability
+		// assertion real: the snapshot must still show the pre-rewrite
+		// value (a snapshot aliasing the live slice would fail here).
+		Add(op.Context(), "phase", "rewritten", "phase2", "after-stall", "k", "v")
+		_ = op.End(nil)
+
+		if len(snap) == 0 || len(snap) >= len(ts.Events()[0].Fields()) {
+			t.Fatalf("snapshot = %d fields, committed = %d (want a strict prefix)",
+				len(snap), len(ts.Events()[0].Fields()))
+		}
+		// Snapshot stability, made real by the rewrite: the snapshot
+		// still shows the pre-rewrite value...
+		snapPhase, ok := snapshotLookup(snap, "phase")
+		if !ok || snapPhase != "before-stall" {
+			t.Fatalf("snapshot phase = %v, want pre-rewrite \"before-stall\" (snapshot aliased the live slice?)", snapPhase)
+		}
+		// ...while the committed WAL carries the rewrite, and every
+		// snapshotted key still exists.
+		committed := ts.Events()[0]
+		if v, _ := committed.Lookup("phase"); v != "rewritten" {
+			t.Fatalf("committed phase = %v, want the rewrite", v)
+		}
+		for _, f := range snap {
+			if _, ok := committed.Lookup(f.Key()); !ok {
+				t.Fatalf("snapshotted key %q missing from committed event", f.Key())
+			}
+		}
+		if v, _ := committed.Lookup("phase2"); v != "after-stall" {
+			t.Fatalf("post-snapshot field lost: %v", v)
+		}
+	})
+}
+
+// Straggler storm in a bubble: the request commits, stragglers fire
+// after, and every one of them exits before the bubble returns.
+func TestSynctestStragglerStormBubble(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rt, ts := testRT(t, nil)
+		const requests = 25
+		for i := range requests {
+			op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
+			Add(op.Context(), "mine", i)
+			_ = op.End(nil)
+			var wg sync.WaitGroup
+			for s := range 8 {
+				wg.Add(1)
+				go func(s int) {
+					defer wg.Done()
+					Add(op.Context(), "straggler", s)
+				}(s)
+			}
+			wg.Wait()
+		}
+		evs := ts.Events()
+		if len(evs) != requests {
+			t.Fatalf("events = %d, want %d", len(evs), requests)
+		}
+		for _, ev := range evs {
+			if _, ok := ev.Lookup("straggler"); ok {
+				t.Fatal("post-seal straggler field reached the wire")
+			}
+		}
+	})
+}
+
+func snapshotLookup(fields []Field, key string) (any, bool) {
+	for _, f := range fields {
+		if f.key == key {
+			return valueOf(f), true
+		}
+	}
+	return nil, false
+}

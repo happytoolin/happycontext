@@ -1,9 +1,11 @@
 package zapadapter
 
-// Agent E (adapters leg) — nil and garbage abuse against the bridge.
+// Bridge robustness tests: nil/garbage abuse and typed-nil error
+// containment.
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	hc "github.com/happytoolin/happycontext"
@@ -33,5 +35,17 @@ func TestCrashNilAbuse(t *testing.T) {
 	var nilSink *Sink
 	nilSink.Write(context.Background(), rec)
 	New(zap.NewNop()).Write(context.Background(), rec)
+	New(zap.NewExample()).Write(context.Background(), rec)
+}
+
+func TestCrashTypedNilErrorField(t *testing.T) {
+	var pe *os.PathError
+	s := &recSink{}
+	rt := hc.MustCompile(hc.Config{Sink: s, SamplingRate: 1})
+	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "j"})
+	hc.Add(op.Context(), "e", pe)
+	hc.Error(op.Context(), pe)
+	_ = op.End(nil)
+	rec := s.rec
 	New(zap.NewExample()).Write(context.Background(), rec)
 }
