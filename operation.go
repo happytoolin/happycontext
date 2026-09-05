@@ -353,11 +353,18 @@ func buildSampleInput(ev *event, start OperationStart, outcome Outcome, code int
 	if scan.name != "" {
 		opName = scan.name
 	}
+	// HTTP samplers see http.status; non-HTTP samplers see their
+	// canonical op.code (the README's non-HTTP contract for Code).
+	// StatusCode stays the HTTP-compat view of http.status in both.
+	samplerCode := code
+	if normalizeDomain(start.Domain) != DomainHTTP && scan.hasOpCode {
+		samplerCode = scan.opCode
+	}
 	in := SampleInput{
 		Domain:     normalizeDomain(start.Domain),
 		Operation:  opName,
 		Outcome:    outcome,
-		Code:       code,
+		Code:       samplerCode,
 		StatusCode: code,
 		Method:     scan.method,
 		Path:       scan.path,

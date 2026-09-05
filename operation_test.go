@@ -321,6 +321,44 @@ func TestSampleInputUsesWALOpName(t *testing.T) {
 	}
 }
 
+// TestSampleInputCodeSurfacesOpCode pins the sampler contract: for
+// non-HTTP operations Code carries the canonical op.code (README:
+// "for non-HTTP operations use Domain, Operation, Outcome, and Code"),
+// while StatusCode stays the http.status view. HTTP samplers keep
+// seeing http.status even if a stray op.code was written.
+func TestSampleInputCodeSurfacesOpCode(t *testing.T) {
+	var jobCode, jobStatus, httpCode int
+	rt, _ := testRT(t, func(c *Config) {
+		c.Sampler = func(in SampleInput) bool {
+			switch in.Domain {
+			case DomainJob:
+				jobCode, jobStatus = in.Code, in.StatusCode
+			case DomainHTTP:
+				httpCode = in.Code
+			}
+			return true
+		}
+	})
+
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "job"})
+	Add(op.Context(), "op.code", 42)
+	_ = op.End(nil)
+	if jobCode != 42 {
+		t.Fatalf("job Code = %d, want 42 (canonical op.code)", jobCode)
+	}
+	if jobStatus != 0 {
+		t.Fatalf("job StatusCode = %d, want 0 (http.status view)", jobStatus)
+	}
+
+	// 2xx, not 5xx: error events bypass the sampler structurally.
+	hop := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
+	Add(hop.Context(), "http.status", 201, "op.code", 7)
+	_ = hop.End(nil)
+	if httpCode != 201 {
+		t.Fatalf("http Code = %d, want 201 (http.status wins on HTTP)", httpCode)
+	}
+}
+
 // TestNonHTTPOpCode pins the canonical-field rule: op.code is non-HTTP
 // only, surfaced from the explicit op.code field the caller wrote.
 func TestNonHTTPOpCode(t *testing.T) {
