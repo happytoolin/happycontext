@@ -4,12 +4,15 @@ package zapadapter
 // containment.
 
 import (
+	"bytes"
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	hc "github.com/happytoolin/happycontext"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type recSink struct{ rec *hc.Record }
@@ -47,5 +50,10 @@ func TestCrashTypedNilErrorField(t *testing.T) {
 	hc.Error(op.Context(), pe)
 	_ = op.End(nil)
 	rec := s.rec
-	New(zap.NewExample()).Write(context.Background(), rec)
+	var out bytes.Buffer
+	zl := zap.New(zapcore.NewCore(zapcore.NewJSONEncoder(zapcore.EncoderConfig{TimeKey: "ts", LevelKey: "level", MessageKey: "msg"}), zapcore.Lock(zapcore.AddSync(&out)), zapcore.DebugLevel))
+	New(zl).Write(context.Background(), rec)
+	if !strings.Contains(out.String(), "<nil>") {
+		t.Fatalf("typed-nil error not rendered as <nil>: %s", out.String())
+	}
 }

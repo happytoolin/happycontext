@@ -32,14 +32,14 @@ func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if intField(events[0], "http.status") != http.StatusCreated {
-		t.Fatalf("expected status %d, got %v", http.StatusCreated, intField(events[0], "http.status"))
+	if statusField(events[0], "http.status") != http.StatusCreated {
+		t.Fatalf("expected status %d, got %v", http.StatusCreated, statusField(events[0], "http.status"))
 	}
-	if fieldOf(events[0], "http.route") != "/orders/:id" {
-		t.Fatalf("expected route template, got %v", fieldOf(events[0], "http.route"))
+	if fieldValue(events[0], "http.route") != "/orders/:id" {
+		t.Fatalf("expected route template, got %v", fieldValue(events[0], "http.route"))
 	}
-	if fieldOf(events[0], "user_id") != "u_1" {
-		t.Fatalf("expected user_id field, got %v", fieldOf(events[0], "user_id"))
+	if fieldValue(events[0], "user_id") != "u_1" {
+		t.Fatalf("expected user_id field, got %v", fieldValue(events[0], "user_id"))
 	}
 }
 
@@ -87,10 +87,10 @@ func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 	if events[0].Level() != hc.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level())
 	}
-	if intField(events[0], "http.status") != http.StatusInternalServerError {
-		t.Fatalf("status = %v, want %d", intField(events[0], "http.status"), http.StatusInternalServerError)
+	if statusField(events[0], "http.status") != http.StatusInternalServerError {
+		t.Fatalf("status = %v, want %d", statusField(events[0], "http.status"), http.StatusInternalServerError)
 	}
-	if _, ok := fieldOf(events[0], "error").(map[string]any); !ok {
+	if _, ok := fieldValue(events[0], "error").(map[string]any); !ok {
 		t.Fatalf("expected structured error field")
 	}
 }
@@ -123,13 +123,13 @@ func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if fieldOf(events[0], "http.route") != "/panic/:id" {
-		t.Fatalf("route = %v", fieldOf(events[0], "http.route"))
+	if fieldValue(events[0], "http.route") != "/panic/:id" {
+		t.Fatalf("route = %v", fieldValue(events[0], "http.route"))
 	}
-	if intField(events[0], "http.status") != http.StatusInternalServerError {
-		t.Fatalf("status = %v, want %d", intField(events[0], "http.status"), http.StatusInternalServerError)
+	if statusField(events[0], "http.status") != http.StatusInternalServerError {
+		t.Fatalf("status = %v, want %d", statusField(events[0], "http.status"), http.StatusInternalServerError)
 	}
-	if _, ok := fieldOf(events[0], "panic").(map[string]any); !ok {
+	if _, ok := fieldValue(events[0], "panic").(map[string]any); !ok {
 		t.Fatalf("expected panic metadata")
 	}
 }
@@ -154,8 +154,8 @@ func TestMiddlewareLogsNoRouteWithoutTemplate(t *testing.T) {
 	if _, ok := events[0].Lookup("http.route"); ok {
 		t.Fatalf("did not expect route template for unmatched route")
 	}
-	if intField(events[0], "http.status") != http.StatusNotFound {
-		t.Fatalf("status = %v, want %d", intField(events[0], "http.status"), http.StatusNotFound)
+	if statusField(events[0], "http.status") != http.StatusNotFound {
+		t.Fatalf("status = %v, want %d", statusField(events[0], "http.status"), http.StatusNotFound)
 	}
 }
 
@@ -177,8 +177,8 @@ func TestMiddlewareGinErrorKeepsCommittedStatus(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if intField(events[0], "http.status") != http.StatusTooManyRequests {
-		t.Fatalf("status = %v, want %d", intField(events[0], "http.status"), http.StatusTooManyRequests)
+	if statusField(events[0], "http.status") != http.StatusTooManyRequests {
+		t.Fatalf("status = %v, want %d", statusField(events[0], "http.status"), http.StatusTooManyRequests)
 	}
 	if events[0].Level() != hc.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level())
@@ -203,7 +203,7 @@ func TestMiddlewareGinErrorUsesUnderlyingErrorMetadata(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	errField, ok := fieldOf(events[0], "error").(map[string]any)
+	errField, ok := fieldValue(events[0], "error").(map[string]any)
 	if !ok {
 		t.Fatalf("expected structured error field")
 	}
@@ -218,14 +218,15 @@ func TestMiddlewareGinErrorUsesUnderlyingErrorMetadata(t *testing.T) {
 // capturedEvent mirrors the v0 test-facing shape (map fields, int
 // numerics) over the v2 TestSink capture, keeping the assertions below
 // unchanged from the v0 suite.
-// Typed field access on captured events (Lookup carries int64; the
-// constants in these tests are ints).
-func fieldOf(ev hc.CapturedEvent, key string) any {
+// Typed field reads on captured events: fieldValue for any value,
+// statusField for the int64 http.status these tests compare against
+// int constants.
+func fieldValue(ev hc.CapturedEvent, key string) any {
 	v, _ := ev.Lookup(key)
 	return v
 }
 
-func intField(ev hc.CapturedEvent, key string) int64 {
+func statusField(ev hc.CapturedEvent, key string) int64 {
 	v, _ := ev.Lookup(key)
 	n, _ := v.(int64)
 	return n

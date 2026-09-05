@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	hc "github.com/happytoolin/happycontext"
@@ -58,4 +59,7 @@ func TestCrashTypedNilErrorField(t *testing.T) {
 	rec := s.rec
 	zl := zerolog.New(&buf)
 	New(&zl).Write(context.Background(), rec)
+	if !strings.Contains(buf.String(), `"<nil>"`) {
+		t.Fatalf("typed-nil error not rendered as <nil>: %s", buf.String())
+	}
 }

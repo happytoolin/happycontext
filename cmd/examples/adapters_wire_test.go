@@ -72,25 +72,25 @@ func parseWireLine(t *testing.T, ln, pipeline string) parsedWire {
 	if err := json.Unmarshal([]byte(ln), &m); err != nil {
 		t.Fatalf("%s line unparseable: %v: %s", pipeline, err, ln)
 	}
-	st, _ := m["http.status"].(float64)
-	oc, _ := m["op.outcome"].(string)
-	rt, _ := m["op.name"].(string)
+	st, stOK := m["http.status"].(float64)
+	oc, ocOK := m["op.outcome"].(string)
+	rt, rtOK := m["op.name"].(string)
 	usr, _ := m["wire"].(string)
 	_, hasErr := m["error"]
-	if st == 0 || oc == "" || rt == "" {
-		t.Fatalf("%s: canonical fields missing: %v", pipeline, m)
+	if !stOK || !ocOK || !rtOK {
+		t.Fatalf("%s: canonical fields missing or mistyped: %v", pipeline, m)
 	}
 	return parsedWire{status: int64(st), outcome: oc, route: rt, user: usr, hasErr: hasErr}
 }
 
-// drive fires the wire cases at a real server built on the given real
-// sink, waits for the handlers to drain, and parses the pipeline's
-// emitted lines.
-func drive(t *testing.T, sink gc.Sink, buf *bytes.Buffer, pipeline string) []parsedWire {
+// drivePipeline fires the wire cases at a real server built on the
+// given real sink and parses the pipeline's emitted lines. The
+// explicit Close is load-bearing: client returns precede the server's
+// deferred emissions, and Close waits for outstanding handlers.
+func drivePipeline(t *testing.T, sink gc.Sink, buf *bytes.Buffer, pipeline string) []parsedWire {
 	t.Helper()
 	rt := gc.MustCompile(gc.Config{Sink: sink, SamplingRate: 1})
 	srv := httptest.NewServer(stdhc.Middleware(rt)(wireMux()))
-	defer srv.Close()
 
 	for _, c := range wireCases {
 		resp, err := srv.Client().Get(srv.URL + c.request)
@@ -100,9 +100,9 @@ func drive(t *testing.T, sink gc.Sink, buf *bytes.Buffer, pipeline string) []par
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}
-	srv.Close() // drain outstanding handlers before reading the buffer
+	srv.Close() // quiesce handlers before reading the buffer
 
-	var out []parsedWire
+	out := make([]parsedWire, 0, len(wireCases))
 	for _, ln := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
 		if ln == "" {
 			continue
@@ -114,41 +114,47 @@ func drive(t *testing.T, sink gc.Sink, buf *bytes.Buffer, pipeline string) []par
 
 // TestAdaptersWireParity drives identical real traffic through every
 // real pipeline — first-party JSONSink, slog, zap, zerolog — and
-// asserts they agree on the canonical wire.
+// asserts BOTH the absolute canonical fields per pipeline AND that the
+// bridges agree with the JSONSink reference. Deterministic order
+// (jsonsink is the fixed reference), no map-iteration roulette.
 func TestAdaptersWireParity(t *testing.T) {
-	pipelines := map[string][]parsedWire{}
-
 	var jsonBuf bytes.Buffer
-	pipelines["jsonsink"] = drive(t, gc.NewJSONSink(&jsonBuf), &jsonBuf, "jsonsink")
+	reference := drivePipeline(t, gc.NewJSONSink(&jsonBuf), &jsonBuf, "jsonsink")
 
 	var slogBuf bytes.Buffer
-	pipelines["slog"] = drive(t, sloghc.New(slog.New(slog.NewJSONHandler(&slogBuf, nil))), &slogBuf, "slog")
+	slogEvents := drivePipeline(t, sloghc.New(slog.New(slog.NewJSONHandler(&slogBuf, nil))), &slogBuf, "slog")
 
 	var zapBuf bytes.Buffer
-	zapLogger := zap.New(zapcore.NewCore(zapcore.NewJSONEncoder(zapcore.EncoderConfig{TimeKey: "ts", LevelKey: "level", MessageKey: "msg", EncodeTime: zapcore.EpochTimeEncoder, EncodeLevel: zapcore.LowercaseLevelEncoder}), zapcore.AddSync(&zapBuf), zapcore.DebugLevel))
-	pipelines["zap"] = drive(t, zaphc.New(zapLogger), &zapBuf, "zap")
+	zapLogger := zap.New(zapcore.NewCore(zapcore.NewJSONEncoder(zapcore.EncoderConfig{TimeKey: "ts", LevelKey: "level", MessageKey: "msg", EncodeTime: zapcore.EpochTimeEncoder, EncodeLevel: zapcore.LowercaseLevelEncoder}), zapcore.Lock(zapcore.AddSync(&zapBuf)), zapcore.DebugLevel))
+	zapEvents := drivePipeline(t, zaphc.New(zapLogger), &zapBuf, "zap")
 
 	var zeroBuf bytes.Buffer
 	zl := zerolog.New(&zeroBuf)
-	pipelines["zerolog"] = drive(t, zerologhc.New(&zl), &zeroBuf, "zerolog")
+	zeroEvents := drivePipeline(t, zerologhc.New(&zl), &zeroBuf, "zerolog")
 
-	var reference []parsedWire
-	var refName string
-	for name, evs := range pipelines {
-		if len(evs) != len(wireCases) {
-			t.Fatalf("%s: %d events, want %d", name, len(evs), len(wireCases))
+	pipelines := []struct {
+		name   string
+		events []parsedWire
+	}{
+		{"jsonsink", reference},
+		{"slog", slogEvents},
+		{"zap", zapEvents},
+		{"zerolog", zeroEvents},
+	}
+	for _, pl := range pipelines {
+		if len(pl.events) != len(wireCases) {
+			t.Fatalf("%s: %d events, want %d", pl.name, len(pl.events), len(wireCases))
 		}
-		if reference == nil {
-			reference, refName = evs, name
-			continue
-		}
-		for i, ev := range evs {
+		for i, ev := range pl.events {
+			// Absolute checks for EVERY pipeline — a bridge regressing a
+			// canonical field must fail deterministically, not only when
+			// map iteration happens to make it the non-reference.
 			want := wireCases[i]
 			if ev.status != want.status || ev.outcome != want.outcome || ev.user != want.userField {
-				t.Fatalf("%s[%d] = %+v, want case %+v", name, i, ev, want)
+				t.Fatalf("%s[%d] = %+v, want case %+v", pl.name, i, ev, want)
 			}
 			if ev.route != reference[i].route || ev.hasErr != reference[i].hasErr {
-				t.Fatalf("%s[%d] diverges from %s: %+v vs %+v", name, i, refName, ev, reference[i])
+				t.Fatalf("%s[%d] diverges from jsonsink: %+v vs %+v", pl.name, i, ev, reference[i])
 			}
 		}
 	}
