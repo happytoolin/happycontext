@@ -588,11 +588,17 @@ func (m *lifeModel) outcome() Outcome {
 			return OutcomeFailure
 		}
 	}
-	explicit, hasExplicit, code, hasCode, _, _ := m.scan()
+	explicit, hasExplicit, code, hasCode, opCode, hasOpCode := m.scan()
 	if hasExplicit {
 		return explicit
 	}
-	if hasCode && code >= 500 {
+	// The 5xx rule reads the canonical code: http.status for HTTP,
+	// op.code for everything else (mirrors resolveOutcomeV2).
+	if normalizeDomain(m.start) == DomainHTTP {
+		if hasCode && code >= 500 {
+			return OutcomeFailure
+		}
+	} else if hasOpCode && opCode >= 500 {
 		return OutcomeFailure
 	}
 	return OutcomeSuccess
@@ -1138,6 +1144,8 @@ func seedPrograms() []seedProg {
 	add("http-500", p(modeRate1, DomainHTTP, intOp("http.status", 500), endErr(nil)))
 	add("http-404", p(modeRate1, DomainHTTP, intOp("http.status", 404), endErr(nil)))
 	add("job-500-status", p(modeRate1, DomainJob, intOp("http.status", 500), endErr(nil)))
+	add("job-500-opcode", p(modeRate1, DomainJob, intOp("op.code", 500), endErr(nil)))
+	add("job-503-opcode-err", p(modeRate1, DomainJob, intOp("op.code", 503), errOp("boom"), endErr(nil)))
 	return seeds
 }
 

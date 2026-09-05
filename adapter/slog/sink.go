@@ -5,7 +5,9 @@ package slogadapter
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"reflect"
 	"slices"
 	"sync"
 
@@ -84,7 +86,7 @@ func (s *Sink) Write(ctx context.Context, rec *hc.Record) {
 // (base64) — both the v0 adapter's shapes.
 func attrOf(f hc.Field) slog.Attr {
 	if err, ok := f.Err(); ok {
-		return slog.String(f.Key(), err.Error())
+		return slog.String(f.Key(), errMessage(err))
 	}
 	if raw, ok := f.Raw(); ok {
 		return slog.Any(f.Key(), raw)
@@ -153,3 +155,13 @@ func lastOccurrences(fields []hc.Field) []int {
 }
 
 var _ hc.Sink = (*Sink)(nil)
+
+// errMessage renders an error field's message, tolerating typed-nil
+// errors (non-nil interface, nil pointer): their Error() panics on nil
+// dereference, and fmt renders them safely as "<nil>".
+func errMessage(err error) string {
+	if v := reflect.ValueOf(err); v.Kind() == reflect.Pointer && v.IsNil() {
+		return fmt.Sprint(err)
+	}
+	return err.Error()
+}

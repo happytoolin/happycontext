@@ -124,8 +124,21 @@ claimed:
 
 	scan := scanWAL(ev)
 	code := scan.code
-	outcome := resolveOutcomeV2(err, recovered, code, scan.outcome)
-	annotatePostSeal(ev, &op.ref, start, duration, normalizeDomain(start.Domain) == DomainHTTP, scan, outcome)
+	isHTTP := normalizeDomain(start.Domain) == DomainHTTP
+	// The canonical code drives the 5xx outcome rule: http.status for
+	// HTTP, op.code for everything else (a non-HTTP op's http.status is
+	// user data, not canonical) — so a job surfacing failure via
+	// op.code >= 500 resolves failure (and bypasses sampling) exactly
+	// like its HTTP twin, instead of logging a self-contradictory
+	// op.code=503 + op.outcome=success line.
+	outcomeCode := 0
+	if isHTTP {
+		outcomeCode = code
+	} else if scan.hasOpCode {
+		outcomeCode = scan.opCode
+	}
+	outcome := resolveOutcomeV2(err, recovered, outcomeCode, scan.outcome)
+	annotatePostSeal(ev, &op.ref, start, duration, isHTTP, scan, outcome)
 
 	emitted = op.commit(ev, rt, start, outcome, code, duration, now, err, recovered != nil, scan)
 	op.emitted = emitted
@@ -353,11 +366,18 @@ func buildSampleInput(ev *event, start OperationStart, outcome Outcome, code int
 	if scan.name != "" {
 		opName = scan.name
 	}
+	// HTTP samplers see http.status; non-HTTP samplers see their
+	// canonical op.code (the README's non-HTTP contract for Code).
+	// StatusCode stays the HTTP-compat view of http.status in both.
+	samplerCode := code
+	if normalizeDomain(start.Domain) != DomainHTTP && scan.hasOpCode {
+		samplerCode = scan.opCode
+	}
 	in := SampleInput{
 		Domain:     normalizeDomain(start.Domain),
 		Operation:  opName,
 		Outcome:    outcome,
-		Code:       code,
+		Code:       samplerCode,
 		StatusCode: code,
 		Method:     scan.method,
 		Path:       scan.path,

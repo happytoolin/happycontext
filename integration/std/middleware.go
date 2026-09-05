@@ -127,13 +127,13 @@ func promoteOptional(w http.ResponseWriter, core *responseWriter) http.ResponseW
 	pusher, hasPush := w.(http.Pusher)
 	switch {
 	case hasFlush && hasHijack && hasPush:
-		return &fullTracker{core, flusher, hijacker, pusher}
+		return &fullTracker{core, flushGuard{core, flusher}, hijacker, pusher}
 	case hasFlush && hasHijack:
-		return &flushHijackTracker{core, flusher, hijacker}
+		return &flushHijackTracker{core, flushGuard{core, flusher}, hijacker}
 	case hasFlush && hasPush:
-		return &flushPushTracker{core, flusher, pusher}
+		return &flushPushTracker{core, flushGuard{core, flusher}, pusher}
 	case hasFlush:
-		return &flushTracker{core, flusher}
+		return &flushTracker{core, flushGuard{core, flusher}}
 	case hasHijack && hasPush:
 		return &hijackPushTracker{core, hijacker, pusher}
 	case hasHijack:
@@ -145,9 +145,31 @@ func promoteOptional(w http.ResponseWriter, core *responseWriter) http.ResponseW
 	}
 }
 
+// flushGuard is embedded by every wrapper that promotes a Flusher: it
+// records the implicit commit before flushing, because net/http sends
+// the header (status 200 if unset) on the first Flush — without it, a
+// panic after the first flush resolves to 500 against a 200 the
+// client already received.
+type flushGuard struct {
+	rw *responseWriter
+	f  http.Flusher
+}
+
+func (g flushGuard) Flush() {
+	g.rw.markFlushed()
+	g.f.Flush()
+}
+
+func (rw *responseWriter) markFlushed() {
+	if !rw.wroteHeader {
+		rw.statusCode = http.StatusOK
+		rw.wroteHeader = true
+	}
+}
+
 type flushTracker struct {
 	*responseWriter
-	http.Flusher
+	flushGuard
 }
 
 type hijackTracker struct {
@@ -162,13 +184,13 @@ type pushTracker struct {
 
 type flushHijackTracker struct {
 	*responseWriter
-	http.Flusher
+	flushGuard
 	http.Hijacker
 }
 
 type flushPushTracker struct {
 	*responseWriter
-	http.Flusher
+	flushGuard
 	http.Pusher
 }
 
@@ -180,7 +202,7 @@ type hijackPushTracker struct {
 
 type fullTracker struct {
 	*responseWriter
-	http.Flusher
+	flushGuard
 	http.Hijacker
 	http.Pusher
 }

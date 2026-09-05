@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -318,6 +319,44 @@ func TestSampleInputUsesWALOpName(t *testing.T) {
 	}
 	if v, ok := ts.Events()[0].Lookup("op.name"); !ok || v != "GET /orders/{id}" {
 		t.Fatalf("wire op.name = %v", v)
+	}
+}
+
+// TestSampleInputCodeSurfacesOpCode pins the sampler contract: for
+// non-HTTP operations Code carries the canonical op.code (README:
+// "for non-HTTP operations use Domain, Operation, Outcome, and Code"),
+// while StatusCode stays the http.status view. HTTP samplers keep
+// seeing http.status even if a stray op.code was written.
+func TestSampleInputCodeSurfacesOpCode(t *testing.T) {
+	var jobCode, jobStatus, httpCode int
+	rt, _ := testRT(t, func(c *Config) {
+		c.Sampler = func(in SampleInput) bool {
+			switch in.Domain {
+			case DomainJob:
+				jobCode, jobStatus = in.Code, in.StatusCode
+			case DomainHTTP:
+				httpCode = in.Code
+			}
+			return true
+		}
+	})
+
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "job"})
+	Add(op.Context(), "op.code", 42)
+	_ = op.End(nil)
+	if jobCode != 42 {
+		t.Fatalf("job Code = %d, want 42 (canonical op.code)", jobCode)
+	}
+	if jobStatus != 0 {
+		t.Fatalf("job StatusCode = %d, want 0 (http.status view)", jobStatus)
+	}
+
+	// 2xx, not 5xx: error events bypass the sampler structurally.
+	hop := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
+	Add(hop.Context(), "http.status", 201, "op.code", 7)
+	_ = hop.End(nil)
+	if httpCode != 201 {
+		t.Fatalf("http Code = %d, want 201 (http.status wins on HTTP)", httpCode)
 	}
 }
 
@@ -961,5 +1000,75 @@ func TestPanicAfterEndRan(t *testing.T) {
 	}
 	if got := sink.events[0].line; bytes.Contains(got, []byte(`"panic"`)) {
 		t.Fatalf("late panic leaked into the event: %s", got)
+	}
+}
+
+// TestNonHTTPFiveHundredOpCodeDrivesFailure pins the coherent canonical
+// code rule: a job surfacing op.code >= 500 resolves failure (and
+// bypasses sampling) like its HTTP twin, not a self-contradictory
+// op.code=503 + op.outcome=success line that healthy-rate sampling can
+// drop. Sub-500 codes stay success.
+func TestNonHTTPFiveHundredOpCodeDrivesFailure(t *testing.T) {
+	samplerCalls := 0
+	rt, ts := testRT(t, func(c *Config) {
+		c.SamplingRate = 0
+		c.Sampler = func(in SampleInput) bool {
+			samplerCalls++
+			return true
+		}
+	})
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "job"})
+	Add(op.Context(), "op.code", 503)
+	if !op.End(nil) {
+		t.Fatal("5xx op.code dropped at rate 0 (must bypass sampling as a failure)")
+	}
+	ev := ts.Events()[0]
+	if o, _ := ev.Lookup("op.outcome"); o != string(OutcomeFailure) {
+		t.Fatalf("outcome = %v, want failure", o)
+	}
+	if samplerCalls != 0 {
+		t.Fatalf("sampler consulted %d times for a 5xx op.code event", samplerCalls)
+	}
+	if ev.Level() != LevelError {
+		t.Fatalf("level = %v, want error", ev.Level())
+	}
+
+	op2 := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "job"})
+	Add(op2.Context(), "op.code", 404)
+	_ = op2.End(nil)
+	if o, _ := ts.Events()[1].Lookup("op.outcome"); o != string(OutcomeSuccess) {
+		t.Fatalf("4xx op.code outcome = %v, want success (only 5xx imply failure)", o)
+	}
+}
+
+// TestTypedNilErrorsContained pins the containment rule: a typed-nil
+// error (non-nil interface, nil pointer) reaches finalization and
+// encode through every path without its nil-dereference panic.
+func TestTypedNilErrorsContained(t *testing.T) {
+	var pe *os.PathError
+
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
+	Error(op.Context(), pe) // hc.Error path
+	_ = op.End(nil)
+	ev := ts.Events()[0]
+	errField, ok := ev.Lookup("error")
+	if !ok {
+		t.Fatal("typed-nil error dropped the field")
+	}
+	m, _ := errField.(map[string]any)
+	if msg, _ := m["message"].(string); msg != "<nil>" {
+		t.Fatalf("error.message = %q, want \"<nil>\"", msg)
+	}
+
+	// KindErr encode path: Add with a typed-nil error value.
+	rec := recOf(LevelInfo, "m", fieldOf("e", pe))
+	line := rec.Encoded()
+	var parsed map[string]any
+	if err := json.Unmarshal(line, &parsed); err != nil {
+		t.Fatalf("line unparseable: %v: %s", err, line)
+	}
+	if parsed["e"] != "<nil>" {
+		t.Fatalf("typed-nil field = %#v, want \"<nil>\"", parsed["e"])
 	}
 }

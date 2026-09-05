@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"slices"
 	"unsafe"
 
@@ -254,7 +255,7 @@ func appendField(event *zerolog.Event, f hc.Field) *zerolog.Event {
 		return event.Dur(key, d)
 	}
 	if err, ok := f.Err(); ok {
-		return event.Str(key, err.Error())
+		return event.Str(key, errMessage(err))
 	}
 	if raw, ok := f.Raw(); ok {
 		return event.RawJSON(key, raw)
@@ -299,3 +300,13 @@ func lastOccurrences(fields []hc.Field) []int {
 }
 
 var _ hc.Sink = (*Sink)(nil)
+
+// errMessage renders an error field's message, tolerating typed-nil
+// errors (non-nil interface, nil pointer): their Error() panics on nil
+// dereference, and fmt renders them safely as "<nil>".
+func errMessage(err error) string {
+	if v := reflect.ValueOf(err); v.Kind() == reflect.Pointer && v.IsNil() {
+		return fmt.Sprint(err)
+	}
+	return err.Error()
+}
