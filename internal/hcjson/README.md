@@ -6,6 +6,10 @@ licensed — see `LICENSE` in this directory. Copyright (c) 2017 Olivier
 Poitrey. The upstream source is available in the Go module cache as
 `github.com/rs/zerolog@v1.34.0/internal/json`.
 
+The fork has not tracked upstream since; output parity with the newer
+zerolog lines the adapter pins (v1.35.1) is verified by the bridge's
+golden tests rather than by re-vendoring.
+
 ## Why
 
 > V2_DESIGN.md and V2_PLAN.md live on the `v2` branch until the v1.0

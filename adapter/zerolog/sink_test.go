@@ -432,3 +432,41 @@ func (w lockedWriter) Write(p []byte) (int, error) {
 type errBoom struct{}
 
 func (errBoom) Error() string { return "boom" }
+
+// TestSinkTimestampHookDoesNotDuplicateTime pins the .With().Timestamp()
+// logger shape — the README's recommended zerolog setup. The hook would
+// stamp a second "time" member onto the typed path (zerolog's own NOTE:
+// "It won't dedupe the time key"), and did before detection was added.
+func TestSinkTimestampHookDoesNotDuplicateTime(t *testing.T) {
+	rec := bridgeRecord(t, func(ctx context.Context) {
+		hc.Add(ctx, "k", "v")
+	})
+
+	t.Run("fast path serves the canonical line", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := zerolog.New(&buf).With().Timestamp().Logger()
+		New(&logger).Write(context.Background(), rec)
+		line := bytes.TrimRight(buf.Bytes(), "\n")
+		if n := bytes.Count(line, []byte(`"time":`)); n != 1 {
+			t.Fatalf("time members = %d, want 1: %s", n, line)
+		}
+		if want := bytes.TrimRight(rec.Encoded(), "\n"); !bytes.Equal(line, want) {
+			t.Fatalf("line = %s, want the canonical Encoded() bytes", line)
+		}
+	})
+
+	t.Run("typed path lets the hook stamp once", func(t *testing.T) {
+		var buf bytes.Buffer
+		// Context fields force the typed path while keeping the hook.
+		logger := zerolog.New(&buf).With().Timestamp().Str("svc", "payments").Logger()
+		New(&logger).Write(context.Background(), rec)
+		line := bytes.TrimRight(buf.Bytes(), "\n")
+		if n := bytes.Count(line, []byte(`"time":`)); n != 1 {
+			t.Fatalf("time members = %d, want 1: %s", n, line)
+		}
+		payload := lastPayload(t, &buf)
+		if payload["svc"] != "payments" {
+			t.Fatalf("context field missing: %v", payload["svc"])
+		}
+	})
+}
