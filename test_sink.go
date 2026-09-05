@@ -65,6 +65,9 @@ func (t *TestSink) Write(_ context.Context, rec *Record) {
 
 // Events returns the captured events.
 func (t *TestSink) Events() []CapturedEvent {
+	if t == nil {
+		return nil
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	out := make([]CapturedEvent, len(t.events))
@@ -74,6 +77,9 @@ func (t *TestSink) Events() []CapturedEvent {
 
 // Reset drops all captured events.
 func (t *TestSink) Reset() {
+	if t == nil {
+		return
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.events = nil
@@ -90,7 +96,7 @@ func copyFields(fields []Field) []Field {
 			raw, _ := f.val.([]byte)
 			out[i] = Field{key: f.key, kind: f.kind, val: bytes.Clone(raw)}
 		case KindAny, KindErr:
-			out[i] = Field{key: f.key, kind: f.kind, val: deepCopyValue(f.val)}
+			out[i] = Field{key: f.key, kind: f.kind, val: deepCopyValue(f.val, newVisitSet())}
 		default:
 			out[i] = f
 		}
@@ -101,14 +107,17 @@ func copyFields(fields []Field) []Field {
 // deepCopyValue clones the mutable containers TestSink can retain
 // (map[string]any, []any, and — via reflect — other map/slice kinds) so
 // captures survive caller mutation. Immutable scalars return unchanged.
-func deepCopyValue(v any) any {
+// The visit set threads through the recursive cases so cyclic values
+// terminate (a fresh set per call would recurse forever — fatal stack
+// overflow, not a recoverable panic).
+func deepCopyValue(v any, seen *visitSet) any {
 	switch val := v.(type) {
 	case nil:
 		return nil
 	case map[string]any:
-		return deepCopyMap(val, newVisitSet())
+		return deepCopyMap(val, seen)
 	case []any:
-		return deepCopySlice(val, newVisitSet())
+		return deepCopySlice(val, seen)
 	default:
 		rv := reflect.ValueOf(v)
 		switch rv.Kind() {
@@ -195,7 +204,7 @@ func deepCopyMap(m map[string]any, seen *visitSet) map[string]any {
 	out := make(map[string]any, len(m))
 	seen.seen[key] = out
 	for k, v := range m {
-		out[k] = deepCopyValue(v)
+		out[k] = deepCopyValue(v, seen)
 	}
 	return out
 }
@@ -208,7 +217,7 @@ func deepCopySlice(s []any, seen *visitSet) []any {
 	out := make([]any, len(s))
 	seen.seen[key] = out
 	for i, v := range s {
-		out[i] = deepCopyValue(v)
+		out[i] = deepCopyValue(v, seen)
 	}
 	return out
 }
