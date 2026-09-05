@@ -1,5 +1,8 @@
 package stdhappycontext
 
+// Middleware behavior tests: routes, statuses, optional interfaces,
+// flush commits, panics, and the nil-runtime passthrough.
+
 import (
 	"bufio"
 	"bytes"
@@ -513,4 +516,14 @@ func TestMiddlewareFlushCommitsStatus(t *testing.T) {
 			t.Fatalf("status = %v, want 200 after plain flush", st)
 		}
 	})
+}
+
+func TestCrashNilRuntimePassthrough(t *testing.T) {
+	mw := Middleware(nil)
+	handler := mw(http.NotFoundHandler())
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest("GET", "/x", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 (passthrough)", rec.Code)
+	}
 }

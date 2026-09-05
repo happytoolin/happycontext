@@ -558,7 +558,8 @@ func TestCrashCyclicAnyValue(t *testing.T) {
 }
 
 func TestCrashFloatEdgeValues(t *testing.T) {
-	vals := []float64{math.NaN(), math.Inf(1), math.Inf(-1), math.SmallestNonzeroFloat64, math.MaxFloat64, -0.0}
+	negZero := math.Copysign(0, -1)
+	vals := []float64{math.NaN(), math.Inf(1), math.Inf(-1), math.SmallestNonzeroFloat64, math.MaxFloat64, negZero}
 	for _, v := range vals {
 		rec := recOf(LevelInfo, "f", fieldOf("f", v))
 		m := mustParseLine(t, rec.Encoded())
@@ -831,22 +832,18 @@ func (r *rawRetainingSink) Write(_ context.Context, rec *Record) {
 // Agent E — configuration and API misuse
 // ════════════════════════════════════════════════════════════════════
 
+// Plain out-of-range rates and NaN are pinned by TestCompileSentinels;
+// this covers the infinities and negative zero it omits.
 func TestCrashHostileRates(t *testing.T) {
-	bad := []float64{math.NaN(), math.Inf(1), math.Inf(-1), -0.1, 1.0000001, 2, -42}
-	for _, r := range bad {
+	for _, r := range []float64{math.Inf(1), math.Inf(-1)} {
 		if _, err := Compile(Config{SamplingRate: r}); err == nil {
 			t.Fatalf("rate %v accepted", r)
 		}
 	}
-	good := []float64{0, 1, 0.5, -0.0}
-	for _, r := range good {
+	for _, r := range []float64{0, 1, 0.5, math.Copysign(0, -1)} {
 		if _, err := Compile(Config{SamplingRate: r}); err != nil {
 			t.Fatalf("rate %v rejected: %v", r, err)
 		}
-	}
-	// Hostile values nested in the maps too.
-	if _, err := Compile(Config{LevelSamplingRates: map[Level]float64{LevelInfo: math.NaN()}}); err == nil {
-		t.Fatal("NaN level rate accepted")
 	}
 	inf := math.Inf(1)
 	if _, err := Compile(Config{OperationPolicies: map[Domain]OperationPolicy{"job": {SamplingRate: &inf}}}); err == nil {
@@ -901,19 +898,26 @@ func TestCrashNilReceiversAndArgs(t *testing.T) {
 		t.Fatal("nil op Context not nil")
 	}
 	// Start with nil runtime and nil ctx.
+	//lint:ignore SA1012 nil contexts are this test's charter
 	op := Start(nil, nil, OperationStart{})
 	if op.End(nil) {
 		t.Fatal("nil runtime emitted")
 	}
 	// Context helpers with nil/no-event ctx: silent no-ops.
+	//lint:ignore SA1012 nil contexts are this test's charter
 	Add(nil, "k", "v")
 	Add(context.Background(), "k", "v")
+	//lint:ignore SA1012 nil contexts are this test's charter
 	AddRawJSON(nil, "k", []byte(`{}`))
 	AddRawJSON(context.Background(), "k", nil)
+	//lint:ignore SA1012 nil contexts are this test's charter
 	Error(nil, nil)
 	Error(context.Background(), nil)
+	//lint:ignore SA1012 nil contexts are this test's charter
 	SetMessage(nil, "")
+	//lint:ignore SA1012 nil contexts are this test's charter
 	SetRoute(nil, "")
+	//lint:ignore SA1012 nil contexts are this test's charter
 	SetLevel(nil, Level(999))
 	// Sinks.
 	(*JSONSink)(nil).Write(context.Background(), nil)
@@ -994,7 +998,7 @@ func TestCrashSetterGarbage(t *testing.T) {
 
 func TestCrashExtremeTimes(t *testing.T) {
 	times := []time.Time{
-		time.Time{}, // zero
+		{}, // zero
 		time.Date(-1, 1, 1, 0, 0, 0, 0, time.UTC),      // negative year
 		time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC),       // year 0
 		time.Date(12345, 6, 7, 8, 9, 10, 11, time.UTC), // five-digit year
@@ -1875,7 +1879,7 @@ func FuzzCrashAdversarialValues(f *testing.F) {
 		case 8:
 			val = strings.Repeat("\xff\x00", 5000)
 		case 9:
-			val = []any{math.MaxFloat64, math.SmallestNonzeroFloat64, -0.0, nil, true}
+			val = []any{math.MaxFloat64, math.SmallestNonzeroFloat64, math.Copysign(0, -1), nil, true}
 		case 10:
 			val = time.Date(-5, 13, 40, 25, 61, 61, -1, time.UTC)
 		case 11:
