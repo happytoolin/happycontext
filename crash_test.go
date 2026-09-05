@@ -28,6 +28,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 	"unicode/utf8"
 )
@@ -1976,3 +1977,194 @@ func key2(i int) string { return "k" + strings.Repeat("p", i%8) + string(rune('a
 type errBoom2 struct{}
 
 func (errBoom2) Error() string { return "boom2" }
+
+// ════════════════════════════════════════════════════════════════════
+// Agent N — testing/synctest bubbles (per-test goroutine hygiene)
+// ════════════════════════════════════════════════════════════════════
+//
+// goleak gates the whole suite at TestMain exit; synctest bubbles make
+// "every goroutine this test started has exited" a per-test assertion
+// (Test waits for bubble goroutines before returning) and replace real
+// sleeps with a virtual clock. Stable since go1.25 — the module floor —
+// so no build tags. Constraints respected: no t.Run/t.Parallel inside
+// a bubble, bubble channels stay inside.
+
+// Concurrent End against a gated sink: the winner durably blocks on a
+// channel inside the bubble (no wall or virtual time involved), the
+// losers spin in End's one-shot wait, every racer provably exits with
+// the bubble, and exactly one write lands.
+//
+// NOTE — virtual-clock incompatibility, pinned here: the original
+// variant used a slowSink (time.Sleep) and hangs forever in a bubble.
+// End's one-shot wait spins with runtime.Gosched, and spinners are
+// never durably blocked, so synctest's clock cannot advance while the
+// winner sleeps — a live lock, not a detected deadlock. Any future
+// library path that sleeps while another goroutine spins (the v1.1
+// watchdog: keep this in mind) cannot be bubble-tested with real
+// time.Sleep in the winner's path. Use channel gates instead.
+func TestSynctestConcurrentEndGatedSink(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		gate := make(chan struct{})
+		gated := &gateSink{gate: gate}
+		rt := MustCompile(Config{Sink: gated, SamplingRate: 1})
+		op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
+		const racers = 16
+		var wg sync.WaitGroup
+		first := make([]bool, racers)
+		for i := range racers {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				first[i] = op.End(nil)
+			}(i)
+		}
+		close(gate)
+		wg.Wait()
+		for i := 1; i < racers; i++ {
+			if first[i] != first[0] {
+				t.Fatalf("racer %d observed %v, racer 0 %v", i, first[i], first[0])
+			}
+		}
+		if gated.writes != 1 {
+			t.Fatalf("sink writes = %d, want 1", gated.writes)
+		}
+	})
+}
+
+type gateSink struct {
+	gate   chan struct{}
+	writes int
+}
+
+func (s *gateSink) Write(_ context.Context, _ *Record) {
+	<-s.gate // durably blocks inside the bubble
+	s.writes++
+}
+
+// Armed-mode mixed writers plus a snapshotter against a single End:
+// the bubble returning proves every goroutine exited (a per-test leak
+// assertion), and the committed line is complete and valid.
+func TestSynctestArmedWritersAllExit(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rt, ts := testRT(t, nil)
+		op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
+		op.ev.arm()
+		stop := make(chan struct{})
+		var wg sync.WaitGroup
+		for w := range 6 {
+			wg.Add(1)
+			go func(w int) {
+				defer wg.Done()
+				for i := 0; ; i++ {
+					select {
+					case <-stop:
+						return
+					default:
+						Add(op.Context(), fmt.Sprintf("w%d", w), i)
+					}
+				}
+			}(w)
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					_ = op.ev.snapshotFields()
+				}
+			}
+		}()
+		Add(op.Context(), "owner", "final")
+		_ = op.End(nil)
+		close(stop)
+		wg.Wait()
+
+		evs := ts.Events()
+		if len(evs) != 1 {
+			t.Fatalf("events = %d, want 1", len(evs))
+		}
+		if v, ok := evs[0].Lookup("owner"); !ok || v != "final" {
+			t.Fatalf("owner field lost: %#v", v)
+		}
+	})
+}
+
+// The v1.1 watchdog shape, simulated deterministically under the
+// virtual clock: a stalled request gets armed (what the watchdog will
+// do), the watchdog takes a mid-flight snapshot after its stall
+// threshold, the request resumes writing, then commits. The snapshot
+// is a stable copy of a strict prefix of the committed WAL.
+func TestSynctestWatchdogShape(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rt, ts := testRT(t, nil)
+		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "stalled"})
+		Add(op.Context(), "phase", "before-stall")
+
+		// The watchdog arms a stalled request and snapshots it.
+		op.ev.arm()
+		time.Sleep(500 * time.Millisecond) // virtual: instant, deterministic
+		snap := op.ev.snapshotFields()
+
+		// The request wakes and keeps writing, then commits.
+		Add(op.Context(), "phase2", "after-stall", "k", "v")
+		_ = op.End(nil)
+
+		if len(snap) == 0 || len(snap) >= len(ts.Events()[0].Fields()) {
+			t.Fatalf("snapshot = %d fields, committed = %d (want a strict prefix)",
+				len(snap), len(ts.Events()[0].Fields()))
+		}
+		// Snapshot stability: every snapshotted field value must still
+		// appear unchanged in the committed event.
+		committed := ts.Events()[0]
+		for _, f := range snap {
+			got, ok := committed.Lookup(f.Key())
+			if !ok {
+				t.Fatalf("snapshotted key %q missing from committed event", f.Key())
+			}
+			if fmt.Sprint(got) != fmt.Sprint(valueOf(f)) {
+				t.Fatalf("snapshotted %q mutated: %v -> %v", f.Key(), valueOf(f), got)
+			}
+		}
+		if v, _ := committed.Lookup("phase"); v != "before-stall" {
+			t.Fatalf("pre-snapshot field lost: %v", v)
+		}
+		if v, _ := committed.Lookup("phase2"); v != "after-stall" {
+			t.Fatalf("post-snapshot field lost: %v", v)
+		}
+	})
+}
+
+// Straggler storm in a bubble: the request commits, stragglers fire
+// after, and every one of them exits before the bubble returns.
+func TestSynctestStragglerStormBubble(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rt, ts := testRT(t, nil)
+		const requests = 25
+		for i := range requests {
+			op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
+			Add(op.Context(), "mine", i)
+			_ = op.End(nil)
+			var wg sync.WaitGroup
+			for s := range 8 {
+				wg.Add(1)
+				go func(s int) {
+					defer wg.Done()
+					Add(op.Context(), "straggler", s)
+				}(s)
+			}
+			wg.Wait()
+		}
+		evs := ts.Events()
+		if len(evs) != requests {
+			t.Fatalf("events = %d, want %d", len(evs), requests)
+		}
+		for _, ev := range evs {
+			if _, ok := ev.Lookup("straggler"); ok {
+				t.Fatal("post-seal straggler field reached the wire")
+			}
+		}
+	})
+}
