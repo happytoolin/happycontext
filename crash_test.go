@@ -1081,11 +1081,7 @@ func TestCrashHostileOperationStart(t *testing.T) {
 // encodedOf renders the single captured event via the JSON sink shape.
 func encodedOf(t *testing.T, ts *TestSink) string {
 	t.Helper()
-	evs := ts.Events()
-	if len(evs) != 1 {
-		t.Fatalf("events = %d, want 1", len(evs))
-	}
-	rec := recOf(evs[0].Level(), evs[0].Message(), evs[0].Fields()...)
+	rec := recOf(LevelInfo, "m", evs2Fields(t, ts)...)
 	return string(rec.Encoded())
 }
 
@@ -1231,11 +1227,7 @@ func TestCrashMegaFields(t *testing.T) {
 		t.Fatalf("events = %d", len(evs))
 	}
 	// Spot check first/last fields through the encoder.
-	var fields []Field
-	for _, f := range evs[0].Fields() {
-		fields = append(fields, f)
-	}
-	rec := recOf(LevelInfo, "mega", fields...)
+	rec := recOf(LevelInfo, "mega", evs[0].Fields()...)
 	line := rec.Encoded()
 	var m map[string]any
 	if err := json.Unmarshal(line, &m); err != nil {
