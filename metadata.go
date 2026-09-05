@@ -10,6 +10,15 @@ func structuredErrorField(err error) map[string]any {
 	if err == nil {
 		return nil
 	}
+	// Typed-nil errors (non-nil interface, nil pointer) must not reach
+	// Error()/Unwrap(): they panic on nil dereference and would crash
+	// finalization. fmt renders them safely as "<nil>".
+	if isTypedNilError(err) {
+		return map[string]any{
+			"message": fmt.Sprint(err),
+			"type":    fmt.Sprintf("%T", err),
+		}
+	}
 	field := map[string]any{
 		"message": structuredErrorMessage(err),
 		"type":    fmt.Sprintf("%T", err),
@@ -21,6 +30,16 @@ func structuredErrorField(err error) map[string]any {
 	}
 
 	return field
+}
+
+// isTypedNilError reports whether err is a non-nil interface holding
+// a nil pointer — the value whose Error() call would panic.
+func isTypedNilError(err error) bool {
+	if err == nil {
+		return false
+	}
+	v := reflect.ValueOf(err)
+	return v.Kind() == reflect.Pointer && v.IsNil()
 }
 
 func structuredPanicField(recovered any) map[string]any {

@@ -1,6 +1,7 @@
 package hc
 
 import (
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -217,7 +218,13 @@ func appendFieldJSON(dst []byte, f Field) []byte {
 	case KindDuration:
 		return jsonEnc.AppendDuration(dst, time.Duration(f.num), time.Millisecond, false, -1)
 	case KindErr:
-		return jsonEnc.AppendString(dst, f.val.(error).Error())
+		err := f.val.(error)
+		if isTypedNilError(err) {
+			// Typed-nil errors must not reach Error(): nil deref
+			// would crash encode. fmt renders "<nil>" safely.
+			return jsonEnc.AppendString(dst, fmt.Sprint(err))
+		}
+		return jsonEnc.AppendString(dst, err.Error())
 	case KindRaw:
 		return append(dst, f.val.([]byte)...)
 	default:

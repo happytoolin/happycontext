@@ -147,7 +147,23 @@ func promoteOptional(w http.ResponseWriter, core *responseWriter) http.ResponseW
 
 type flushTracker struct {
 	*responseWriter
-	http.Flusher
+	flusher http.Flusher
+}
+
+// Flush records the implicit commit before flushing: net/http sends
+// the header (status 200 if unset) on the first Flush, so the tracker
+// must observe it — otherwise a panic after the first flush resolves
+// to 500 against a 200 the client already received.
+func (t *flushTracker) Flush() {
+	t.markFlushed()
+	t.flusher.Flush()
+}
+
+func (rw *responseWriter) markFlushed() {
+	if !rw.wroteHeader {
+		rw.statusCode = http.StatusOK
+		rw.wroteHeader = true
+	}
 }
 
 type hijackTracker struct {
@@ -162,14 +178,24 @@ type pushTracker struct {
 
 type flushHijackTracker struct {
 	*responseWriter
-	http.Flusher
+	flusher http.Flusher
 	http.Hijacker
+}
+
+func (t *flushHijackTracker) Flush() {
+	t.markFlushed()
+	t.flusher.Flush()
 }
 
 type flushPushTracker struct {
 	*responseWriter
-	http.Flusher
+	flusher http.Flusher
 	http.Pusher
+}
+
+func (t *flushPushTracker) Flush() {
+	t.markFlushed()
+	t.flusher.Flush()
 }
 
 type hijackPushTracker struct {
@@ -180,9 +206,14 @@ type hijackPushTracker struct {
 
 type fullTracker struct {
 	*responseWriter
-	http.Flusher
+	flusher http.Flusher
 	http.Hijacker
 	http.Pusher
+}
+
+func (t *fullTracker) Flush() {
+	t.markFlushed()
+	t.flusher.Flush()
 }
 
 // Unwrap lets http.ResponseController discover deadline/duplex controls

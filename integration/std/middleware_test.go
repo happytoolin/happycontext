@@ -445,3 +445,72 @@ func (w *fullOptionalWriter) ReadFrom(src io.Reader) (int64, error) {
 	}
 	return io.Copy(&w.body, src)
 }
+
+// TestMiddlewareFlushCommitsStatus pins the implicit-commit rule: the
+// first Flush sends the header (200 if unset), so the tracker must
+// observe it. A panic after the first flush previously resolved to 500
+// against a 200 the client already received.
+func TestMiddlewareFlushCommitsStatus(t *testing.T) {
+	sink := hc.NewTestSink()
+	mw := Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
+
+	t.Run("panic after flush keeps the committed 200", func(t *testing.T) {
+		sink.Reset()
+		handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.(http.Flusher).Flush()
+			panic("mid-stream")
+		}))
+		rec := httptest.NewRecorder()
+		func() {
+			defer func() { _ = recover() }()
+			handler.ServeHTTP(rec, httptest.NewRequest("GET", "/s", nil))
+		}()
+		if rec.Code != http.StatusOK {
+			t.Fatalf("client saw %d, want 200", rec.Code)
+		}
+		st, _ := sink.Events()[0].Lookup("http.status")
+		o, _ := sink.Events()[0].Lookup("op.outcome")
+		if st != int64(http.StatusOK) || o != string(hc.OutcomePanic) {
+			t.Fatalf("log = status:%v outcome:%v, want 200/panic", st, o)
+		}
+	})
+
+	t.Run("error after flush keeps the committed 200", func(t *testing.T) {
+		sink.Reset()
+		handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.(http.Flusher).Flush()
+			hc.Error(r.Context(), errors.New("post-flush failure"))
+		}))
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/s", nil))
+		st, _ := sink.Events()[0].Lookup("http.status")
+		if st != int64(http.StatusOK) {
+			t.Fatalf("status = %v, want committed 200", st)
+		}
+		// Outcome stays success — outcome is derived from the deferred
+		// error pointer, not the recorded error field (v0 semantics) —
+		// but the structured error must be present and the event kept.
+		if o, _ := sink.Events()[0].Lookup("op.outcome"); o != string(hc.OutcomeSuccess) {
+			t.Fatalf("outcome = %v, want success (error field is metadata)", o)
+		}
+		if _, ok := sink.Events()[0].Lookup("error"); !ok {
+			t.Fatal("error field missing")
+		}
+	})
+
+	t.Run("flush wrappers on all shapes", func(t *testing.T) {
+		// httptest.Recorder implements Flusher only; the other promoted
+		// shapes are compile-checked by the wrapper types themselves.
+		sink.Reset()
+		handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			f, ok := w.(http.Flusher)
+			if !ok {
+				t.Fatal("flusher not promoted")
+			}
+			f.Flush()
+		}))
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/s", nil))
+		if st, _ := sink.Events()[0].Lookup("http.status"); st != int64(http.StatusOK) {
+			t.Fatalf("status = %v, want 200 after plain flush", st)
+		}
+	})
+}
