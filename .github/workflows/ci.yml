@@ -123,3 +123,5 @@ jobs:
           go test . -run '^$' -fuzz '^FuzzEndLifecycle$' -fuzztime 60s
           go test . -run '^$' -fuzz '^FuzzDedupeFields$' -fuzztime 60s
           go test . -run '^$' -fuzz '^FuzzCompileConfig$' -fuzztime 60s
+          go test . -run '^$' -fuzz '^FuzzCrashAdversarialValues$' -fuzztime 60s
+          go test . -run '^$' -fuzz '^FuzzCrashArmedInterleavings$' -fuzztime 60s
