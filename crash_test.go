@@ -4,8 +4,8 @@ package hc
 // consolidated from the two crash-testing rounds. Each section is one
 // independent workstream (agent) with its own charter; helpers and
 // fixtures are shared at package scope. The module-local legs (nil
-// abuse per bridge, std middleware passthrough) live beside their
-// modules in adapter/*/crash_test.go and integration/std/crash_test.go.
+// abuse per bridge) live in each adapter's crash_test.go; the std
+// passthrough tests live with the middleware and wire tests.
 //
 //   A  panic torture (sampler/marshal/sink panics, panic(nil), one-shot)
 //   B  concurrency hammer (straggler storms, recycling, shared runtime)
@@ -18,6 +18,7 @@ package hc
 //   J  sink contract edges (Encoded race, fanout, recycle hazards)
 //   K  adversarial fuzz targets (values, armed interleavings)
 //   L  armed-mode DST (mixed writers vs single End, arm-vs-seal)
+//   N  testing/synctest bubbles (per-test goroutine hygiene, watchdog)
 
 import (
 	"context"
