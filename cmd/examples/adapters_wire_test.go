@@ -91,6 +91,7 @@ func drivePipeline(t *testing.T, sink gc.Sink, buf *bytes.Buffer, pipeline strin
 	t.Helper()
 	rt := gc.MustCompile(gc.Config{Sink: sink, SamplingRate: 1})
 	srv := httptest.NewServer(stdhc.Middleware(rt)(wireMux()))
+	defer srv.Close() // safety net for early fatals; Close is idempotent
 
 	for _, c := range wireCases {
 		resp, err := srv.Client().Get(srv.URL + c.request)

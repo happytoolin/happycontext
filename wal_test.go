@@ -1813,9 +1813,7 @@ func TestStragglerArmedBurst(t *testing.T) {
 		const stragglers = 4
 		var wg sync.WaitGroup
 		for range stragglers {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				mu.Lock()
 				ready++
 				start.Broadcast()
@@ -1824,7 +1822,8 @@ func TestStragglerArmedBurst(t *testing.T) {
 				}
 				mu.Unlock()
 				stragglerWrite(ctx) // armed: serialized under ev.mu
-			}()
+
+			})
 		}
 		// release all stragglers at once (logrus start-line technique)
 		mu.Lock()

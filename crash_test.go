@@ -342,9 +342,7 @@ func TestCrashStragglerStormArmed(t *testing.T) {
 	const perWorker = 40
 	var wg sync.WaitGroup
 	for w := range workers {
-		wg.Add(1)
-		go func(w int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range perWorker {
 				op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
 				op.ev.arm()
@@ -352,7 +350,8 @@ func TestCrashStragglerStormArmed(t *testing.T) {
 				_ = op.End(nil)
 				Add(op.Context(), "straggler", 1)
 			}
-		}(w)
+
+		})
 	}
 	wg.Wait()
 	evs := ts.Events()
@@ -412,9 +411,7 @@ func TestCrashSharedRuntimeAllDomains(t *testing.T) {
 	domains := []Domain{DomainHTTP, DomainJob, DomainMessage, DomainCLI, "custom"}
 	var wg sync.WaitGroup
 	for d := range domains {
-		wg.Add(1)
-		go func(d int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range 50 {
 				op := Start(context.Background(), rt, OperationStart{Domain: domains[d], Name: "x"})
 				Add(op.Context(), "i", i)
@@ -423,7 +420,8 @@ func TestCrashSharedRuntimeAllDomains(t *testing.T) {
 				}
 				_ = op.End(nil)
 			}
-		}(d)
+
+		})
 	}
 	wg.Wait()
 	evs := ts.Events()
@@ -444,11 +442,10 @@ func TestCrashConcurrentEndSlowSink(t *testing.T) {
 	res := make([]bool, racers)
 	var wg sync.WaitGroup
 	for i := range racers {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
+		wg.Go(func() {
 			res[i] = op.End(nil)
-		}(i)
+
+		})
 	}
 	wg.Wait()
 	for i, r := range res {
@@ -1390,11 +1387,10 @@ func TestCrashConcurrentEndDistinctErrPtrs(t *testing.T) {
 		}
 		var wg sync.WaitGroup
 		for i := range errs {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
+			wg.Go(func() {
 				_ = op.End(errs[i])
-			}(i)
+
+			})
 		}
 		wg.Wait()
 		evs := ts.Events()
@@ -1516,13 +1512,12 @@ func TestCrashConcurrentEncoded(t *testing.T) {
 	var wg sync.WaitGroup
 	lines := make([][]byte, n)
 	for g := range n {
-		wg.Add(1)
-		go func(g int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for range iters {
 				lines[g] = rec.Encoded()
 			}
-		}(g)
+
+		})
 	}
 	wg.Wait()
 	for g := 1; g < n; g++ {
@@ -1585,11 +1580,10 @@ type fanoutSink struct {
 func (f *fanoutSink) Write(ctx context.Context, rec *Record) {
 	var wg sync.WaitGroup
 	for _, s := range f.inner {
-		wg.Add(1)
-		go func(s Sink) {
-			defer wg.Done()
+		wg.Go(func() {
 			s.Write(ctx, rec)
-		}(s)
+
+		})
 	}
 	wg.Wait()
 }
@@ -1602,15 +1596,14 @@ func TestCrashFanoutSinks(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for w := range 8 {
-		wg.Add(1)
-		go func(w int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range 25 {
 				op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
 				Add(op.Context(), "w", w, "i", i)
 				_ = op.End(nil)
 			}
-		}(w)
+
+		})
 	}
 	wg.Wait()
 
@@ -1672,9 +1665,7 @@ func TestCrashArmedMixedWritersSingleEnd(t *testing.T) {
 		stop := make(chan struct{})
 
 		for w := range 6 {
-			wg.Add(1)
-			go func(w int) {
-				defer wg.Done()
+			wg.Go(func() {
 				for i := 0; ; i++ {
 					select {
 					case <-stop:
@@ -1683,12 +1674,11 @@ func TestCrashArmedMixedWritersSingleEnd(t *testing.T) {
 					}
 					Add(op.Context(), fmt.Sprintf("w%d", w), i)
 				}
-			}(w)
+
+			})
 		}
 		for s := range 3 {
-			wg.Add(1)
-			go func(s int) {
-				defer wg.Done()
+			wg.Go(func() {
 				for i := 0; ; i++ {
 					select {
 					case <-stop:
@@ -1704,12 +1694,11 @@ func TestCrashArmedMixedWritersSingleEnd(t *testing.T) {
 						SetMessage(op.Context(), fmt.Sprintf("m-%d", i))
 					}
 				}
-			}(s)
+
+			})
 		}
 		// Watchdog-style snapshotter.
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				select {
 				case <-stop:
@@ -1718,7 +1707,8 @@ func TestCrashArmedMixedWritersSingleEnd(t *testing.T) {
 					_ = op.ev.snapshotFields()
 				}
 			}
-		}()
+
+		})
 
 		_ = op.End(nil)
 		close(stop)
@@ -1745,9 +1735,7 @@ func TestCrashArmRacingSeal(t *testing.T) {
 
 		stop := make(chan struct{})
 		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				select {
 				case <-stop:
@@ -1756,7 +1744,8 @@ func TestCrashArmRacingSeal(t *testing.T) {
 					op.ev.arm()
 				}
 			}
-		}()
+
+		})
 		_ = op.End(nil)
 		close(stop)
 		wg.Wait()
@@ -1778,11 +1767,10 @@ func TestCrashArmedErrorVsSeal(t *testing.T) {
 		op.ev.arm()
 
 		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			Error(op.Context(), fmt.Errorf("racing-%d", round))
-		}()
+
+		})
 		_ = op.End(nil)
 		wg.Wait()
 
@@ -1819,9 +1807,7 @@ func TestCrashSnapshotVsPostSealAppends(t *testing.T) {
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-stop:
@@ -1830,7 +1816,7 @@ func TestCrashSnapshotVsPostSealAppends(t *testing.T) {
 				_ = op.ev.snapshotFields()
 			}
 		}
-	}()
+	})
 	Add(op.Context(), "k", "v")
 	_ = op.End(nil)
 	close(stop)
@@ -2077,9 +2063,7 @@ func TestSynctestArmedWritersAllExit(t *testing.T) {
 				}
 			})
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				select {
 				case <-stop:
@@ -2088,7 +2072,8 @@ func TestSynctestArmedWritersAllExit(t *testing.T) {
 					_ = op.ev.snapshotFields()
 				}
 			}
-		}()
+
+		})
 		Add(op.Context(), "owner", "final")
 		_ = op.End(nil)
 		close(stop)

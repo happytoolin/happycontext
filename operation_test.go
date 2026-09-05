@@ -597,9 +597,7 @@ func concurrentEnd(t *testing.T, rate float64, n int) ([]bool, int) {
 	released, ready := false, 0
 	var wg sync.WaitGroup
 	for i := range n {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
+		wg.Go(func() {
 			mu.Lock()
 			ready++
 			start.Broadcast()
@@ -608,7 +606,8 @@ func concurrentEnd(t *testing.T, rate float64, n int) ([]bool, int) {
 			}
 			mu.Unlock()
 			results[i] = op.End(nil)
-		}(i)
+
+		})
 	}
 	mu.Lock()
 	for ready != n {
@@ -671,9 +670,7 @@ func TestConcurrentEndArmed(t *testing.T) {
 		var wg sync.WaitGroup
 		results := make([]bool, n)
 		for i := range n {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
+			wg.Go(func() {
 				mu.Lock()
 				ready++
 				start.Broadcast()
@@ -687,7 +684,8 @@ func TestConcurrentEndArmed(t *testing.T) {
 					Add(ctx, "async", i) // guarded append racing the seal
 					results[i] = false
 				}
-			}(i)
+
+			})
 		}
 		mu.Lock()
 		for ready != n {
@@ -729,12 +727,11 @@ func TestConcurrentEndErrorPointer(t *testing.T) {
 		results := make([]bool, 8)
 		var wg sync.WaitGroup
 		for i := range 8 {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
+			wg.Go(func() {
 				err := fmt.Errorf("caller-%d", i)
 				results[i] = op.End(&err)
-			}(i)
+
+			})
 		}
 		wg.Wait()
 		if len(ts.Events()) != 1 {
