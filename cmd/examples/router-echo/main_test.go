@@ -19,13 +19,12 @@ func TestRouterEchoMiddleware(t *testing.T) {
 	sink := sloghc.New(logger)
 
 	e := echo.New()
-	e.Use(echohc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	e.Use(echohc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
 	e.GET("/users/:id", func(c echo.Context) error {
 		ctx := c.Request().Context()
 		id := c.Param("id")
 
 		hc.Add(ctx, "router", "echo")
-		hc.Add(ctx, "event_attached", hc.FromContext(ctx) != nil)
 		hc.Add(
 			ctx,
 			"user", map[string]any{
@@ -41,9 +40,7 @@ func TestRouterEchoMiddleware(t *testing.T) {
 
 		if c.QueryParam("debug") == "1" {
 			hc.SetLevel(ctx, hc.LevelDebug)
-		}
-		if level, ok := hc.GetLevel(ctx); ok {
-			hc.Add(ctx, "requested_level", level)
+			hc.Add(ctx, "requested_level", hc.LevelDebug)
 		}
 		if c.QueryParam("fail") == "1" {
 			hc.Error(ctx, errors.New("demo failure"))

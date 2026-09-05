@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -22,12 +23,10 @@ func TestZapAdapterWritesStructuredLogs(t *testing.T) {
 		t.Fatal("expected sink to be created")
 	}
 
-	fields := map[string]any{
-		"example": "adapter-zap",
-		"test":    true,
-	}
-
-	sink.Write(hc.LevelInfo, "zap test message", fields)
+	rt := hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1, Message: "zap test message"})
+	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
+	hc.Add(op.Context(), "example", "adapter-zap", "test", true)
+	op.End(nil)
 
 	output := buf.String()
 	if !strings.Contains(output, "zap test message") {
@@ -43,9 +42,7 @@ func TestZapAdapterWithNilLogger(t *testing.T) {
 	if sink == nil {
 		t.Fatal("expected sink to be created even with nil logger")
 	}
-
-	// Should not panic when writing with nil logger
-	sink.Write(hc.LevelInfo, "test", map[string]any{"key": "value"})
+	sink.Write(context.Background(), nil)
 }
 
 func TestZapAdapterAllLevels(t *testing.T) {
@@ -57,11 +54,12 @@ func TestZapAdapterAllLevels(t *testing.T) {
 		core := zapcore.NewCore(encoder, zapcore.AddSync(&buf), zapcore.DebugLevel)
 		logger := zap.New(core)
 		sink := zaphc.New(logger)
+		rt := hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1, Message: "level test"})
+		op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
+		hc.SetLevel(op.Context(), level)
+		op.End(nil)
 
-		sink.Write(level, "level test", map[string]any{"level": string(level)})
-
-		output := buf.String()
-		if output == "" {
+		if buf.Len() == 0 {
 			t.Errorf("expected output for level %s", level)
 		}
 	}

@@ -14,7 +14,7 @@ import (
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	sink := sloghc.New(logger)
-	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 0.1, Message: "request handled"})
+	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 0.1, Message: "request handled"}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -22,7 +22,6 @@ func main() {
 		id := r.PathValue("id")
 
 		hc.Add(ctx, "example", "adapter-slog")
-		hc.Add(ctx, "event_attached", hc.FromContext(ctx) != nil)
 		hc.Add(
 			ctx,
 			"user", map[string]any{
@@ -38,9 +37,7 @@ func main() {
 
 		if r.URL.Query().Get("debug") == "1" {
 			hc.SetLevel(ctx, hc.LevelDebug)
-		}
-		if level, ok := hc.GetLevel(ctx); ok {
-			hc.Add(ctx, "requested_level", level)
+			hc.Add(ctx, "requested_level", hc.LevelDebug)
 		}
 
 		if r.URL.Query().Get("fail") == "1" {

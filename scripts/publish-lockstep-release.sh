@@ -60,10 +60,8 @@ target="${2:-HEAD}"
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
-
-publishable_modules() {
-  git ls-files 'adapter/*/go.mod' 'integration/*/go.mod' | sed 's#/go\.mod$##' | sort
-}
+# shellcheck source=scripts/lockstep-modules.sh
+source "$repo_root/scripts/lockstep-modules.sh"
 
 declare -a created_tags=()
 
@@ -98,7 +96,7 @@ create_release_if_missing() {
 while IFS= read -r module_path; do
   tag_name="${module_path}/${version}"
   create_tag_if_missing "$tag_name" "$target" "Release $tag_name"
-done < <(publishable_modules)
+done < <(publishable_module_dirs)
 
 if [[ "$push_tags" == true && ${#created_tags[@]} -gt 0 ]]; then
   git push "$remote" "${created_tags[@]}"
@@ -111,5 +109,5 @@ if [[ "$create_releases" == true ]]; then
       "$tag_name" \
       "${module_path}: ${version}" \
       "Lockstep module release for \`${module_path}\` at ${version}."
-  done < <(publishable_modules)
+  done < <(publishable_module_dirs)
 fi

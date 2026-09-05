@@ -19,12 +19,26 @@ unarmed fast path.
 - THEN the emitted JSON contains them in insertion order
 
 ### Requirement: Sealing
-The WAL SHALL ignore any mutation after `End` commits or drops the event.
+The WAL SHALL ignore any mutation whose atomic load observes `End`
+having already sealed the event. Writes that begin after seal SHALL be
+no-ops and SHALL NOT corrupt another request's buffer.
+
+A residual TOCTOU on the unarmed single-load fast path is accepted
+(amendments 1/20): a straggler that loaded `walLive` and is preempted
+across `End` → seal → recycle MAY still complete that in-flight append
+into the recycled buffer. The generation check closes every write that
+starts after recycle.
 
 #### Scenario: Straggler write after commit
 - GIVEN an event whose `End` has committed and recycled its buffer
 - WHEN an async goroutine calls `hc.Add` on the stale context
 - THEN the write is a no-op and no other request's buffer is corrupted
+
+#### Scenario: In-flight append versus recycle
+- GIVEN a straggler that has already loaded the live generation
+- WHEN `End` seals and recycles the event before that append stores
+- THEN the append MAY land in the next request's buffer (accepted
+  residual of the single-load protocol)
 
 ### Requirement: Duplicate keys
 Duplicate keys SHALL resolve last-write-wins at encode time, with dedupe

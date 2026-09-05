@@ -16,7 +16,7 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	sink := sloghc.New(logger)
 
-	mw := stdhc.Middleware(hc.Config{
+	mw := stdhc.Middleware(hc.MustCompile(hc.Config{
 		Sink: sink,
 		Sampler: func(in hc.SampleInput) bool {
 			if in.HasError || in.StatusCode >= 500 {
@@ -25,11 +25,11 @@ func main() {
 			if in.Duration >= 500*time.Millisecond {
 				return true
 			}
-			fields := hc.EventFields(in.Event)
-			tier, _ := fields["user_tier"].(string)
-			return tier == "enterprise"
+			v, ok := in.Lookup("user_tier")
+			tier, _ := v.(string)
+			return ok && tier == "enterprise"
 		},
-	})
+	}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {

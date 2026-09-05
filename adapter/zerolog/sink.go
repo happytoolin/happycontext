@@ -34,8 +34,8 @@ func New(l *zerolog.Logger) *Sink {
 // the view is only consulted for the fast-path decision — every other
 // path goes through zerolog's public API.
 //
-// The layout is identical in zerolog v1.34.0 (pinned) and v1.35.1 (MVS
-// in benches); only the first six fields are read.
+// The layout is identical in zerolog v1.34.0 and v1.35.1 (both pinned
+// to v1.35.1 here and in benches); only the first six fields are read.
 type loggerView struct {
 	w       zerolog.LevelWriter
 	level   zerolog.Level
@@ -136,8 +136,10 @@ func (z *Sink) Write(ctx context.Context, rec *hc.Record) {
 	}
 	// Stamp the record's own completion time (rec.Time) rather than a
 	// fresh write-time read, so the typed path stays symmetric with
-	// the fast path and the canonical line.
-	event.Time("time", rec.Time())
+	// the fast path and the canonical line. Use the live global so
+	// customized TimestampFieldName is honored (the fast path already
+	// refused to run when the globals are not the defaults).
+	event.Time(zerolog.TimestampFieldName, rec.Time())
 	event.Msg(rec.Message())
 }
 
@@ -175,7 +177,8 @@ func zlvlFor(level hc.Level) zerolog.Level {
 // float milliseconds via zerolog defaults, time → RFC3339 string),
 // with RawJSON appending pre-encoded bytes verbatim.
 func appendField(event *zerolog.Event, f hc.Field) *zerolog.Event {
-	key := f.Key()
+	// WireKey matches Encoded(): colliding envelope keys become fields.*.
+	key := f.WireKey()
 	if str, ok := f.Str(); ok {
 		return event.Str(key, str)
 	}
@@ -220,7 +223,7 @@ func lastOccurrences(fields []hc.Field) []int {
 		for i := range fields {
 			last := true
 			for j := i + 1; j < len(fields); j++ {
-				if fields[j].Key() == fields[i].Key() {
+				if fields[j].WireKey() == fields[i].WireKey() {
 					last = false
 					break
 				}
@@ -235,10 +238,10 @@ func lastOccurrences(fields []hc.Field) []int {
 	seen := make(map[string]struct{}, len(fields)*2)
 	kept := make([]int, 0, len(fields))
 	for i := len(fields) - 1; i >= 0; i-- {
-		if _, dup := seen[fields[i].Key()]; dup {
+		if _, dup := seen[fields[i].WireKey()]; dup {
 			continue
 		}
-		seen[fields[i].Key()] = struct{}{}
+		seen[fields[i].WireKey()] = struct{}{}
 		kept = append(kept, i)
 	}
 	slices.Reverse(kept)

@@ -39,8 +39,13 @@ type Field struct {
 	val any // KindErr (error), KindRaw ([]byte), KindAny
 }
 
-// Key returns the field key.
+// Key returns the field key as written on the WAL (unaliased).
 func (f Field) Key() string { return f.key }
+
+// WireKey returns the key as it appears on the canonical JSON line:
+// user fields named "message", "time", or "level" become
+// "fields.message", "fields.time", and "fields.level".
+func (f Field) WireKey() string { return aliasedFieldKey(f.key) }
 
 // Kind returns the field's value kind.
 func (f Field) Kind() FieldKind { return f.kind }

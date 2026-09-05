@@ -16,13 +16,12 @@ func main() {
 	sink := sloghc.New(logger)
 
 	app := fiber.New()
-	app.Use(fiberhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(fiberhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/users/:id", func(c *fiber.Ctx) error {
 		ctx := c.UserContext()
 		id := c.Params("id")
 
 		hc.Add(ctx, "router", "fiber-v2")
-		hc.Add(ctx, "event_attached", hc.FromContext(ctx) != nil)
 		hc.Add(
 			ctx,
 			"user", map[string]any{
@@ -38,9 +37,7 @@ func main() {
 
 		if c.Query("debug") == "1" {
 			hc.SetLevel(ctx, hc.LevelDebug)
-		}
-		if level, ok := hc.GetLevel(ctx); ok {
-			hc.Add(ctx, "requested_level", level)
+			hc.Add(ctx, "requested_level", hc.LevelDebug)
 		}
 		if c.Query("fail") == "1" {
 			hc.Error(ctx, errors.New("demo failure"))
