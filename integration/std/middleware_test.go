@@ -495,6 +495,8 @@ func TestMiddlewareFlushCommitsStatus(t *testing.T) {
 	})
 }
 
+// Consolidated from integration/std/crash_test.go: nil-runtime
+// middleware is a documented passthrough.
 func TestCrashNilRuntimePassthrough(t *testing.T) {
 	mw := Middleware(nil)
 	handler := mw(http.NotFoundHandler())

@@ -649,6 +649,8 @@ func TestTestSinkCopiesMutableValues(t *testing.T) {
 	}
 }
 
+// FuzzDedupeFields pins the canonical dedupe: every key emitted once,
+// at its last-occurrence position, with its last value.
 //
 // Canonical-key collisions (user fields named "message"/"time"/"level")
 // follow the logrus rename policy (record.go aliasKey): colliding user

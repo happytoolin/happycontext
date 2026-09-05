@@ -683,6 +683,7 @@ func canaryWrite(stale context.Context) {
 	Error(stale, errors.New("!BUG stale error"))
 }
 
+// Loom-lite oracle note.
 //
 // The one preemption-sensitive fragment is the straggler's append: its
 // single state load happens, then it acts. Between load and act the

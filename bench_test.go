@@ -1,5 +1,9 @@
 package hc
 
+// Benchmarks for the sampling gate and the record encode/write path —
+// the repo-wide root-module benchmark file (the cross-adapter and host
+// comparisons live in the benches module).
+
 import (
 	"context"
 	"io"
