@@ -146,10 +146,12 @@ func (e *event) append(gen uint64, f Field) {
 }
 
 // addKV appends the leading pair plus any well-formed kv pairs
-// (k, v, k, v, ...). Malformed tails are skipped silently; the first
-// key is positional and cannot be malformed (amendment 19).
+// (k, v, k, v, ...). Empty keys and non-string keys are skipped
+// uniformly; an odd trailing value is dropped.
 func (e *event) addKV(ref *walRef, key string, value any, kv ...any) {
-	e.append(ref.gen, fieldOf(key, value))
+	if key != "" {
+		e.append(ref.gen, fieldOf(key, value))
+	}
 	for i := 0; i+1 < len(kv); i += 2 {
 		k, ok := kv[i].(string)
 		if !ok || k == "" {
@@ -157,23 +159,6 @@ func (e *event) addKV(ref *walRef, key string, value any, kv ...any) {
 		}
 		e.append(ref.gen, fieldOf(k, kv[i+1]))
 	}
-}
-
-// appendSealed is the owner's post-seal write: same generation check
-// against torn recycling; the state check accepts sealed (by
-// construction the owner performs these after sealing). Events that
-// were armed keep serializing under mu so watchdog snapshots taken
-// during the seal window can never race the owner's final appends.
-func (e *event) appendSealed(gen uint64, f Field) {
-	s := e.state.Load()
-	if s>>walStateBits != gen {
-		return // event recycled under us: not our buffer anymore
-	}
-	if walState(s&walStateMask) == walSealedArmed {
-		e.mu.Lock()
-		defer e.mu.Unlock()
-	}
-	e.fields = append(e.fields, f)
 }
 
 // Typed append helpers for the canonical fields: no interface boundary,
@@ -202,11 +187,11 @@ func (e *event) setError(ref *walRef, err error) {
 		e.mu.Lock()
 		defer e.mu.Unlock()
 		if cur := e.state.Load(); cur>>walStateBits == ref.gen && walState(cur&walStateMask) == walArmed {
-			e.fields = append(e.fields, Field{key: "error", kind: KindAny, val: structuredErrorField(err)})
+			e.fields = append(e.fields, Field{key: KeyError, kind: KindAny, val: structuredErrorField(err)})
 			e.hasErr = true // only when the write belonged to this generation
 		}
 	case walLive:
-		e.fields = append(e.fields, Field{key: "error", kind: KindAny, val: structuredErrorField(err)})
+		e.fields = append(e.fields, Field{key: KeyError, kind: KindAny, val: structuredErrorField(err)})
 		e.hasErr = true
 	}
 }
@@ -239,7 +224,7 @@ func (e *event) setRoute(ref *walRef, route string) {
 	if route == "" {
 		return
 	}
-	e.appendStr(ref.gen, "http.route", route)
+	e.appendStr(ref.gen, KeyHTTPRoute, route)
 }
 
 // setLevel records the requested level floor. Same liveness rules and
@@ -283,9 +268,15 @@ func (e *event) lookup(key string) (any, bool) {
 	return lookupField(e.fields, key)
 }
 
+// pooledFieldCap is the maximum field-slice capacity returned to the
+// pool. Wider events are dropped from the pool and left for the GC so
+// a single pathological request cannot pin a large buffer for the
+// process lifetime.
+const pooledFieldCap = 1024
+
 func (e *event) release() {
 	e.seal()
-	if cap(e.fields) <= 1024 {
+	if cap(e.fields) <= pooledFieldCap {
 		eventPool.Put(e)
 	}
 }

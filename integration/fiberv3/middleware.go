@@ -32,8 +32,22 @@ func Middleware(rt *hc.Runtime) fiber.Handler {
 				routePath = route.Path
 			}
 			status := c.Response().StatusCode()
+			// Fiber's response struct defaults its status to 200 and does
+			// not track whether the handler committed anything, so "the
+			// response started" must be inferred: any status other than
+			// the 200 default, or a non-empty body under 200, means bytes
+			// or a status actually went out. A bare 200 with no body is
+			// treated as not started so a pre-response panic still
+			// resolves to 500. Do not "simplify" this — it is the
+			// panic-vs-committed-status contract.
 			responseStarted := status != 0 && (status != http.StatusOK || len(c.Response().Body()) > 0)
-			status = common.ResolveStatus(status, finalizeErr, recovered, responseStarted, statusFromFiberError(finalizeErr))
+			status = common.ResolveStatus(common.StatusInput{
+				Committed:       status,
+				Err:             finalizeErr,
+				Recovered:       recovered,
+				ResponseStarted: responseStarted,
+				ErrorStatus:     statusFromFiberError(finalizeErr),
+			})
 			common.FinalizeRequest(op, routePath, status, finalizeErr, recovered)
 
 			if recovered != nil {

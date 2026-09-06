@@ -1,4 +1,4 @@
-package workerhc
+package workerhappycontext
 
 // P8.2 worker lifecycle scenario battery (dst-research §8.2): the
 // job-shaped scenarios assembled as end-to-end flows with real
@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	hc "github.com/happytoolin/happycontext"
+	"github.com/happytoolin/happycontext"
 )
 
 // TestWorkerRetryMetadata: attempt/max_attempts survive to the wire

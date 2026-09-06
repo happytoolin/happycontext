@@ -11,18 +11,31 @@ import (
 // decisions: the resolved scalars plus read access to the request's
 // fields (Lookup and a zero-copy Fields view).
 type SampleInput struct {
+	// Domain is the operation's domain; Operation is the resolved
+	// operation name (an op.name field write overrides the start
+	// metadata); Outcome is the resolved outcome.
 	Domain    Domain
 	Operation string
 	Outcome   Outcome
-	Code      int
 
-	// HTTP compatibility fields. For non-HTTP operations, these may be empty/zero.
+	// Code is the canonical status scalar: http.status for HTTP
+	// operations, the explicit op.code for everything else.
+	Code int
+
+	// Method, Path, and StatusCode are the HTTP compatibility view.
+	// For non-HTTP operations they may be empty or zero; StatusCode is
+	// always the http.status field, even when Code carries op.code.
 	Method     string
 	Path       string
 	StatusCode int
-	Duration   time.Duration
-	Level      Level
-	HasError   bool
+
+	// Duration, Level, and HasError are domain-independent: the
+	// resolved wall time, the final severity, and whether the request
+	// ended in an error or panic. HasError events always bypass
+	// sampling.
+	Duration time.Duration
+	Level    Level
+	HasError bool
 
 	// ev backs Lookup/Fields; nil when the input was built synthetically.
 	ev *event
@@ -37,7 +50,7 @@ func (in SampleInput) Lookup(key string) (any, bool) {
 }
 
 // Fields returns a read-only view of the request's fields in insertion
-// order (amendment 8).
+// order.
 func (in SampleInput) Fields() []Field {
 	if in.ev == nil {
 		return nil

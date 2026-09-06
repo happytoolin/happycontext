@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/happytoolin/happycontext/bridge"
 	"github.com/happytoolin/happycontext/internal/hcjson"
 )
 
@@ -17,7 +18,8 @@ type Record struct {
 	fields      []Field // the sealed WAL slice; nobody mutates it after End
 	completedAt time.Time
 
-	encoded atomic.Pointer[encodedLine] // lazy-once publish (amendment 6)
+	// computed lazily on first Encoded
+	encoded atomic.Pointer[encodedLine]
 }
 
 type encodedLine struct{ b []byte }
@@ -56,9 +58,8 @@ func lookupField(fields []Field, key string) (any, bool) {
 
 // Encoded returns the canonical JSON line (one line, trailing newline)
 // for this record, computing it at most once: concurrent callers race
-// benignly on the publish and share the winner (amendment 6). The bytes
-// belong to the record — copy them if you retain them past Write
-// (amendment 9).
+// benignly on the publish and share the winner. The bytes belong to
+// the record — copy them if you retain them past Write.
 func (r *Record) Encoded() []byte {
 	if e := r.encoded.Load(); e != nil {
 		return e.b
@@ -140,11 +141,11 @@ func aliasFields(fields []Field) []Field {
 }
 
 // dedupeScanLimit sets the crossover between the allocation-free
-// last-occurrence scan and the seen-set path for wide events. It is a
-// cross-module contract: the adapters' lastOccurrences narrow path
-// uses the same literal 24 so bridges and the canonical line resolve
-// duplicates identically (pinned by the golden parity tests).
-const dedupeScanLimit = 24
+// last-occurrence scan and the seen-set path for wide events. It is the
+// same constant the sink bridges use (bridge.NarrowLimit), so the
+// canonical line and every bridge resolve duplicates identically
+// (pinned by the golden parity tests).
+const dedupeScanLimit = bridge.NarrowLimit
 
 // appendDedupedFields emits each key once — its last value, at its last
 // position (amendment 3). Narrow events use the allocation-free scan;

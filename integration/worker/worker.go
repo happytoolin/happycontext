@@ -1,13 +1,13 @@
-// Package workerhc provides the background-job happycontext lifecycle:
-// Start opens a job operation from JobMeta and returns the deferred-End
-// handle.
-package workerhc
+// Package workerhappycontext provides the background-job happycontext
+// lifecycle: Start opens a job operation from JobMeta and returns the
+// deferred-End handle.
+package workerhappycontext
 
 import (
 	"context"
 	"time"
 
-	hc "github.com/happytoolin/happycontext"
+	"github.com/happytoolin/happycontext"
 )
 
 // JobMeta describes background job execution metadata.
@@ -27,7 +27,7 @@ type JobMeta struct {
 // no-op (the original ctx carries no WAL):
 //
 //	func run(ctx context.Context, rt *hc.Runtime) (err error) {
-//		op := workerhc.Start(ctx, rt, meta)
+//		op := workerhappycontext.Start(ctx, rt, meta)
 //		ctx = op.Context()
 //		defer op.End(&err)
 //		hc.Add(ctx, "rows", 42)
@@ -51,6 +51,6 @@ func Start(ctx context.Context, rt *hc.Runtime, meta JobMeta) *hc.Operation {
 // canonical-field pass; scheduled_at has no op.* equivalent.
 func addJobFields(ctx context.Context, meta JobMeta) {
 	if !meta.ScheduledAt.IsZero() {
-		hc.Add(ctx, "job.scheduled_at", meta.ScheduledAt.UTC())
+		hc.Add(ctx, hc.KeyJobScheduledAt, meta.ScheduledAt.UTC())
 	}
 }

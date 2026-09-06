@@ -5,13 +5,11 @@ package slogadapter
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"reflect"
-	"slices"
 	"sync"
 
 	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/happycontext/bridge"
 )
 
 const (
@@ -75,18 +73,18 @@ func (s *Sink) Write(ctx context.Context, rec *hc.Record) {
 	bufPtr := slogAttrPool.Get().(*[]slog.Attr)
 	attrs := (*bufPtr)[:0]
 	defer func() { recycleAttrs(bufPtr, attrs) }()
-	for _, i := range lastOccurrences(fields) {
+	for _, i := range bridge.LastIndices(fields, hc.Field.Key) {
 		attrs = append(attrs, attrOf(fields[i]))
 	}
 	s.logger.LogAttrs(ctx, slogLevel, rec.Message(), attrs...)
 }
 
 // attrOf maps a typed field to the matching slog constructor. Error
-// fields render the message string and raw bytes render via slog.Any
-// (base64) — both the v0 adapter's shapes.
+// fields render the message string; everything without a typed slot
+// goes through slog.Any.
 func attrOf(f hc.Field) slog.Attr {
 	if err, ok := f.Err(); ok {
-		return slog.String(f.Key(), errMessage(err))
+		return slog.String(f.Key(), bridge.ErrorMessage(err))
 	}
 	if str, ok := f.Str(); ok {
 		return slog.String(f.Key(), str)
@@ -115,53 +113,4 @@ func attrOf(f hc.Field) slog.Attr {
 	return slog.Any(f.Key(), f.Any())
 }
 
-// lastOccurrences returns the indices of each key's last write, in
-// forward emission order — the same duplicate resolution the core
-// encoder applies (linear scan for narrow events, backward seen-set
-// collection for wide ones).
-// The 24 crossover matches hc's dedupeScanLimit so bridges and the
-// canonical line resolve duplicates identically (cross-module
-// contract, pinned by the golden parity tests).
-func lastOccurrences(fields []hc.Field) []int {
-	if len(fields) <= 24 {
-		var stack [24]int // allocation-free narrow path
-		n := 0
-		for i := range fields {
-			last := true
-			for j := i + 1; j < len(fields); j++ {
-				if fields[j].Key() == fields[i].Key() {
-					last = false
-					break
-				}
-			}
-			if last {
-				stack[n] = i
-				n++
-			}
-		}
-		return stack[:n:n]
-	}
-	seen := make(map[string]struct{}, len(fields)*2)
-	kept := make([]int, 0, len(fields))
-	for i := len(fields) - 1; i >= 0; i-- {
-		if _, dup := seen[fields[i].Key()]; dup {
-			continue
-		}
-		seen[fields[i].Key()] = struct{}{}
-		kept = append(kept, i)
-	}
-	slices.Reverse(kept)
-	return kept
-}
-
 var _ hc.Sink = (*Sink)(nil)
-
-// errMessage renders an error field's message, tolerating typed-nil
-// errors (non-nil interface, nil pointer): their Error() panics on nil
-// dereference, and fmt renders them safely as "<nil>".
-func errMessage(err error) string {
-	if v := reflect.ValueOf(err); v.Kind() == reflect.Pointer && v.IsNil() {
-		return fmt.Sprint(err)
-	}
-	return err.Error()
-}

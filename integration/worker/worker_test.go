@@ -1,4 +1,4 @@
-package workerhc
+package workerhappycontext
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	hc "github.com/happytoolin/happycontext"
+	"github.com/happytoolin/happycontext"
 )
 
 func TestStartAddsWorkerFields(t *testing.T) {
@@ -62,14 +62,14 @@ func TestStartAddsWorkerFields(t *testing.T) {
 	}
 }
 
-func TestFinishSuccessDefaultMessage(t *testing.T) {
+func TestEndSuccessDefaultMessage(t *testing.T) {
 	sink := hc.NewTestSink()
 	rt := hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})
 	op := Start(context.Background(), rt, JobMeta{Name: "cleanup", ID: "job_1", Queue: "nightly"})
 	var err error
 
 	if !op.End(&err) {
-		t.Fatal("expected finish to write")
+		t.Fatal("expected End to write")
 	}
 
 	events := sink.Events()
@@ -84,7 +84,7 @@ func TestFinishSuccessDefaultMessage(t *testing.T) {
 	}
 }
 
-func TestFinishErrorAndPanic(t *testing.T) {
+func TestEndErrorAndPanic(t *testing.T) {
 	t.Run("error", func(t *testing.T) {
 		sink := hc.NewTestSink()
 		rt := hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 0})

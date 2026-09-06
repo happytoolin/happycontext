@@ -225,7 +225,7 @@ func TestOutcomePrecedence(t *testing.T) {
 // TestPanicBeatsErrorWhenCoDelivered pins the panic > error precedence
 // for the shape the table test cannot reach: the error pointer is
 // already set when End runs AND a panic is in flight (defer op.End(&err)
-// with err non-nil, then panic). resolveOutcomeV2 must still resolve
+// with err non-nil, then panic). resolveOutcome must still resolve
 // OutcomePanic — a swap to error-first precedence silently turns the
 // event into OutcomeFailure. Found as a gap by mutation testing (M7):
 // every panic test deferred op.End(nil), so the error was never
@@ -1112,5 +1112,47 @@ func TestAddJSONRawMessage(t *testing.T) {
 	nested, _ := m["meta"].(map[string]any)
 	if nested["batch"] != true || m["sib"] != float64(1) {
 		t.Fatalf("line = %s", rec.Encoded())
+	}
+}
+
+// TestZeroOperationEndIsNoop pins the zero-value contract: End on a
+// zero Operation (never Start-ed) is a no-op returning false, matching
+// the nil-*Operation guard instead of dereferencing the nil event.
+func TestZeroOperationEndIsNoop(t *testing.T) {
+	var op Operation
+	if op.End(nil) {
+		t.Fatal("zero Operation End reported an emission")
+	}
+	if op.Context() != nil {
+		t.Fatalf("zero Operation context = %v, want nil", op.Context())
+	}
+}
+
+// TestAddSkipsEmptyKeysUniformly pins the key-skipping contract: the
+// empty key is skipped in the leading pair exactly as in the variadic
+// tail (the doc's "non-empty string" rule).
+func TestAddSkipsEmptyKeysUniformly(t *testing.T) {
+	ts := NewTestSink()
+	rt := MustCompile(Config{Sink: ts, SamplingRate: 1})
+	op := Start(context.Background(), rt, OperationStart{Name: "skip"})
+	Add(op.Context(), "", 1)
+	Add(op.Context(), "", 2, "kept", 3)
+	Add(op.Context(), "also", 4)
+	op.End(nil)
+
+	events := ts.Events()
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want 1", len(events))
+	}
+	for _, f := range events[0].Fields() {
+		if f.Key() == "" {
+			t.Fatal("an empty-key field reached the record")
+		}
+	}
+	if v, _ := events[0].Lookup("kept"); v != int64(3) {
+		t.Fatalf("kept = %v, want 3", v)
+	}
+	if v, _ := events[0].Lookup("also"); v != int64(4) {
+		t.Fatalf("also = %v, want 4", v)
 	}
 }
