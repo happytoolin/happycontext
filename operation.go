@@ -122,7 +122,7 @@ claimed:
 
 	scan := scanWAL(ev)
 	code := scan.code
-	isHTTP := normalizeDomain(start.Domain) == DomainHTTP
+	isHTTP := start.Domain == DomainHTTP
 	// The canonical code drives the 5xx outcome rule: http.status for
 	// HTTP, op.code for everything else (a non-HTTP op's http.status is
 	// user data, not canonical) — so a job surfacing failure via
@@ -278,24 +278,24 @@ func shouldWriteHealthy(rt *Runtime, policy OperationPolicy, in SampleInput) boo
 // while it runs. A key the request already wrote is skipped — appending
 // later would flip the LWW fold and clobber the user's override (the
 // route-name contract in the HTTP integrations depends on this).
-func applyOperationStartFieldsLocked(ev *event, ref *walRef, start OperationStart, scan walScan, append func(Field)) {
+func appendStartFields(start OperationStart, scan walScan, add func(Field)) {
 	if !scan.hasDomain {
-		append(fieldStr("op.domain", string(start.Domain)))
+		add(fieldStr("op.domain", string(start.Domain)))
 	}
 	if !scan.hasName {
-		append(fieldStr("op.name", start.Name))
+		add(fieldStr("op.name", start.Name))
 	}
 	if !scan.hasID && start.ID != "" {
-		append(fieldStr("op.id", start.ID))
+		add(fieldStr("op.id", start.ID))
 	}
 	if !scan.hasSource && start.Source != "" {
-		append(fieldStr("op.source", start.Source))
+		add(fieldStr("op.source", start.Source))
 	}
 	if !scan.hasAttempt && start.Attempt > 0 {
-		append(fieldInt64("op.attempt", int64(start.Attempt)))
+		add(fieldInt64("op.attempt", int64(start.Attempt)))
 	}
 	if !scan.hasMaxAttempts && start.MaxAttempts > 0 {
-		append(fieldInt64("op.max_attempts", int64(start.MaxAttempts)))
+		add(fieldInt64("op.max_attempts", int64(start.MaxAttempts)))
 	}
 }
 
@@ -319,29 +319,27 @@ func annotateOperationFailures(ev *event, ref *walRef, err error, recovered any)
 // operations surface their explicit op.code here (ledger: canonical
 // fields).
 func annotatePostSeal(ev *event, ref *walRef, start OperationStart, duration time.Duration, isHTTP bool, scan walScan, outcome Outcome) {
-	gen := ref.gen
-	// Lock ONCE for the whole post-seal block when armed (the owner is
-	// the only writer past the seal, so the state cannot change between
-	// appends — and one lock/unlock replaces the per-appendSealed
-	// atomic-load-and-maybe-mutex round trip).
-	if walState(ev.state.Load()&walStateMask) == walSealedArmed {
+	// The owner is the only writer past the seal, so the state and the
+	// generation are stable across this entire block (release is
+	// deferred to post-commit, reset requires a pool round-trip): one
+	// armed check and one lock/unlock bracket replace the per-append
+	// atomic-load-and-maybe-mutex round trip of the old appendSealed
+	// loop — ~9 atomic loads and N indirect calls saved per request.
+	armed := walState(ev.state.Load()&walStateMask) == walSealedArmed
+	if armed {
 		ev.mu.Lock()
+		defer ev.mu.Unlock()
 	}
-	app := func(f Field) {
-		if ev.state.Load()>>walStateBits != gen {
-			return // event recycled under us: not our buffer anymore
-		}
-		ev.fields = append(ev.fields, f)
-	}
-	applyOperationStartFieldsLocked(ev, ref, start, scan, app)
-	app(fieldInt64("duration_ms", duration.Milliseconds()))
+
+	fields := ev.fields
+	add := func(f Field) { fields = append(fields, f) }
+	appendStartFields(start, scan, add)
+	add(fieldInt64("duration_ms", duration.Milliseconds()))
 	if !isHTTP && scan.hasOpCode {
-		app(fieldInt64("op.code", int64(scan.opCode)))
+		add(fieldInt64("op.code", int64(scan.opCode)))
 	}
-	app(fieldStr("op.outcome", string(outcome)))
-	if walState(ev.state.Load()&walStateMask) == walSealedArmed {
-		ev.mu.Unlock()
-	}
+	add(fieldStr("op.outcome", string(outcome)))
+	ev.fields = fields
 }
 
 // resolveOutcomeV2 applies the v2 precedence: panic > error > explicit
@@ -405,7 +403,7 @@ func resolveEventMessage(configured string, domain Domain, eventMessage string) 
 	if configured != "" {
 		return configured
 	}
-	if normalizeDomain(domain) == DomainHTTP {
+	if domain == DomainHTTP {
 		return DefaultMessage
 	}
 	return DefaultOperationMessage

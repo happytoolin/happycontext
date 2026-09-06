@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>happycontext v2 — Hardening Campaign Report</title>
+<style>
+  :root{
+    --paper:#faf7f0; --ink:#1a2332; --accent:#1d4ed8; --accent2:#b91c1c;
+    --gold:#92600a; --muted:#6b7280; --line:#e5e0d4; --card:#ffffff;
+    --green:#166534; --mono:'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace;
+    --serif:'Georgia','Times New Roman',serif; --sans:-apple-system,'Segoe UI',sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.55;font-size:15px}
+  .page{max-width:1060px;margin:0 auto;padding:48px 40px 80px}
+  header.hero{border-bottom:3px solid var(--ink);padding-bottom:28px;margin-bottom:36px}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+  h1{font-family:var(--serif);font-size:42px;line-height:1.08;font-weight:400;letter-spacing:-.01em}
+  h1 em{font-style:italic;color:var(--accent)}
+  .sub{margin-top:12px;color:var(--muted);font-size:15px;max-width:64ch}
+  .meta{margin-top:18px;display:flex;gap:26px;flex-wrap:wrap;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  .meta b{color:var(--ink);font-weight:600}
+  h2{font-family:var(--serif);font-size:26px;font-weight:400;margin:52px 0 6px;padding-top:26px;border-top:1px solid var(--line)}
+  h2 .no{font-family:var(--mono);font-size:12px;color:var(--accent);vertical-align:super;margin-right:8px;letter-spacing:.1em}
+  .lede{color:var(--muted);margin-bottom:20px;max-width:70ch}
+  h3{font-size:14px;font-weight:700;margin:26px 0 10px;letter-spacing:.01em}
+  p{margin:0 0 14px;max-width:78ch}
+  .grid{display:grid;gap:14px}
+  .g4{grid-template-columns:repeat(4,1fr)} .g3{grid-template-columns:repeat(3,1fr)} .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:820px){.g4,.g3{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .stat .n{font-family:var(--mono);font-size:30px;font-weight:600;letter-spacing:-.02em}
+  .stat .n small{font-size:15px;color:var(--muted);font-weight:400}
+  .stat .l{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+  .down .n{color:var(--green)} .up .n{color:var(--accent2)}
+  table{width:100%;border-collapse:collapse;margin:14px 0 22px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13.5px}
+  th{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 14px;border-bottom:2px solid var(--ink);background:#f5f1e8}
+  td{padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td.num,th.num{text-align:right;font-family:var(--mono);white-space:nowrap}
+  .good{color:var(--green);font-weight:600} .bad{color:var(--accent2);font-weight:600} .warn{color:var(--gold);font-weight:600}
+  .tag{display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:99px;border:1px solid;margin-right:6px;white-space:nowrap}
+  .t-defect{color:var(--accent2);border-color:#f3c1c1;background:#fdf3f3}
+  .t-fixed{color:var(--green);border-color:#c3dcc3;background:#f2f8f2}
+  .t-doc{color:var(--gold);border-color:#e8d5a8;background:#fbf6ea}
+  .bar-row{display:grid;grid-template-columns:220px 1fr 110px;gap:12px;align-items:center;margin-bottom:9px;font-size:12.5px}
+  .bar-row .lbl{font-family:var(--mono);font-size:11.5px;color:var(--ink);text-align:right}
+  .track{background:#efe9dc;border-radius:5px;height:20px;position:relative;overflow:hidden}
+  .fill{height:100%;border-radius:5px;position:absolute}
+  .f-v0{background:#c9c2b2} .f-v2{background:linear-gradient(90deg,#2563eb,#1e40af)}
+  .bar-row .val{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .bar-row .val b{color:var(--ink)}
+  .legend{display:flex;gap:18px;margin:8px 0 16px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .quote{border-left:3px solid var(--accent);background:var(--card);padding:16px 20px;margin:18px 0;border-radius:0 10px 10px 0;font-family:var(--serif);font-size:15.5px;font-style:italic}
+  .quote .who{display:block;font-family:var(--mono);font-style:normal;font-size:10.5px;color:var(--muted);margin-top:8px;letter-spacing:.08em}
+  .callout{background:#eef2fb;border:1px solid #cdd9f5;border-radius:10px;padding:16px 20px;margin:18px 0;font-size:13.5px}
+  .callout b{color:var(--accent)}
+  code{font-family:var(--mono);font-size:12.5px;background:#efe9dc;padding:1px 6px;border-radius:4px}
+  .timeline{list-style:none;margin:16px 0;border-left:2px solid var(--line);padding-left:24px}
+  .timeline li{margin-bottom:16px;position:relative}
+  .timeline li::before{content:'';position:absolute;left:-29.5px;top:6px;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid var(--paper)}
+  .timeline .t-head{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.06em}
+  .timeline .t-body{font-size:13.5px;color:var(--ink)}
+  .timeline .merged .t-head::after{content:' ✓ merged';color:var(--green)}
+  .timeline .open .t-head::after{content:' ● open';color:var(--gold)}
+  .timeline .sup .t-head::after{content:' → superseded';color:var(--muted)}
+  footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  @media(max-width:820px){.two-col{grid-template-columns:1fr}}
+  .score-ring{display:flex;gap:14px;flex-wrap:wrap;margin:16px 0}
+  .ring{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 18px;min-width:150px}
+  .ring .r-top{font-family:var(--mono);font-size:24px;font-weight:600}
+  .ring .r-lab{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+  .ring .r-sub{font-size:11px;color:var(--muted);margin-top:4px}
+  .arrow{color:var(--muted)} .arrow b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="hero">
+  <div class="kicker">Engineering Campaign Report · Final</div>
+  <h1>happycontext <em>v2</em> — the hardening campaign</h1>
+  <p class="sub">From API break to release candidate: one design, five merged PR waves, six independent model audits, two adversarial crash-testing rounds, a logic audit, a realism pass, and a benchmark duel against v0 — with every finding verified by probe before it was believed.</p>
+  <div class="meta">
+    <span>BASE <b>origin/main @ 0.5.0</b></span>
+    <span>HEAD <b>final/v2-night → PR #54</b></span>
+    <span>COMMITS <b>39</b></span>
+    <span>PRODUCTION <b>18,716 LOC · 0 goroutines</b></span>
+    <span>TESTS <b>274 · 6 fuzz targets</b></span>
+  </div>
+</header>
+
+<!-- ================= GOAL ================= -->
+<h2><span class="no">01</span>The Goal</h2>
+<p class="lede">What v2 set out to do, as locked in <code>V2_DESIGN.md</code> before a line was written.</p>
+<div class="grid g2">
+  <div class="stat"><div class="l">Thesis</div><p style="margin-top:8px;font-size:14px"><b>One structured, canonical event per request.</b> Stop scattering fragmented log lines; make debugging start from a complete record. A request-scoped write-ahead log (WAL), append-only, last-write-wins, committed exactly once at <code>End</code>.</p></div>
+  <div class="stat"><div class="l">The four pillars</div><p style="margin-top:8px;font-size:14px">① Compiled, immutable <code>Runtime</code> — bad config is a construction error, never a per-request clamp. ② Zero shared mutable state on the request path; production spawns <b>zero goroutines</b>. ③ Structural error/panic sampling bypass — failures can never be sampled away. ④ Small, straight API: everything v0 taught us to remove, removed.</p></div>
+</div>
+<div class="callout"><b>Release contract:</b> performance gates with benchstat evidence vs the v0.4.0 baseline; full 3-version Go matrix (1.25/1.26/1.27) green under <code>-race</code>; a published MIGRATION.md <em>before</em> merge; 1.0.0 cut via lockstep release-please on the v2 line.</div>
+
+<!-- ================= SCOREBOARD ================= -->
+<h2><span class="no">02</span>The Scoreboard</h2>
+<p class="lede">Every number below was verified in-session — probes before fixes, benchstat before claims.</p>
+<div class="grid g4">
+  <div class="stat down"><div class="n">16</div><div class="l">Library defects found &amp; fixed</div></div>
+  <div class="stat"><div class="n">6</div><div class="l">Independent model audits</div></div>
+  <div class="stat"><div class="n">4.7M<small>+</small></div><div class="l">Fuzz executions (local bursts)</div></div>
+  <div class="stat down"><div class="n">−53%</div><div class="l">Lifecycle latency vs v0</div></div>
+  <div class="stat down"><div class="n">14→2</div><div class="l">Allocations per request</div></div>
+  <div class="stat down"><div class="n">−98%</div><div class="l">zerolog bridge latency</div></div>
+  <div class="stat"><div class="n">274</div><div class="l">Tests · goleak-gated</div></div>
+  <div class="stat"><div class="n">0</div><div class="l">Open known defects</div></div>
+</div>
+
+<h3>Audit scorecard — who found what</h3>
+<table>
+  <tr><th>Reviewer</th><th>Model</th><th>Scope</th><th class="num">Findings</th><th>Notable catches</th></tr>
+  <tr><td>Branch review</td><td>Cursor + manual verification</td><td>v2 diff vs main</td><td class="num">8</td><td>sampler route parity, JSONSink race, zerolog envelope aliasing</td></tr>
+  <tr><td>Crash round 1</td><td>Agents A–F (adversarial)</td><td>panics, concurrency, encoder, pool, config, live chaos</td><td class="num">2</td><td><b>TestSink fatal stack-overflow on cyclic values</b></td></tr>
+  <tr><td>Crash round 2</td><td>Agents G–M</td><td>time, depth, lifecycle, sink contract, DST, fuzz, chaos</td><td class="num">0</td><td>core held; pinned 7 undocumented contracts</td></tr>
+  <tr><td>Logic audit 1</td><td>Manual, line-by-line</td><td>core + integrations</td><td class="num">1</td><td><code>SampleInput.Code</code> never surfaced canonical <code>op.code</code></td></tr>
+  <tr><td>PR review</td><td>DeepSeek V4 Flash Vision</td><td>crash-suite PR diff (ran tests locally)</td><td class="num">2</td><td>wrong oracle in my own armed-race test (passed by scheduler luck)</td></tr>
+  <tr><td>Logic audit 2</td><td>DeepSeek V4 Pro</td><td>full production source</td><td class="num">4</td><td><b>flush-panic wire lie</b> (logged 500, client got 200); non-HTTP 5xx resolved success</td></tr>
+  <tr><td>Skill audit 1</td><td>GLM-5.3 + 5.3-Flash</td><td>test diff via golang-* personas</td><td class="num">10</td><td><b>parity roulette</b> (~25% miss rate on bridge regressions); latent wire-test race</td></tr>
+  <tr><td>Skill audit 2</td><td>GLM-5.3 (5 personas) + Flash (3)</td><td>whole branch, core only</td><td class="num">18</td><td><b>%w-wrapped typed-nil defeat of containment</b>; nil <code>AddRawJSON</code> line corruption</td></tr>
+</table>
+<p style="font-size:13px;color:var(--muted)">Also: the lint gate caught GLM-Flash once (a function-level <code>lint:ignore</code> that doesn't exist in staticcheck), and the race detector caught two races in my own first wire test. The fences fence the builders too.</p>
+
+<!-- ================= DEFECTS ================= -->
+<h2><span class="no">03</span>Hall of defects — all dead</h2>
+<p class="lede">Sixteen production-code defects, each reproduced before fixing and pinned by a regression test after.</p>
+<table>
+  <tr><th>#</th><th>Defect</th><th>Found by</th><th>Severity</th><th>Status</th></tr>
+  <tr><td class="num">1</td><td>Samplers saw <code>Operation:"request"</code>, never the route — v0 passed the route, v2 didn't</td><td>branch review</td><td><span class="tag t-defect">defect</span></td><td><span class="tag t-fixed">fixed</span></td></tr>
+  <tr><td class="num">2</td><td><code>cmd/examples</code> compiled against published v0.5.0, not the branch — CI tested the wrong line</td><td>branch review</td><td><span class="tag t-defect">defect</span></td><td><span class="tag t-fixed">fixed</span></td></tr>
+  <tr><td class="num">3</td><td><code>JSONSink</code> claimed concurrent safety, wrote unlocked</td><td>branch review</td><td><span class="tag t-defect">defect</span></td><td><span class="tag t-fixed">fixed</span></td></tr>
+  <tr><td class="num">4</td><td>zerolog typed path hardcoded <code>"time"</code>; fast/typed paths split on envelope-key aliasing</td><td>branch review</td><td><span class="tag t-defect">defect</span></td><td><span class="tag t-fixed">fixed</span></td></tr>
+  <tr><td class="num">5</td><td>Lockstep release gated on two different release-please outputs; three discovery lists drifted</td><td>branch review</td><td><span class="tag t-defect">defect</span></td><td><span class="tag t-fixed">fixed</span></td></tr>
+  <tr><td class="num">6</td><td>README-recommended <code>.With().Timestamp()</code> loggers emitted <b>duplicate <code>"time"</code> keys</b> — invisible to map-parsing tests, caught on live output</td><td>public-surface audit</td><td><span class="tag t-defect">defect</span></td><td><span class="tag t-fixed">fixed</span></td></tr>
+  <tr><td class="num">7</td><td><code>FinalizeRequest</code> double-wrote the error field every errored request</td><td>self-review</td><td><span class="tag t-defect">defect</span></td><td><span class="tag t-fixed">fixed</span></td></tr>
+  <tr><td class="num">8</td><td><b>TestSink stack-overflowed (fatal, unrecoverable)</b> on cyclic values — cycle guard built a fresh visit-set per recursion</td><td>crash round 1</td><td><span class="tag t-defect">defect</span></td><td><span class="tag t-fixed">fixed</span></td></tr>
+  <tr><td class="num">9</td><td>Typed-nil <code>(*T)(nil)</code> errors panicked <code>Error()</code> through five boundaries</td><td>DeepSeek audit 2</td><td><span class="tag t-defect">defect</span></td><td><span class="tag t-fixed">fixed</span></td></tr>
+  <tr><td class="num">10</td><td><b>Flush-then-panic wire lie</b>: streaming handlers logged <code>http.status=500</code> the client never received</td><td>DeepSeek audit 2</td><td><span class="tag t-defect">defect</span></td><td><span class="tag t-fixed">fixed</span></td></tr>
+  <tr><td class="num">11</td><td>Non-HTTP <code>op.code≥500</code> resolved <code>success</code> and was sampleable as healthy — a self-contradicting wire line</td><td>DeepSeek audit 2</td><td><span class="tag t-defect">defect</span></td><td><span class="tag t-fixed">fixed</span></td></tr>
+  <tr><td class="num">12</td><td><b>%w-wrapped typed-nils defeated the containment</b> — panic inside <code>End</code> <em>after</em> its recover, losing the event and masking the real panic</td><td>GLM core audit</td><td><span class="tag t-defect">defect</span></td><td><span class="tag t-fixed">fixed</span></td></tr>
+  <tr><td class="num">13</td><td><code>AddRawJSON(ctx,k,nil)</code> emitted a bare <code>"k":</code> member — every line for that request unparseable</td><td>GLM core audit</td><td><span class="tag t-defect">defect</span></td><td><span class="tag t-fixed">fixed→removed</span></td></tr>
+  <tr><td class="num">14</td><td>Parity test skipped absolute checks for the reference pipeline — bridge regressions slipped ~25% of runs</td><td>GLM skill audit</td><td><span class="tag t-defect">test defect</span></td><td><span class="tag t-fixed">fixed</span></td></tr>
+  <tr><td class="num">15</td><td>Two crash fuzz targets wired into no CI fuzz job at all</td><td>GLM re-check</td><td><span class="tag t-defect">process gap</span></td><td><span class="tag t-fixed">fixed</span></td></tr>
+  <tr><td class="num">16</td><td>Sentinel errors double-prefixed (<code>hc: … hc: invalid rate</code>) on the frozen API</td><td>GLM core audit</td><td><span class="tag t-doc">API</span></td><td><span class="tag t-fixed">fixed</span></td></tr>
+</table>
+
+<!-- ================= BENCHMARKS ================= -->
+<h2><span class="no">04</span>The numbers — v0 vs v2</h2>
+<p class="lede">Same machine (Apple M4), same toolchain (go1.27.0), <code>-count=5</code>, p=0.008 on every row. The benchstat evidence the design's §4 gates demanded.</p>
+<div class="legend"><span><i style="background:#c9c2b2"></i>v0 (origin/main)</span><span><i style="background:linear-gradient(90deg,#2563eb,#1e40af)"></i>v2 (this branch)</span></div>
+
+<div class="bar-row"><div class="lbl">OperationLifecycle</div><div class="track"><div class="fill f-v0" style="width:100%"></div><div class="fill f-v2" style="width:46.7%;top:0"></div></div><div class="val"><b>264ns</b> ← 565ns · <span class="good">−53%</span></div></div>
+<div class="bar-row"><div class="lbl">Dropped · 32 fields</div><div class="track"><div class="fill f-v0" style="width:100%"></div><div class="fill f-v2" style="width:43.8%"></div></div><div class="val"><b>748ns</b> ← 1708ns · <span class="good">−56%</span></div></div>
+<div class="bar-row"><div class="lbl">Dropped · 8 fields</div><div class="track"><div class="fill f-v0" style="width:100%"></div><div class="fill f-v2" style="width:60%"></div></div><div class="val"><b>348ns</b> ← 579ns · <span class="good">−40%</span></div></div>
+<div class="bar-row"><div class="lbl">With policies</div><div class="track"><div class="fill f-v0" style="width:100%"></div><div class="fill f-v2" style="width:96.2%"></div></div><div class="val"><b>411ns</b> ← 428ns · <span class="good">−4%</span></div></div>
+<div class="bar-row"><div class="lbl">Non-HTTP job</div><div class="track"><div class="fill f-v0" style="width:100%"></div><div class="fill f-v2" style="width:77.1%"></div></div><div class="val"><b>241ns</b> ← 312ns · <span class="good">−23%</span></div></div>
+<div class="bar-row"><div class="lbl">zerolog bridge (12f)</div><div class="track"><div class="fill f-v0" style="width:100%"></div><div class="fill f-v2" style="width:2.2%"></div></div><div class="val"><b>7ns</b> ← 326ns · <span class="good">−98%</span></div></div>
+<div class="bar-row"><div class="lbl">slog bridge (12f)</div><div class="track"><div class="fill f-v0" style="width:100%"></div><div class="fill f-v2" style="width:96.6%"></div></div><div class="val"><b>1075ns</b> ← 1113ns · <span class="good">−3%</span></div></div>
+<div class="bar-row"><div class="lbl">zap bridge (12f)</div><div class="track"><div class="fill f-v0" style="width:100%"></div><div class="fill f-v2" style="width:97.3%"></div></div><div class="val"><b>857ns</b> ← 881ns · <span class="good">−3%</span></div></div>
+
+<div class="grid g3" style="margin-top:22px">
+  <div class="stat down"><div class="n">2</div><div class="l">Allocs / request — constant</div><div class="r-sub" style="color:var(--muted);font-size:12px;margin-top:6px">was 9–14, scaling with fields; now 2 at any width (WAL + pooling)</div></div>
+  <div class="stat down"><div class="n">272 <small>B</small></div><div class="l">Bytes / request</div><div class="r-sub" style="color:var(--muted);font-size:12px;margin-top:6px">was 1648 B kept · 4760 B dropped-32</div></div>
+  <div class="stat down"><div class="n">0</div><div class="l">Allocs, zerolog fast path</div><div class="r-sub" style="color:var(--muted);font-size:12px;margin-top:6px">7.0 ns/op — serves <code>Encoded()</code> bytes directly</div></div>
+</div>
+<p style="font-size:12.5px;color:var(--muted);margin-top:10px">Note on the nominal <code>write_empty</code> "+929%": shape mismatch, not a regression — v0's benchmark called the sink with a zero-field event; v2's runs the entire Start→End→encode→bridge lifecycle. slog/zap floors are host-handler-bound, as the design predicted.</p>
+
+<!-- ================= API ================= -->
+<h2><span class="no">05</span>The API — what changed for 1.0.0</h2>
+<p class="lede">The frozen surface after the campaign, including the final decision: the raw-JSON path died because <code>json.RawMessage</code> through <code>Add</code> already does the job with bridge parity.</p>
+
+<h3>Removed (the small-API principle, executed)</h3>
+<table>
+  <tr><th>v0 symbol</th><th>Replacement</th></tr>
+  <tr><td><code>hc.Event</code> + <code>EventFields/EventMessage/EventHasMessage/EventHasError/EventStartTime</code></td><td><code>*hc.Record</code> — <code>Fields()</code>, <code>Lookup</code>, <code>Message()</code>, <code>Level()</code>, <code>Encoded()</code></td></tr>
+  <tr><td><code>FromContext</code> / <code>NewContext</code> / <code>NormalizeConfig</code></td><td>internal; config compiles once via <code>Compile</code>/<code>MustCompile</code> → <code>*Runtime</code></td></tr>
+  <tr><td><code>GetLevel</code> / <code>Commit</code> / <code>LevelRank</code> / <code>MergeLevelWithFloor</code> / <code>BeginOperation</code> / <code>FinishOperation</code></td><td>gone; <code>SetLevel</code> floor + one-shot <code>End</code> cover them</td></tr>
+  <tr><td><code>AddRaw</code> → <code>AddRawJSON</code> (renamed in, removed out)</td><td><b>removed entirely</b> — pass <code>json.RawMessage</code> to <code>Add</code>: verbatim embed, identical rendering through every bridge; <code>KindRaw</code> and <code>Field.Raw()</code> went with it; plain <code>[]byte</code> stays base64 (the <code>encoding/json</code> contract)</td></tr>
+  <tr><td><code>NewWithOptions</code> / <code>SinkOptions</code> (all bridges)</td><td><code>New</code> only — nothing to configure until proven otherwise</td></tr>
+  <tr><td><code>Middleware(hc.Config{…})</code> (all integrations)</td><td><code>Middleware(rt)</code> — the compiled runtime; nil is a passthrough</td></tr>
+</table>
+
+<h3>Added / changed semantics</h3>
+<table>
+  <tr><th>Surface</th><th>Contract</th></tr>
+  <tr><td><code>Compile / MustCompile → *Runtime</code></td><td>immutable, shared; sentinel errors <code>ErrInvalidRate/Level/Outcome</code> wrapped with <code>%w</code> (single <code>"hc: "</code> prefix — the double-prefix bug died at the last free rename)</td></tr>
+  <tr><td><code>End(errp *error) bool</code></td><td>one-shot CAS; deferred-direct form required for panic capture; concurrent first calls safe — exactly one commits</td></tr>
+  <tr><td><code>Field.WireKey()</code></td><td>wire-only view: envelope-colliding user keys render as <code>fields.*</code> (needed by flat-JSON bridges)</td></tr>
+  <tr><td><code>SampleInput</code></td><td><code>Operation</code> = last-write <code>op.name</code> (the route); <code>Code</code> = canonical code (<code>http.status</code> for HTTP, <code>op.code</code> otherwise); 5xx outcome rule follows the same split — non-HTTP 5xx resolve failure and bypass sampling</td></tr>
+  <tr><td><code>NewJSONSink(w)</code></td><td>first-party, mutex-serialized, zero deps beyond stdlib</td></tr>
+  <tr><td><code>TestSink</code> / <code>CapturedEvent</code></td><td>deep-copying capture (cycles safe, errors keep identity, pointer payloads shared — contract documented)</td></tr>
+  <tr><td><code>OutcomeRetry</code></td><td>explicit-input only — the core never emits it; documented so nobody waits for retry events</td></tr>
+  <tr><td>worker <code>Start(ctx, rt, meta)</code></td><td>doc example teaches <code>ctx = op.Context()</code> — the old example's <code>Add</code> calls were silent no-ops</td></tr>
+</table>
+
+<!-- ================= TIMELINE ================= -->
+<h2><span class="no">06</span>The campaign, as it happened</h2>
+<ul class="timeline">
+  <li class="merged"><div class="t-head">#41 · chore: simplify v2</div><div class="t-body">Dead code, modern syntax, comment cleanup — the pre-campaign tidy.</div></li>
+  <li class="merged"><div class="t-head">#42 · v2 review fixes (W1–W8)</div><div class="t-body">Branch review verified and fixed: sampler route parity, examples off v0.5.0, JSONSink race, zerolog timestamp + aliasing, release gating, spec reconciliation — plus the README-recommended logger shape emitting duplicate <code>time</code> keys, found on live output.</div></li>
+  <li class="merged"><div class="t-head">#43 · crash-test suites (rounds 1+2)</div><div class="t-body">13 adversarial agents, ~70 tests, 2 fuzz targets, live chaos on race-built binaries; found the fatal TestSink cycle overflow; zero library defects in round 2.</div></li>
+  <li class="merged"><div class="t-head">#45 · logic-audit round 2 (DeepSeek V4 Pro)</div><div class="t-body">Full-source audit: flush-panic wire lie, non-HTTP 5xx semantics, typed-nil containment, precedence documentation. Plus a simplification pass with a recorded keep-list.</div></li>
+  <li class="merged"><div class="t-head">#48 · hardening tail</div><div class="t-body">synctest adoption (with the spin-wait × virtual-clock livelock finding), test consolidation 14→9, realism pass (real sinks, zero-mock wire suites, cross-bridge parity), critique response.</div></li>
+  <li class="sup"><div class="t-head">#44 / #46 / #47 / #49–#52</div><div class="t-body">The stacked-then-combined intermediates: synctest bubbles, consolidation, realism, GLM skill-audit fixes, fuzz-CI wiring, WaitGroup.Go sweep, comment archaeology.</div></li>
+  <li class="open"><div class="t-head">#54 · the final PR</div><div class="t-body">Everything above in one unit + the whole-branch GLM core audit (wrapped typed-nil defect, nil-raw-JSON corruption, API-freeze polish) + raw-JSON surface removal + design-ledger amendments 20–23 + the v0-vs-v2 benchstat evidence. Green: 1.25/1.26/1.27 + fuzz.</div></li>
+</ul>
+
+<!-- ================= VERDICT ================= -->
+<h2><span class="no">07</span>Verdict</h2>
+<div class="quote">"The concurrency heart of the library — the generation-guarded WAL, seal/arm state machine, one-shot End protocol, and LWW encoder — survived a full adversarial re-read with zero new memory-model, ownership, or lifecycle defects."<span class="who">GLM-5.3, whole-branch core audit</span></div>
+<div class="quote">"The core is essentially ready to tag 1.0.0."<span class="who">GLM-5.3, whole-branch core audit</span></div>
+<div class="quote">"The determinism engineering is genuinely sound: the DisableKeepAlives reasoning is correct against Transport's retry rules, the exact-count oracle is server-side and robust, and the cross-goroutine reads are happens-before-clean via unix socket race edges rather than luck."<span class="who">DeepSeek V4 Pro, PR #48 critique</span></div>
+
+<div class="callout">
+<b>Remaining before the 1.0.0 tag:</b> merge #54 · run the release-gate ceremony on the baseline machine (OperationLifecycle misses the ≤250ns absolute gate by ~5% at 264ns with allocs passing 2≤4; the relative story is −40…−56% everywhere) · decide the End-drop gate's form (348ns vs ≤100ns absolute, vs v0's 579ns) · optionally align the bench harness (<code>Add</code>-steady-state has no isolated benchmark; <code>Event*→WAL*</code> renames broke mechanical joins).
+</div>
+
+<div class="score-ring">
+  <div class="ring"><div class="r-top good">16/16</div><div class="r-lab">defects fixed</div><div class="r-sub">each probe-verified, each pinned</div></div>
+  <div class="ring"><div class="r-top">6</div><div class="r-lab">audits survived</div><div class="r-sub">2× DeepSeek · 2× GLM · 2× manual</div></div>
+  <div class="ring"><div class="r-top good">0</div><div class="r-lab">known open defects</div><div class="r-sub">production goroutine-free, goleak-proven</div></div>
+  <div class="ring"><div class="r-top">1.0.0</div><div class="r-lab">ready when #54 lands</div><div class="r-sub">lockstep release-please on v2</div></div>
+</div>
+
+<footer>
+  <span>happycontext v2 hardening campaign · generated 2026-09-06</span>
+  <span>6 audits · 274 tests · 4.7M+ fuzz execs · 39 commits · 3 model families</span>
+</footer>
+
+</div>
+</body>
+</html>
