@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"unsafe"
 
 	"github.com/happytoolin/happycontext"
@@ -104,12 +105,7 @@ func hasTimestampHook(hooks []zerolog.Hook) bool {
 	if timestampHookSample == nil {
 		return false
 	}
-	for _, h := range hooks {
-		if h == timestampHookSample {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(hooks, timestampHookSample)
 }
 
 // enabled mirrors zerolog's own gate (Logger.should) for a plain

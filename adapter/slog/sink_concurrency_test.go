@@ -113,15 +113,13 @@ func TestStressSlogSustainedCorrectness(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range goroutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range writes {
 				op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "stress"})
 				hc.Add(op.Context(), "a", 1, "b", "two", "c", true)
 				op.End(nil)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

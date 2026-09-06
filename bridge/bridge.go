@@ -9,6 +9,7 @@ package bridge
 import (
 	"fmt"
 	"reflect"
+	"slices"
 )
 
 // NarrowLimit is the crossover between the allocation-free
@@ -44,17 +45,14 @@ func LastIndices[T any](items []T, key func(T) string) []int {
 	}
 	seen := make(map[string]struct{}, len(items)*2)
 	kept := make([]int, 0, len(items))
-	for i := len(items) - 1; i >= 0; i-- {
-		if _, dup := seen[key(items[i])]; dup {
+	for i, item := range slices.Backward(items) {
+		if _, dup := seen[key(item)]; dup {
 			continue
 		}
-		seen[key(items[i])] = struct{}{}
+		seen[key(item)] = struct{}{}
 		kept = append(kept, i)
 	}
-	// reverse into forward order
-	for l, r := 0, len(kept)-1; l < r; l, r = l+1, r-1 {
-		kept[l], kept[r] = kept[r], kept[l]
-	}
+	slices.Reverse(kept)
 	return kept
 }
 

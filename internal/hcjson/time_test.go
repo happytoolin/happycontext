@@ -84,9 +84,7 @@ func TestAppendTimeRFC3339CachedConcurrent(t *testing.T) {
 	base := time.Now().Truncate(time.Second)
 	var wg sync.WaitGroup
 	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := range 1000 {
 				tt := base.Add(time.Duration(j%1000) * time.Millisecond)
 				got := string(AppendTimeRFC3339(nil, tt))
@@ -96,7 +94,7 @@ func TestAppendTimeRFC3339CachedConcurrent(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }
