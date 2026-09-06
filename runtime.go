@@ -85,7 +85,10 @@ func Compile(cfg Config) (*Runtime, error) {
 
 	if len(cfg.LevelSamplingRates) > 0 {
 		rt.levelRates = make(map[Level]float64, len(cfg.LevelSamplingRates))
-		for level, rate := range cfg.LevelSamplingRates {
+		// Sorted iteration (like the policies loop): with multiple
+		// invalid entries, the first error reported is deterministic.
+		for _, level := range slices.Sorted(maps.Keys(cfg.LevelSamplingRates)) {
+			rate := cfg.LevelSamplingRates[level]
 			if !IsValidLevel(level) {
 				return nil, fmt.Errorf("hc: level sampling rate for level %d: %w", int(level), ErrInvalidLevel)
 			}

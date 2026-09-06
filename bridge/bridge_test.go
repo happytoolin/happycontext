@@ -30,7 +30,7 @@ func TestLastIndicesResolvesLastWriteWins(t *testing.T) {
 		tests[wideIdx].items[i] = item{fmt.Sprintf("k%d", i%NarrowLimit)} // NarrowLimit distinct keys, each 3×
 	}
 	last := make([]int, 0, NarrowLimit)
-	for k := 0; k < NarrowLimit; k++ {
+	for k := range NarrowLimit {
 		last = append(last, NarrowLimit*2+k) // the final block holds each key's last write
 	}
 	tests[wideIdx].want = last

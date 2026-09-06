@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 
 	hc "github.com/happytoolin/happycontext"
@@ -28,7 +28,7 @@ func (p printSink) Write(_ context.Context, rec *hc.Record) {
 		seen[f.Key()] = true
 		keys = append(keys, f.Key())
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	fmt.Fprintf(p.w, "%s %s", rec.Level(), rec.Message())
 	for _, k := range keys {
 		var v any

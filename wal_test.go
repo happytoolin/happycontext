@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -745,9 +746,7 @@ func (s *sim) clone() *sim {
 	c.realSnapshots = append([][]string(nil), s.realSnapshots...)
 	c.postKeys = append([]string(nil), s.postKeys...)
 	c.flags = map[string]bool{}
-	for k, v := range s.flags {
-		c.flags[k] = v
-	}
+	maps.Copy(c.flags, s.flags)
 	return &c
 }
 

@@ -1,0 +1,5 @@
+# Ignored modernization suggestions
+# Format: <date> <category> <description>
+2026-09-06 vendored-hcjson internal/hcjson vendored loops stay byte-faithful to zerolog v1.34.0 for upstream diffability — go fix loop rewrites reverted there
+2026-09-06 t-context-churn root tests keep context.Background() (290 sites, ctx is a WAL carrier here, not worth freeze-time churn); nested-module conversions from go fix kept
+2026-09-06 b-loop bench_test.go's b.N-coupled rebuild windows are deliberate design; b.Loop() would change the steady-state pool logic

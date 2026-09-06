@@ -13,6 +13,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -978,10 +979,7 @@ func (c *progCursor) next() byte {
 // window returns up to n bytes from the cursor (fewer at the end).
 func (c *progCursor) window(n int) []byte {
 	if c.pos+n > len(c.b) {
-		n = len(c.b) - c.pos
-		if n < 0 {
-			n = 0
-		}
+		n = max(len(c.b)-c.pos, 0)
 	}
 	w := c.b[c.pos : c.pos+n]
 	c.pos += n
@@ -1382,8 +1380,8 @@ func modelPanicField(payload any) map[string]any {
 // scan re-derives the scan scalars the spec reads from the WAL: a
 // backward walk accepting the first field of the matching key+kind.
 func (m *lifeModel) scan() (outcome Outcome, hasOutcome bool, code int, hasCode bool, opCode int, hasOpCode bool) {
-	for i := len(m.appends) - 1; i >= 0; i-- {
-		f := m.appends[i]
+	for _, f := range slices.Backward(m.appends) {
+
 		switch f.key {
 		case "op.outcome":
 			if !hasOutcome && f.kind == KindString {
@@ -2227,8 +2225,8 @@ func encodeValue(b *[]byte, v any) {
 	case time.Duration:
 		// valDuration decodes as int8(mult)*unit: pick the largest unit
 		// that divides x with an int8 multiplier.
-		for i := len(progDurUnits) - 1; i >= 0; i-- {
-			u := progDurUnits[i]
+		for i, u := range slices.Backward(progDurUnits) {
+
 			if x%u == 0 {
 				m := x / u
 				if m >= -128 && m <= 127 {

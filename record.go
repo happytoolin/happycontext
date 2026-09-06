@@ -1,6 +1,7 @@
 package hc
 
 import (
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -48,8 +49,8 @@ func (r *Record) Lookup(key string) (any, bool) {
 // lookupField is the single last-write-wins backward scan shared by
 // Record.Lookup, CapturedEvent.Lookup, and the event's live lookup.
 func lookupField(fields []Field, key string) (any, bool) {
-	for i := len(fields) - 1; i >= 0; i-- {
-		if f := fields[i]; f.key == key {
+	for _, f := range slices.Backward(fields) {
+		if f.key == key {
 			return valueOf(f), true
 		}
 	}
@@ -173,8 +174,8 @@ func appendDedupedFields(dst []byte, fields []Field) []byte {
 	n := 0
 	var seen map[string]struct{}
 	kept := make([]int, 0, len(fields)) // last-occurrence indices, found backward
-	for i := len(fields) - 1; i >= 0; i-- {
-		key := fields[i].key
+	for i, field := range slices.Backward(fields) {
+		key := field.key
 		dup := false
 		for j := range n {
 			if seenArr[j] == key {
@@ -202,8 +203,8 @@ func appendDedupedFields(dst []byte, fields []Field) []byte {
 		}
 		kept = append(kept, i)
 	}
-	for i := len(kept) - 1; i >= 0; i-- {
-		dst = appendFieldJSON(dst, fields[kept[i]])
+	for _, k := range slices.Backward(kept) {
+		dst = appendFieldJSON(dst, fields[k])
 	}
 	return dst
 }
