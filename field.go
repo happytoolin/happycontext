@@ -20,7 +20,6 @@ const (
 	KindTime
 	KindDuration
 	KindErr
-	KindRaw
 	KindAny
 )
 
@@ -36,7 +35,7 @@ type Field struct {
 	b   bool    // KindBool
 	str string  // KindString
 	t   time.Time
-	val any // KindErr (error), KindRaw ([]byte), KindAny
+	val any // KindErr (error), KindAny
 }
 
 // Key returns the field key as written on the WAL (unaliased).
@@ -117,18 +116,8 @@ func (f Field) Err() (err error, ok bool) {
 	return nil, false
 }
 
-// Raw returns the pre-encoded JSON bytes for raw kinds.
-func (f Field) Raw() (raw []byte, ok bool) {
-	if f.kind == KindRaw {
-		if b, isBytes := f.val.([]byte); isBytes {
-			return b, true
-		}
-	}
-	return nil, false
-}
-
 // Any returns the value for any-kinds. It never boxes: typed kinds
-// (including error and raw) return nil — use Err() and Raw().
+// (including error) return nil — use Err().
 func (f Field) Any() any {
 	if f.kind == KindAny {
 		return f.val
@@ -206,7 +195,7 @@ func valueOf(f Field) any {
 		return f.t
 	case KindDuration:
 		return time.Duration(f.num)
-	case KindErr, KindRaw, KindAny:
+	case KindErr, KindAny:
 		return f.val
 	default:
 		return nil

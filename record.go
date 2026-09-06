@@ -229,8 +229,6 @@ func appendFieldJSON(dst []byte, f Field) []byte {
 		// safeErrorMessage fences typed-nils (direct or %w-wrapped)
 		// and panicking Error() implementations.
 		return jsonEnc.AppendString(dst, safeErrorMessage(f.val.(error)))
-	case KindRaw:
-		return append(dst, f.val.([]byte)...)
 	default:
 		return jsonEnc.AppendInterface(dst, f.val)
 	}

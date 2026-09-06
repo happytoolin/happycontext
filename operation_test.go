@@ -440,35 +440,10 @@ func TestAddNoEventNoop(t *testing.T) {
 	Add(context.Background(), "k", 1) // no panic
 	//lint:ignore SA1012 intentional: pin the nil-context no-op contract
 	Add(nil, "k", 1)
-	AddRawJSON(context.Background(), "k", []byte(`{}`))
 	Error(context.Background(), errors.New("x"))
 	SetMessage(context.Background(), "m")
 	SetRoute(context.Background(), "/r")
 	SetLevel(context.Background(), LevelWarn)
-}
-
-func TestAddRawJSONField(t *testing.T) {
-	rt, ts := testRT(t, nil)
-	op := Start(context.Background(), rt, OperationStart{})
-	AddRawJSON(op.Context(), "meta", []byte(`{"nested":true}`))
-	op.End(nil)
-	ev := ts.Events()[0]
-	var found *Field
-	for _, cand := range ev.Fields() {
-		if cand.Key() == "meta" {
-			f := cand
-			found = &f
-		}
-	}
-	if found == nil || found.Kind() != KindRaw {
-		if found == nil {
-			t.Fatal("raw field missing")
-		}
-		t.Fatalf("kind = %v", found.Kind())
-	}
-	if raw, ok := found.Raw(); !ok || string(raw) != `{"nested":true}` {
-		t.Fatalf("raw = %v", raw)
-	}
 }
 
 func TestLevelSamplingRates(t *testing.T) {
@@ -1110,5 +1085,32 @@ func TestPanicWireShapeParity(t *testing.T) {
 	}
 	if evs[0].Level() != evs[1].Level() || evs[0].Level() != LevelError {
 		t.Fatalf("levels = %v/%v, want error/error", evs[0].Level(), evs[1].Level())
+	}
+}
+
+// TestAddJSONRawMessage pins the supported raw-JSON path: json.RawMessage
+// through regular Add embeds verbatim on the canonical line (its
+// MarshalJSON contract), no re-marshaling of the decoded value.
+func TestAddJSONRawMessage(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
+	Add(op.Context(), "meta", json.RawMessage(`{"batch":true}`), "sib", 1)
+	if !op.End(nil) {
+		t.Fatal("event dropped")
+	}
+	ev := ts.Events()[0]
+	v, ok := ev.Lookup("meta")
+	b, isBytes := v.(json.RawMessage)
+	if !ok || !isBytes || string(b) != `{"batch":true}` {
+		t.Fatalf("meta = %#v, want the verbatim RawMessage", v)
+	}
+	rec := recOf(LevelInfo, "m", ev.Fields()...)
+	var m map[string]any
+	if err := json.Unmarshal(rec.Encoded(), &m); err != nil {
+		t.Fatalf("line unparseable: %v: %s", err, rec.Encoded())
+	}
+	nested, _ := m["meta"].(map[string]any)
+	if nested["batch"] != true || m["sib"] != float64(1) {
+		t.Fatalf("line = %s", rec.Encoded())
 	}
 }

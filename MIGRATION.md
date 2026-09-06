@@ -53,7 +53,7 @@ panic capture.
 | `hc.Add(ctx, k, v)` returning `bool` | same call, returns nothing (silent no-op without an event — the `slog` helper idiom) |
 | `hc.EventFields(e)` / `EventMessage` / `EventHasMessage` / `EventHasError` / `EventStartTime` | gone; sinks receive `*hc.Record` (`Fields()`, `Lookup`, `Message()`, `Level()`); samplers receive `SampleInput.Fields()`/`Lookup`. HTTP `SampleInput.Operation` is the last-write `op.name` (the route template), not the Start name `"request"`. Non-HTTP `SampleInput.Code` surfaces the canonical `op.code` (`StatusCode` stays the `http.status` view); HTTP `Code` remains `http.status`. |
 | `hc.NewContext(ctx)` / `hc.FromContext(ctx)` | gone (internal) |
-| `hc.AddRaw(ctx, k, raw)` | `hc.AddRawJSON(ctx, k, raw)` |
+| `hc.AddRaw(ctx, k, raw)` | gone; pass `json.RawMessage` to `hc.Add` — it embeds verbatim through the regular path with bridge parity |
 | — | `hc.SetLevel(ctx, level)` unchanged in shape; `GetLevel` removed |
 
 ## Levels
@@ -133,7 +133,7 @@ panics also **bypass sampling structurally** — before any custom
 `BeginOperation`, `FinishOperation`, `OperationFinish`, `StartOperation`,
 `Commit`, `GetLevel`, `LevelRank`, `MergeLevelWithFloor`, `EventFields`,
 `EventMessage`, `EventHasMessage`, `EventHasError`, `EventStartTime`,
-`NewContext`, `FromContext`, `NormalizeConfig`, `AddRaw`, plus the
+`NewContext`, `FromContext`, `NormalizeConfig`, `AddRaw`/`AddRawJSON` (kind `KindRaw` and `Field.Raw()` went with them), plus the
 `Event` type itself, `SinkOptions`/`NewWithOptions` in the bridges, and
 `operation/common.NormalizeConfig`-style helpers that moved into
 `Compile`.

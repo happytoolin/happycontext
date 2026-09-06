@@ -573,38 +573,6 @@ func TestCrashFloatEdgeValues(t *testing.T) {
 	}
 }
 
-func TestCrashRawJSONInjection(t *testing.T) {
-	// Contract: AddRawJSON appends verbatim, no sanitization. Pin that
-	// invalid blobs produce an unparseable line WITHOUT panicking —
-	// the caller owned those bytes. (KindRaw fields constructed
-	// directly: recOf's fieldOf would type a []byte as KindAny, which
-	// the encoder renders base64 — itself worth pinning.)
-	rec := recOf(LevelInfo, "m", Field{key: "raw", kind: KindRaw, val: []byte(`{"broken":`)})
-	if rec.Encoded() == nil {
-		t.Fatal("encode returned nil")
-	}
-	if json.Valid(rec.Encoded()) {
-		t.Fatalf("invalid raw unexpectedly produced valid JSON: %s", rec.Encoded())
-	}
-	rec2 := recOf(LevelInfo, "m", Field{key: "raw", kind: KindRaw, val: []byte(`}}}}} early-close`)})
-	if rec2.Encoded() == nil {
-		t.Fatal("encode returned nil")
-	}
-	// A plain []byte through Add renders base64 (json.Marshal shape).
-	recB64 := recOf(LevelInfo, "m", fieldOf("bytes", []byte(`{"ok":[1,2]}`)))
-	mb := mustParseLine(t, recB64.Encoded())
-	if s, _ := mb["bytes"].(string); s != "eyJvayI6WzEsMl19" {
-		t.Fatalf("[]byte not base64: %#v", mb["bytes"])
-	}
-	// Valid raw still embeds verbatim.
-	rec3 := recOf(LevelInfo, "m", Field{key: "raw", kind: KindRaw, val: []byte(`{"ok":[1,2]}`)})
-	m := mustParseLine(t, rec3.Encoded())
-	raw, _ := m["raw"].(map[string]any)
-	if raw == nil || raw["ok"] == nil {
-		t.Fatalf("valid raw JSON not embedded: %s", rec3.Encoded())
-	}
-}
-
 func TestCrashExtremeFieldCounts(t *testing.T) {
 	for _, n := range []int{0, 1, 23, 24, 25, 1023, 1024, 1025, 5000} {
 		fields := make([]Field, n)
@@ -912,9 +880,6 @@ func TestCrashNilReceiversAndArgs(t *testing.T) {
 	//lint:ignore SA1012 nil contexts are this test's charter
 	Add(nil, "k", "v")
 	Add(context.Background(), "k", "v")
-	//lint:ignore SA1012 nil contexts are this test's charter
-	AddRawJSON(nil, "k", []byte(`{}`))
-	AddRawJSON(context.Background(), "k", nil)
 	//lint:ignore SA1012 nil contexts are this test's charter
 	Error(nil, nil)
 	Error(context.Background(), nil)
@@ -1464,28 +1429,6 @@ func TestCrashStartOnCanceledContext(t *testing.T) {
 	Add(op.Context(), "k", "v")
 	if !op.End(nil) || len(ts.Events()) != 1 {
 		t.Fatal("canceled parent context broke the lifecycle")
-	}
-}
-
-// AddRawJSON keeps the caller's []byte by reference: mutating the blob
-// between Add and End is visible on the wire (torn JSON, silently).
-// Pin the lifetime contract: encode before you reuse the buffer.
-func TestCrashRawJSONBlobLifetime(t *testing.T) {
-	rt, ts := testRT(t, nil)
-	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
-	blob := []byte(`{"v":1}`)
-	AddRawJSON(op.Context(), "raw", blob)
-	blob[5] = '9' // caller mutates before End
-	_ = op.End(nil)
-
-	ev := ts.Events()[0]
-	raw, ok := ev.Lookup("raw")
-	if !ok {
-		t.Fatal("raw field missing")
-	}
-	b, _ := raw.([]byte)
-	if string(b) != `{"v":9}` {
-		t.Fatalf("raw blob was copied at Add time: %q (lifetime contract is by-reference)", b)
 	}
 }
 
@@ -2208,28 +2151,5 @@ func TestCrashPanickingErrorContained(t *testing.T) {
 	rec := recOf(LevelInfo, "m", ts.Events()[0].Fields()...)
 	if !json.Valid(rec.Encoded()) {
 		t.Fatalf("line invalid: %s", rec.Encoded())
-	}
-}
-
-// TestCrashEmptyRawJSONNoop pins the nil/empty AddRawJSON contract: a
-// zero-length blob is skipped, not emitted as a bare "key": member
-// (which corrupted the canonical line).
-func TestCrashEmptyRawJSONNoop(t *testing.T) {
-	rt, ts := testRT(t, nil)
-	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
-	AddRawJSON(op.Context(), "blob", nil)
-	AddRawJSON(op.Context(), "empty", []byte{})
-	Add(op.Context(), "after", 1)
-	_ = op.End(nil)
-	rec := recOf(LevelInfo, "m", ts.Events()[0].Fields()...)
-	line := string(rec.Encoded())
-	if !json.Valid(rec.Encoded()) {
-		t.Fatalf("line invalid: %s", line)
-	}
-	if strings.Contains(line, "\"blob\":,") || strings.Contains(line, "\"empty\":,") {
-		t.Fatalf("bare member emitted: %s", line)
-	}
-	if v, _ := ts.Events()[0].Lookup("after"); v != int64(1) {
-		t.Fatalf("sibling lost: %v", v)
 	}
 }

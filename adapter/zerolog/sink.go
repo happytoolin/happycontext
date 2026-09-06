@@ -257,9 +257,6 @@ func appendField(event *zerolog.Event, f hc.Field) *zerolog.Event {
 	if err, ok := f.Err(); ok {
 		return event.Str(key, errMessage(err))
 	}
-	if raw, ok := f.Raw(); ok {
-		return event.RawJSON(key, raw)
-	}
 	return event.Interface(key, f.Any())
 }
 

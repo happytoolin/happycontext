@@ -139,38 +139,8 @@ func rtFieldValue(rng *rand.Rand, kind FieldKind) any {
 		default:
 			return fmt.Errorf("wrapped: %w", errors.New("inner"))
 		}
-	case KindRaw:
-		// raw embeds verbatim: the blobs must stay valid JSON or the
-		// whole line breaks (the caller's contract).
-		switch rng.IntN(5) {
-		case 0:
-			return []byte(fmt.Sprintf(`{"n":%d}`, rng.IntN(1e6)))
-		case 1:
-			return []byte(`{"nested":{"deep":[1,true,null]}}`)
-		case 2:
-			return []byte(fmt.Sprintf(`{"s":"v%d"}`, rng.IntN(100)))
-		case 3:
-			return []byte(`[1,2,3]`)
-		default:
-			return []byte(`null`)
-		}
-	case KindAny:
-		switch rng.IntN(6) {
-		case 0:
-			return nil
-		case 1:
-			return "str"
-		case 2:
-			return int64(rng.IntN(1000))
-		case 3:
-			return []any{int64(1), "x", true, nil}
-		case 4:
-			return map[string]any{"a": int64(1), "b": "two", "c": []any{false}}
-		default:
-			return map[string]any{"nested": map[string]any{"k": fmt.Sprintf("v%d", rng.IntN(10))}}
-		}
 	default:
-		return "unreachable"
+		return nil
 	}
 }
 
@@ -234,7 +204,6 @@ func TestFieldRoundTripProperty(t *testing.T) {
 		{KindTime, "time"},
 		{KindDuration, "duration"},
 		{KindErr, "err"},
-		{KindRaw, "raw"},
 		{KindAny, "any"},
 	}
 	for _, k := range kinds {
@@ -243,22 +212,7 @@ func TestFieldRoundTripProperty(t *testing.T) {
 			const n = 3000
 			for i := range n {
 				val := rtFieldValue(rng, k.kind)
-				var r *Record
-				if k.kind == KindRaw {
-					blob := val.([]byte)
-					r = recOf(LevelInfo, "m", Field{key: "k", kind: KindRaw, val: blob})
-					line := r.Encoded()
-					_, members := decodeLineStrict(t, line)
-					if len(members) != 4 || members[1].key != "k" {
-						t.Fatalf("iter %d: unexpected wire members %v", i, memberKeys(members))
-					}
-					// raw embeds verbatim: byte equality with the blob
-					if !bytes.Equal(members[1].val, blob) {
-						t.Fatalf("iter %d: raw wire %s != blob %s", i, members[1].val, blob)
-					}
-					continue
-				}
-				r = recOf(LevelInfo, "m", fieldOf("k", val))
+				r := recOf(LevelInfo, "m", fieldOf("k", val))
 				line := r.Encoded()
 				_, members := decodeLineStrict(t, line)
 				if len(members) != 4 { // level, k, time, message
@@ -402,13 +356,6 @@ func TestEncodedRoundTripAllKinds(t *testing.T) {
 				}
 			}
 		})
-	}
-
-	// raw fields are embedded verbatim
-	r := recOf(LevelInfo, "m", Field{key: "raw", kind: KindRaw, val: []byte(`{"pre":true}`)})
-	got, _ := decodeLineStrict(t, r.Encoded())
-	if string(got["raw"]) != `{"pre":true}` {
-		t.Fatalf("raw field = %s", got["raw"])
 	}
 }
 
@@ -963,7 +910,6 @@ type lifeOpKind uint8
 const (
 	opAdd    lifeOpKind = iota // typed value from the table
 	opAddStr                   // raw string value from the stream (may be invalid UTF-8)
-	opAddRaw                   // AddRawJSON with a valid-JSON table blob
 	opAddVar                   // variadic Add with (possibly malformed) kv tails
 	opErr                      // hc.Error with a generated message
 	opSetMsg
@@ -997,7 +943,7 @@ type lifeOp struct {
 	key  string
 	val  any // typed value for opAdd, string for opAddStr/opSetMsg/opSetRoute,
 	// error for opErr/opEndErr, Level for opSetLevel, panic payload for opEndPanic
-	raw   []byte   // for opAddRaw (the JSON blob); for opEndPanic: nil or the co-delivered error message
+	raw   []byte   // for opEndPanic: nil or the co-delivered error message
 	pairs []kvPair // for opAddVar: extra (key, value) pairs after the leading one
 }
 
@@ -1068,13 +1014,6 @@ var progTimes = []time.Time{
 
 var progDurUnits = []time.Duration{time.Nanosecond, time.Microsecond, time.Millisecond, time.Second}
 
-// progRawTbl entries are all valid JSON so the encoded line stays
-// parseable (AddRawJSON embeds verbatim; invalid blobs are the
-// caller's contract breach, exercised in the unit tests).
-var progRawTbl = []string{
-	`{"n":0}`, `{"b":true}`, `{"s":"x"}`, `null`, `[1,2]`, `{"nested":{"k":"v"}}`, `["a","b"]`,
-}
-
 // maxProgOps caps decoded streams (width seeds need up to ~82 appends).
 const maxProgOps = 100
 
@@ -1100,10 +1039,6 @@ func decodeProgram(b []byte) lifeProgram {
 			key := progKeys[int(c.next())%len(progKeys)]
 			n := int(c.next() % 17)
 			ops = append(ops, lifeOp{kind: opAddStr, key: key, val: string(c.window(n))})
-		case opAddRaw:
-			key := progKeys[int(c.next())%len(progKeys)]
-			raw := progRawTbl[int(c.next())%len(progRawTbl)]
-			ops = append(ops, lifeOp{kind: opAddRaw, key: key, raw: []byte(raw)})
 		case opAddVar:
 			// One leading pair plus 0-4 extra pairs; extra keys may be
 			// empty strings or non-strings (malformed tails the public
@@ -1293,8 +1228,6 @@ func executeProgramOn(prog lifeProgram, op *Operation) {
 		switch o.kind {
 		case opAdd, opAddStr:
 			Add(ctx, o.key, o.val)
-		case opAddRaw:
-			AddRawJSON(ctx, o.key, o.raw)
 		case opAddVar:
 			kv := make([]any, 0, len(o.pairs)*2)
 			for _, p := range o.pairs {
@@ -1376,8 +1309,6 @@ func buildModel(prog lifeProgram) *lifeModel {
 		switch o.kind {
 		case opAdd, opAddStr:
 			m.append(fieldOf(o.key, o.val))
-		case opAddRaw:
-			m.append(Field{key: o.key, kind: KindRaw, val: o.raw})
 		case opAddVar:
 			m.append(fieldOf(o.key, o.val))
 			for _, p := range o.pairs {
@@ -1715,11 +1646,6 @@ func checkFieldWire(f Field, raw []byte) error {
 			return fmt.Errorf("err %q: wire %q != %q", f.key, s, want)
 		}
 		return nil
-	case KindRaw:
-		if want := string(f.val.([]byte)); string(raw) != want {
-			return fmt.Errorf("raw %q: wire %s != modeled %s", f.key, raw, want)
-		}
-		return nil
 	case KindAny:
 		var modelV, wireV any
 		modelBytes, err := json.Marshal(f.val)
@@ -1941,7 +1867,6 @@ func seedPrograms() []seedProg {
 	p := func(mode lifeMode, start Domain, ops ...lifeOp) lifeProgram {
 		return lifeProgram{mode: mode, start: start, ops: ops}
 	}
-	raw := func(s string) []byte { return []byte(s) }
 	endErr := func(err error) lifeOp { return lifeOp{kind: opEndErr, val: err} } // err stays a typed error (nil-safe)
 	endPanic := func(payload any, errp error) lifeOp {
 		return lifeOp{kind: opEndPanic, val: payload, raw: errBytes(errp)}
@@ -2018,7 +1943,6 @@ func seedPrograms() []seedProg {
 		anyOp("op.name", progTimes[0]),
 		anyOp("op.id", 42*time.Millisecond),
 		errOp("err-9"),
-		lifeOp{kind: opAddRaw, key: "http.route", raw: raw(`{"nested":{"k":"v"}}`)},
 		anyOp("http.method", map[string]any{"v": "x"}),
 		lifeOp{kind: opSetMsg, val: "custom"},
 		endErr(context.Canceled)))
@@ -2177,9 +2101,6 @@ func encodeProgram(prog lifeProgram) []byte {
 			s := o.val.(string)
 			b = append(b, keyByte(o.key), byte(len(s)))
 			b = append(b, s...)
-		case opAddRaw:
-			idx := indexOf(progRawTbl, string(o.raw))
-			b = append(b, keyByte(o.key), byte(idx))
 		case opAddVar:
 			b = append(b, keyByte(o.key))
 			encodeValue(&b, o.val)

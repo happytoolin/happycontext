@@ -1544,7 +1544,6 @@ func stragglerWrite(ctx context.Context) {
 	SetMessage(ctx, "s-message")
 	SetLevel(ctx, LevelError)
 	Add(ctx, "s-add", "straggler-value")
-	AddRawJSON(ctx, "s-raw", []byte(`{"s":true}`))
 	Error(ctx, errors.New("s-error"))
 	SetRoute(ctx, "/s-route")
 }

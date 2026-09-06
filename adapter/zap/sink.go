@@ -55,9 +55,6 @@ func fieldOf(f hc.Field) zap.Field {
 	if err, ok := f.Err(); ok {
 		return zap.String(f.Key(), errMessage(err))
 	}
-	if raw, ok := f.Raw(); ok {
-		return zap.Any(f.Key(), raw)
-	}
 	if str, ok := f.Str(); ok {
 		return zap.String(f.Key(), str)
 	}

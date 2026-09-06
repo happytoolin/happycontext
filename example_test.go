@@ -94,11 +94,11 @@ func ExampleStart() {
 		defer op.End(&err) // direct defer: captures errors and panics
 
 		hc.Add(op.Context(), "rows", 42, "source", "queue")
-		hc.AddRawJSON(op.Context(), "meta", []byte(`{"batch":true}`))
+		hc.Add(op.Context(), "meta", json.RawMessage(`{"batch":true}`))
 		return errors.New("row 17 failed")
 	}()
 	// Output:
-	// ERROR operation_completed error={"message":"row 17 failed","type":"*errors.errorString"} meta="eyJiYXRjaCI6dHJ1ZX0=" op.attempt=2 op.domain="job" op.id="job_1" op.max_attempts=3 op.name="import" op.outcome="failure" rows=42 source="queue"
+	// ERROR operation_completed error={"message":"row 17 failed","type":"*errors.errorString"} meta={"batch":true} op.attempt=2 op.domain="job" op.id="job_1" op.max_attempts=3 op.name="import" op.outcome="failure" rows=42 source="queue"
 }
 
 // ExampleOperation_End demonstrates the deferred idiom and the

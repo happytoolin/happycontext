@@ -1,7 +1,6 @@
 package hc
 
 import (
-	"bytes"
 	"context"
 	"reflect"
 	"sync"
@@ -92,9 +91,6 @@ func copyFields(fields []Field) []Field {
 	out := make([]Field, len(fields))
 	for i, f := range fields {
 		switch f.kind {
-		case KindRaw:
-			raw, _ := f.val.([]byte)
-			out[i] = Field{key: f.key, kind: f.kind, val: bytes.Clone(raw)}
 		case KindAny, KindErr:
 			out[i] = Field{key: f.key, kind: f.kind, val: deepCopyValue(f.val, newVisitSet())}
 		default:

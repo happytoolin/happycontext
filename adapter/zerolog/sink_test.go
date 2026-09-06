@@ -97,7 +97,7 @@ func TestSinkTypedFieldsAndDedupe(t *testing.T) {
 	emit(t, &buf, func(ctx context.Context) {
 		hc.Add(ctx, "s", "v", "i", 7, "b", true, "t", now, "d", 1500*time.Millisecond)
 		hc.Add(ctx, "k", "first", "k", "second")
-		hc.AddRawJSON(ctx, "meta", []byte(`{"raw":true}`))
+		hc.Add(ctx, "meta", json.RawMessage(`{"raw":true}`))
 	})
 
 	payload := lastPayload(t, &buf)

@@ -186,10 +186,6 @@ func (e *event) appendAny(gen uint64, key string, value any) {
 	e.append(gen, Field{key: key, kind: KindAny, val: value})
 }
 
-func (e *event) setRaw(ref *walRef, key string, raw []byte) {
-	e.append(ref.gen, Field{key: key, kind: KindRaw, val: raw})
-}
-
 // setError records the structured error field and latches hasErr.
 // Armed events serialize the append + latch under mu so a concurrent
 // seal cannot split them (the P5 matrix pins the discipline).

@@ -88,9 +88,6 @@ func attrOf(f hc.Field) slog.Attr {
 	if err, ok := f.Err(); ok {
 		return slog.String(f.Key(), errMessage(err))
 	}
-	if raw, ok := f.Raw(); ok {
-		return slog.Any(f.Key(), raw)
-	}
 	if str, ok := f.Str(); ok {
 		return slog.String(f.Key(), str)
 	}

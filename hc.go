@@ -40,29 +40,6 @@ func Add(ctx context.Context, key string, value any, kv ...any) {
 	ref.ev.addKV(ref, key, value, kv...)
 }
 
-// AddRawJSON attaches pre-encoded JSON under key without re-escaping;
-// the escape scan is skipped entirely for blobs the caller already
-// encoded once.
-// A nil or empty blob is a no-op: appending zero bytes would leave a
-// bare "key": member and corrupt the canonical line.
-//
-// For validated embedding through the regular path, pass
-// json.RawMessage to Add instead: it is a []byte that asserts
-// JSON-ness via its MarshalJSON contract, so Add embeds it verbatim
-// AND every bridge (slog/zap/zerolog, which all honor MarshalJSON)
-// renders it identically — AddRawJSON is the zero-parse fast lane
-// where the caller alone guarantees validity. A plain []byte through
-// Add is deliberately base64 (the encoding/json contract for binary
-// data, matched by all three host loggers).
-func AddRawJSON(ctx context.Context, key string, raw []byte) {
-	if len(raw) == 0 {
-		return
-	}
-	if ref := eventFromContext(ctx); ref != nil {
-		ref.ev.setRaw(ref, key, raw)
-	}
-}
-
 // Error records err on the request's event as the structured canonical
 // error field.
 func Error(ctx context.Context, err error) {
