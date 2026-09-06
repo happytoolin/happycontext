@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+## [1.0.0](https://github.com/happytoolin/happycontext/compare/v0.5.0...v1.0.0) (2026-09-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove the raw-JSON surface — AddRawJSON, KindRaw, Field.Raw()
+* The entire v0 public API is replaced. See MIGRATION.md for the complete v0 -> v1 symbol map.
+
+### Features
+
+* add first-party JSON sink with SWAR encoder ([#23](https://github.com/happytoolin/happycontext/issues/23)) ([7919d17](https://github.com/happytoolin/happycontext/commit/7919d1711553292954bc417885ef0967d3537e73))
+* remove the raw-JSON surface — AddRawJSON, KindRaw, Field.Raw() ([a683c53](https://github.com/happytoolin/happycontext/commit/a683c5339f0c345d2560fe1e989714df21b8479f))
+* v2 record core (W3-W9) + DST hardening ([#29](https://github.com/happytoolin/happycontext/issues/29)) ([07b8293](https://github.com/happytoolin/happycontext/commit/07b82938720bca7d84ce30db8a913300ab671f5f))
+
+
+### Bug Fixes
+
+* **ci:** point release-please at v2 with the input that exists ([04519dc](https://github.com/happytoolin/happycontext/commit/04519dca0804194439f63c0c3b9d1e7891ac12f3))
+* **core:** GLM whole-branch audit — 1 defect + 2 probable-defects + API-freeze polish ([5850c19](https://github.com/happytoolin/happycontext/commit/5850c1953d625851f3e9fdcb6929a50c193203c9))
+* **v2:** apply the final pre-1.0 quality-audit fixes ([1a4e91d](https://github.com/happytoolin/happycontext/commit/1a4e91d3b8423bf2f157e40d550bc24c4334f29f))
+
+
+### Performance Improvements
+
+* deliver the optimization the review caught as half-implemented ([6cbafe3](https://github.com/happytoolin/happycontext/commit/6cbafe3fb7a1bfc6e006602aabfb7ec5bf4e987a))
+* hot-path wins — EndDrop −18%, encode −10%, batched post-seal ([5f3ce19](https://github.com/happytoolin/happycontext/commit/5f3ce196cf6dfec493dea516d13b27b0a728c529))
+* v2 optimizations — zerolog Encoded(), Record pooling, lazy start fields, fast-path sampling ([4f725f4](https://github.com/happytoolin/happycontext/commit/4f725f4accc965f7460b8280a1669154fb5c3fcd))
+
 ## [0.5.0](https://github.com/happytoolin/happycontext/compare/v0.4.0...v0.5.0) (2026-08-30)
 
 
