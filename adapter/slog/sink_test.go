@@ -2,6 +2,7 @@ package slogadapter
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"testing"
 
@@ -137,7 +138,7 @@ func TestSinkErrorAndRawWireFidelity(t *testing.T) {
 	rt := hc.MustCompile(hc.Config{Sink: New(slog.New(h)), SamplingRate: 1})
 	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
 	hc.Add(op.Context(), "e", errBoom{})
-	hc.AddRawJSON(op.Context(), "meta", []byte(`{"raw":true}`))
+	hc.Add(op.Context(), "meta", json.RawMessage(`{"raw":true}`))
 	op.End(nil)
 
 	if got := h.records[0].Attrs["e"]; got != "boom" {

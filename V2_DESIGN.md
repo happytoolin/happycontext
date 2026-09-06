@@ -376,6 +376,30 @@ destination drains** (`adapter/datadog`, `adapter/posthog`, …) — in
 Go the collector/agent owns that job, and stdout-plus-agent is the
 12-factor norm evlog's Node-only world lacks.
 
+## 7a. Post-implementation amendments (2026-09-06)
+
+Changes made during implementation review that supersede §2/§5/§6:
+
+20. **The raw-JSON surface is removed** (`AddRawJSON`, `KindRaw`,
+    `Field.Raw()`), superseding amendment 18's rename. Pre-encoded JSON
+    travels as `json.RawMessage` through regular `Add`: its
+    `MarshalJSON` contract embeds the bytes verbatim in the canonical
+    line AND renders identically through every bridge (all hosts honor
+    `MarshalJSON`), so the second public path existed only to skip a
+    type assertion. A plain `[]byte` through `Add` stays base64 — the
+    `encoding/json` contract, matched by slog/zap/zerolog.
+21. **Sentinel error strings dropped their `"hc: "` prefix** (they
+    double-prefixed under the documented `fmt.Errorf("hc: …: %w")`
+    wrapping). The prefix convention itself — amendment 17 — is
+    unchanged; only the sentinel literals moved.
+22. **`Field.WireKey()` joined the public API** (wire-only aliasing
+    view: user keys colliding with the envelope render as
+    `fields.*`), needed by bridges that emit flat JSON.
+23. **`SampleInput.Code` surfaces the canonical code**: `http.status`
+    for HTTP, `op.code` otherwise; the 5xx outcome rule follows the
+    same canonical split, so non-HTTP 5xx codes resolve failure and
+    bypass sampling like their HTTP twins.
+
 ## 8. Decisions ledger
 
 Every question raised during design, and its final answer.

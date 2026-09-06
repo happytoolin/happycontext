@@ -88,9 +88,6 @@ func attrOf(f hc.Field) slog.Attr {
 	if err, ok := f.Err(); ok {
 		return slog.String(f.Key(), errMessage(err))
 	}
-	if raw, ok := f.Raw(); ok {
-		return slog.Any(f.Key(), raw)
-	}
 	if str, ok := f.Str(); ok {
 		return slog.String(f.Key(), str)
 	}
@@ -122,6 +119,9 @@ func attrOf(f hc.Field) slog.Attr {
 // forward emission order — the same duplicate resolution the core
 // encoder applies (linear scan for narrow events, backward seen-set
 // collection for wide ones).
+// The 24 crossover matches hc's dedupeScanLimit so bridges and the
+// canonical line resolve duplicates identically (cross-module
+// contract, pinned by the golden parity tests).
 func lastOccurrences(fields []hc.Field) []int {
 	if len(fields) <= 24 {
 		var stack [24]int // allocation-free narrow path

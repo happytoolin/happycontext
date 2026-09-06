@@ -4,25 +4,30 @@ package hc
 type Domain string
 
 const (
-	DomainHTTP    Domain = "http"
-	DomainJob     Domain = "job"
-	DomainMessage Domain = "msg"
-	DomainCLI     Domain = "cli"
+	DomainHTTP    Domain = "http" // the middlewares; http.status is canonical
+	DomainJob     Domain = "job"  // worker integration; op.code is canonical
+	DomainMessage Domain = "msg"  // custom message-consumer operations
+	DomainCLI     Domain = "cli"  // command-line invocations
 )
 
 // Outcome describes operation completion status.
 type Outcome string
 
 const (
-	OutcomeSuccess  Outcome = "success"
-	OutcomeFailure  Outcome = "failure"
-	OutcomePanic    Outcome = "panic"
-	OutcomeCanceled Outcome = "canceled"
-	OutcomeTimeout  Outcome = "timeout"
-	OutcomeRetry    Outcome = "retry"
+	OutcomeSuccess  Outcome = "success"  // default for anything not below
+	OutcomeFailure  Outcome = "failure"  // error, or 5xx canonical code
+	OutcomePanic    Outcome = "panic"    // recovered panic (re-panicked)
+	OutcomeCanceled Outcome = "canceled" // error wrapping context.Canceled
+	OutcomeTimeout  Outcome = "timeout"  // error wrapping context.DeadlineExceeded
+	OutcomeRetry    Outcome = "retry"    // explicit-input only: resolveOutcome never emits it
 )
 
-// OperationPolicy customizes lifecycle defaults per domain.
+// OperationPolicy customizes lifecycle defaults per domain. Zero
+// fields mean the defaults: success logs at INFO, failures and panics
+// at ERROR; OutcomeLevels (checked first) and then the three level
+// fields override that, per outcome or per class. SamplingRate, when
+// set, replaces both the global rate and any LevelSamplingRates entry
+// for the domain.
 type OperationPolicy struct {
 	SuccessLevel  Level
 	FailureLevel  Level

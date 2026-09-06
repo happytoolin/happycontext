@@ -21,7 +21,7 @@ import (
 
 // mustWireLine parses one emitted JSON line and asserts the canonical
 // envelope every consumer relies on.
-func mustWireLine(t *testing.T, ln string) map[string]any {
+func parseWireLine(t *testing.T, ln string) map[string]any {
 	t.Helper()
 	var m map[string]any
 	if err := json.Unmarshal([]byte(ln), &m); err != nil {
@@ -32,8 +32,12 @@ func mustWireLine(t *testing.T, ln string) map[string]any {
 			t.Fatalf("canonical key %q missing: %s", k, ln)
 		}
 	}
-	outcome := m["op.outcome"].(string)
-	status := int(m["http.status"].(float64))
+	outcome, ocOK := m["op.outcome"].(string)
+	statusF, stOK := m["http.status"].(float64)
+	if !ocOK || !stOK {
+		t.Fatalf("canonical envelope mistyped: %s", ln)
+	}
+	status := int(statusF)
 	switch outcome {
 	case "panic":
 		if _, ok := m["panic"].(map[string]any); !ok {
@@ -58,9 +62,10 @@ func mustWireLine(t *testing.T, ln string) map[string]any {
 
 // TestWireMixedTrafficRealLogger drives concurrent mixed traffic —
 // success, error, panic, streaming-flush, kitchen-sink — through the
-// real middleware and the real slog JSON pipeline (one shared logger,
-// exactly the production shape); every emitted line must parse, carry
-// the full canonical envelope, and be internally coherent.
+// real middleware and the first-party JSONSink (one shared sink, the
+// production shape; the slog/zap/zerolog equivalents live in
+// cmd/examples); every emitted line must parse, carry the full
+// canonical envelope, and be internally coherent.
 func TestWireMixedTrafficRealLogger(t *testing.T) {
 	var buf bytes.Buffer
 	// One JSONSink, mutex-serialized by the sink itself: the shared
@@ -114,9 +119,7 @@ func TestWireMixedTrafficRealLogger(t *testing.T) {
 	const per = 15
 	var wg sync.WaitGroup
 	for w := range workers {
-		wg.Add(1)
-		go func(w int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range per {
 				id := fmt.Sprintf("w%d-%d", w, i)
 				for _, p := range []string{"/ok/", "/err/", "/panic/", "/stream/", "/kitchen/"} {
@@ -126,7 +129,7 @@ func TestWireMixedTrafficRealLogger(t *testing.T) {
 					}
 				}
 			}
-		}(w)
+		})
 	}
 	wg.Wait()
 	// Client returns precede the server's deferred emissions; Close
@@ -139,7 +142,7 @@ func TestWireMixedTrafficRealLogger(t *testing.T) {
 	}
 	outcomes := map[string]int{}
 	for _, ln := range lines {
-		m := mustWireLine(t, ln)
+		m := parseWireLine(t, ln)
 		outcomes[m["op.outcome"].(string)]++
 	}
 	// Exact mix: every /err is failure, every /panic is panic, the
@@ -151,7 +154,7 @@ func TestWireMixedTrafficRealLogger(t *testing.T) {
 
 func nonEmptyLines(s string) []string {
 	var out []string
-	for _, ln := range strings.Split(s, "\n") {
+	for ln := range strings.SplitSeq(s, "\n") {
 		if strings.TrimSpace(ln) != "" {
 			out = append(out, ln)
 		}
@@ -178,19 +181,23 @@ func TestWireRouteAndOperationShareTheTemplate(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 	srv := httptest.NewServer(Middleware(rt)(mux))
-	defer srv.Close()
 
 	resp, err := srv.Client().Get(srv.URL + "/orders/o_42")
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = resp.Body.Close()
+	// Quiesce before reading shared state: client returns precede the
+	// server's deferred emission, and this test reads buf and sampled
+	// directly (the buffering that makes this safe today is a net/http
+	// implementation detail — Close makes it explicit).
+	srv.Close()
 
 	lines := nonEmptyLines(buf.String())
 	if len(lines) != 1 {
 		t.Fatalf("lines = %d", len(lines))
 	}
-	m := mustWireLine(t, lines[0])
+	m := parseWireLine(t, lines[0])
 	// req.Pattern carries the method for method-matched patterns; the
 	// invariant is that all three views agree on the same template.
 	const want = "GET /orders/{id}"

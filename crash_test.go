@@ -19,6 +19,7 @@ package hc
 //   K  adversarial fuzz targets (values, armed interleavings)
 //   L  armed-mode DST (mixed writers vs single End, arm-vs-seal)
 //   N  testing/synctest bubbles (per-test goroutine hygiene, watchdog)
+//      (M was the ad-hoc live-chaos runs; intentionally not a file here)
 
 import (
 	"context"
@@ -341,9 +342,7 @@ func TestCrashStragglerStormArmed(t *testing.T) {
 	const perWorker = 40
 	var wg sync.WaitGroup
 	for w := range workers {
-		wg.Add(1)
-		go func(w int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range perWorker {
 				op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
 				op.ev.arm()
@@ -351,7 +350,7 @@ func TestCrashStragglerStormArmed(t *testing.T) {
 				_ = op.End(nil)
 				Add(op.Context(), "straggler", 1)
 			}
-		}(w)
+		})
 	}
 	wg.Wait()
 	evs := ts.Events()
@@ -411,9 +410,7 @@ func TestCrashSharedRuntimeAllDomains(t *testing.T) {
 	domains := []Domain{DomainHTTP, DomainJob, DomainMessage, DomainCLI, "custom"}
 	var wg sync.WaitGroup
 	for d := range domains {
-		wg.Add(1)
-		go func(d int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range 50 {
 				op := Start(context.Background(), rt, OperationStart{Domain: domains[d], Name: "x"})
 				Add(op.Context(), "i", i)
@@ -422,7 +419,7 @@ func TestCrashSharedRuntimeAllDomains(t *testing.T) {
 				}
 				_ = op.End(nil)
 			}
-		}(d)
+		})
 	}
 	wg.Wait()
 	evs := ts.Events()
@@ -443,11 +440,9 @@ func TestCrashConcurrentEndSlowSink(t *testing.T) {
 	res := make([]bool, racers)
 	var wg sync.WaitGroup
 	for i := range racers {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
+		wg.Go(func() {
 			res[i] = op.End(nil)
-		}(i)
+		})
 	}
 	wg.Wait()
 	for i, r := range res {
@@ -560,6 +555,8 @@ func TestCrashCyclicAnyValue(t *testing.T) {
 }
 
 func TestCrashFloatEdgeValues(t *testing.T) {
+	// Untyped constant -0.0 is +0 (constants carry no sign) — Copysign
+	// is the only way to obtain a real negative zero.
 	negZero := math.Copysign(0, -1)
 	vals := []float64{math.NaN(), math.Inf(1), math.Inf(-1), math.SmallestNonzeroFloat64, math.MaxFloat64, negZero}
 	for _, v := range vals {
@@ -573,38 +570,6 @@ func TestCrashFloatEdgeValues(t *testing.T) {
 	m := mustParseLine(t, rec32.Encoded())
 	if s, _ := m["f32"].(string); s != "NaN" {
 		t.Fatalf("float32 NaN = %#v, want \"NaN\"", m["f32"])
-	}
-}
-
-func TestCrashRawJSONInjection(t *testing.T) {
-	// Contract: AddRawJSON appends verbatim, no sanitization. Pin that
-	// invalid blobs produce an unparseable line WITHOUT panicking —
-	// the caller owned those bytes. (KindRaw fields constructed
-	// directly: recOf's fieldOf would type a []byte as KindAny, which
-	// the encoder renders base64 — itself worth pinning.)
-	rec := recOf(LevelInfo, "m", Field{key: "raw", kind: KindRaw, val: []byte(`{"broken":`)})
-	if rec.Encoded() == nil {
-		t.Fatal("encode returned nil")
-	}
-	if json.Valid(rec.Encoded()) {
-		t.Fatalf("invalid raw unexpectedly produced valid JSON: %s", rec.Encoded())
-	}
-	rec2 := recOf(LevelInfo, "m", Field{key: "raw", kind: KindRaw, val: []byte(`}}}}} early-close`)})
-	if rec2.Encoded() == nil {
-		t.Fatal("encode returned nil")
-	}
-	// A plain []byte through Add renders base64 (json.Marshal shape).
-	recB64 := recOf(LevelInfo, "m", fieldOf("bytes", []byte(`{"ok":[1,2]}`)))
-	mb := mustParseLine(t, recB64.Encoded())
-	if s, _ := mb["bytes"].(string); s != "eyJvayI6WzEsMl19" {
-		t.Fatalf("[]byte not base64: %#v", mb["bytes"])
-	}
-	// Valid raw still embeds verbatim.
-	rec3 := recOf(LevelInfo, "m", Field{key: "raw", kind: KindRaw, val: []byte(`{"ok":[1,2]}`)})
-	m := mustParseLine(t, rec3.Encoded())
-	raw, _ := m["raw"].(map[string]any)
-	if raw == nil || raw["ok"] == nil {
-		t.Fatalf("valid raw JSON not embedded: %s", rec3.Encoded())
 	}
 }
 
@@ -851,6 +816,12 @@ func TestCrashHostileRates(t *testing.T) {
 	if _, err := Compile(Config{OperationPolicies: map[Domain]OperationPolicy{"job": {SamplingRate: &inf}}}); err == nil {
 		t.Fatal("+Inf policy rate accepted")
 	}
+	// Nested NaN in the level map: TestCompileSentinels covers only the
+	// global rate and plain out-of-range map values — keep this one
+	// deterministic rather than fuzz-only.
+	if _, err := Compile(Config{LevelSamplingRates: map[Level]float64{LevelInfo: math.NaN()}}); err == nil {
+		t.Fatal("NaN level rate accepted")
+	}
 }
 
 // The compiled Runtime shares no mutable state with the caller's
@@ -909,9 +880,6 @@ func TestCrashNilReceiversAndArgs(t *testing.T) {
 	//lint:ignore SA1012 nil contexts are this test's charter
 	Add(nil, "k", "v")
 	Add(context.Background(), "k", "v")
-	//lint:ignore SA1012 nil contexts are this test's charter
-	AddRawJSON(nil, "k", []byte(`{}`))
-	AddRawJSON(context.Background(), "k", nil)
 	//lint:ignore SA1012 nil contexts are this test's charter
 	Error(nil, nil)
 	Error(context.Background(), nil)
@@ -1381,11 +1349,9 @@ func TestCrashConcurrentEndDistinctErrPtrs(t *testing.T) {
 		}
 		var wg sync.WaitGroup
 		for i := range errs {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
+			wg.Go(func() {
 				_ = op.End(errs[i])
-			}(i)
+			})
 		}
 		wg.Wait()
 		evs := ts.Events()
@@ -1466,28 +1432,6 @@ func TestCrashStartOnCanceledContext(t *testing.T) {
 	}
 }
 
-// AddRawJSON keeps the caller's []byte by reference: mutating the blob
-// between Add and End is visible on the wire (torn JSON, silently).
-// Pin the lifetime contract: encode before you reuse the buffer.
-func TestCrashRawJSONBlobLifetime(t *testing.T) {
-	rt, ts := testRT(t, nil)
-	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
-	blob := []byte(`{"v":1}`)
-	AddRawJSON(op.Context(), "raw", blob)
-	blob[5] = '9' // caller mutates before End
-	_ = op.End(nil)
-
-	ev := ts.Events()[0]
-	raw, ok := ev.Lookup("raw")
-	if !ok {
-		t.Fatal("raw field missing")
-	}
-	b, _ := raw.([]byte)
-	if string(b) != `{"v":9}` {
-		t.Fatalf("raw blob was copied at Add time: %q (lifetime contract is by-reference)", b)
-	}
-}
-
 // ════════════════════════════════════════════════════════════════════
 // Agent J — sink contract edges
 // ════════════════════════════════════════════════════════════════════
@@ -1507,13 +1451,11 @@ func TestCrashConcurrentEncoded(t *testing.T) {
 	var wg sync.WaitGroup
 	lines := make([][]byte, n)
 	for g := range n {
-		wg.Add(1)
-		go func(g int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for range iters {
 				lines[g] = rec.Encoded()
 			}
-		}(g)
+		})
 	}
 	wg.Wait()
 	for g := 1; g < n; g++ {
@@ -1576,11 +1518,9 @@ type fanoutSink struct {
 func (f *fanoutSink) Write(ctx context.Context, rec *Record) {
 	var wg sync.WaitGroup
 	for _, s := range f.inner {
-		wg.Add(1)
-		go func(s Sink) {
-			defer wg.Done()
+		wg.Go(func() {
 			s.Write(ctx, rec)
-		}(s)
+		})
 	}
 	wg.Wait()
 }
@@ -1593,15 +1533,13 @@ func TestCrashFanoutSinks(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for w := range 8 {
-		wg.Add(1)
-		go func(w int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range 25 {
 				op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
 				Add(op.Context(), "w", w, "i", i)
 				_ = op.End(nil)
 			}
-		}(w)
+		})
 	}
 	wg.Wait()
 
@@ -1663,9 +1601,7 @@ func TestCrashArmedMixedWritersSingleEnd(t *testing.T) {
 		stop := make(chan struct{})
 
 		for w := range 6 {
-			wg.Add(1)
-			go func(w int) {
-				defer wg.Done()
+			wg.Go(func() {
 				for i := 0; ; i++ {
 					select {
 					case <-stop:
@@ -1674,12 +1610,10 @@ func TestCrashArmedMixedWritersSingleEnd(t *testing.T) {
 					}
 					Add(op.Context(), fmt.Sprintf("w%d", w), i)
 				}
-			}(w)
+			})
 		}
 		for s := range 3 {
-			wg.Add(1)
-			go func(s int) {
-				defer wg.Done()
+			wg.Go(func() {
 				for i := 0; ; i++ {
 					select {
 					case <-stop:
@@ -1695,12 +1629,10 @@ func TestCrashArmedMixedWritersSingleEnd(t *testing.T) {
 						SetMessage(op.Context(), fmt.Sprintf("m-%d", i))
 					}
 				}
-			}(s)
+			})
 		}
 		// Watchdog-style snapshotter.
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				select {
 				case <-stop:
@@ -1709,7 +1641,7 @@ func TestCrashArmedMixedWritersSingleEnd(t *testing.T) {
 					_ = op.ev.snapshotFields()
 				}
 			}
-		}()
+		})
 
 		_ = op.End(nil)
 		close(stop)
@@ -1736,9 +1668,7 @@ func TestCrashArmRacingSeal(t *testing.T) {
 
 		stop := make(chan struct{})
 		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				select {
 				case <-stop:
@@ -1747,7 +1677,7 @@ func TestCrashArmRacingSeal(t *testing.T) {
 					op.ev.arm()
 				}
 			}
-		}()
+		})
 		_ = op.End(nil)
 		close(stop)
 		wg.Wait()
@@ -1769,11 +1699,9 @@ func TestCrashArmedErrorVsSeal(t *testing.T) {
 		op.ev.arm()
 
 		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			Error(op.Context(), fmt.Errorf("racing-%d", round))
-		}()
+		})
 		_ = op.End(nil)
 		wg.Wait()
 
@@ -1810,9 +1738,7 @@ func TestCrashSnapshotVsPostSealAppends(t *testing.T) {
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-stop:
@@ -1821,7 +1747,7 @@ func TestCrashSnapshotVsPostSealAppends(t *testing.T) {
 				_ = op.ev.snapshotFields()
 			}
 		}
-	}()
+	})
 	Add(op.Context(), "k", "v")
 	_ = op.End(nil)
 	close(stop)
@@ -2013,11 +1939,9 @@ func TestSynctestConcurrentEndGatedSink(t *testing.T) {
 		var wg sync.WaitGroup
 		first := make([]bool, racers)
 		for i := range racers {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
+			wg.Go(func() {
 				first[i] = op.End(nil)
-			}(i)
+			})
 		}
 		// The gate usually closes before the winner reaches Write, so
 		// the durable block is scheduling-dependent — the assertions
@@ -2059,9 +1983,7 @@ func TestSynctestArmedWritersAllExit(t *testing.T) {
 		stop := make(chan struct{})
 		var wg sync.WaitGroup
 		for w := range 6 {
-			wg.Add(1)
-			go func(w int) {
-				defer wg.Done()
+			wg.Go(func() {
 				for i := 0; ; i++ {
 					select {
 					case <-stop:
@@ -2070,11 +1992,9 @@ func TestSynctestArmedWritersAllExit(t *testing.T) {
 						Add(op.Context(), fmt.Sprintf("w%d", w), i)
 					}
 				}
-			}(w)
+			})
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				select {
 				case <-stop:
@@ -2083,7 +2003,7 @@ func TestSynctestArmedWritersAllExit(t *testing.T) {
 					_ = op.ev.snapshotFields()
 				}
 			}
-		}()
+		})
 		Add(op.Context(), "owner", "final")
 		_ = op.End(nil)
 		close(stop)
@@ -2161,11 +2081,9 @@ func TestSynctestStragglerStormBubble(t *testing.T) {
 			_ = op.End(nil)
 			var wg sync.WaitGroup
 			for s := range 8 {
-				wg.Add(1)
-				go func(s int) {
-					defer wg.Done()
+				wg.Go(func() {
 					Add(op.Context(), "straggler", s)
-				}(s)
+				})
 			}
 			wg.Wait()
 		}
@@ -2188,4 +2106,50 @@ func snapshotLookup(fields []Field, key string) (any, bool) {
 		}
 	}
 	return nil, false
+}
+
+// TestCrashWrappedTypedNilContained pins the containment against
+// %w-wrapped typed-nils: isTypedNilError inspects only the outermost
+// error, so the wrap chain's inner nil deref used to panic inside End
+// AFTER its recover — losing the event and masking any in-flight
+// panic. safeErrorMessage fences it (found by the GLM-5.3 core audit).
+type wrappedNilErr struct{ msg string }
+
+func (e *wrappedNilErr) Error() string { return e.msg }
+
+func TestCrashWrappedTypedNilContained(t *testing.T) {
+	var pe *wrappedNilErr
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
+	Error(op.Context(), fmt.Errorf("job failed: %w", pe))
+	Add(op.Context(), "e2", fmt.Errorf("join: %w", pe))
+	if !op.End(nil) {
+		t.Fatal("wrapped typed-nil dropped the event")
+	}
+	if len(ts.Events()) != 1 {
+		t.Fatalf("events = %d", len(ts.Events()))
+	}
+	rec := recOf(LevelInfo, "m", ts.Events()[0].Fields()...)
+	if !json.Valid(rec.Encoded()) {
+		t.Fatalf("line invalid: %s", rec.Encoded())
+	}
+}
+
+// TestCrashPanickingErrorContained fences arbitrary panicking Error()
+// implementations through the error-metainfo path.
+type boomErr struct{}
+
+func (boomErr) Error() string { panic("boom") }
+
+func TestCrashPanickingErrorContained(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
+	Error(op.Context(), boomErr{})
+	if !op.End(nil) || len(ts.Events()) != 1 {
+		t.Fatal("panicking Error() implementation lost the event")
+	}
+	rec := recOf(LevelInfo, "m", ts.Events()[0].Fields()...)
+	if !json.Valid(rec.Encoded()) {
+		t.Fatalf("line invalid: %s", rec.Encoded())
+	}
 }

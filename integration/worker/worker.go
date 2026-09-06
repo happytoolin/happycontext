@@ -22,11 +22,15 @@ type JobMeta struct {
 
 // Start initializes a worker operation handle. rt comes from
 // hc.Compile/MustCompile; a nil *hc.Runtime runs the operation with no
-// emission. End the operation with the deferred-error idiom:
+// emission. End the operation with the deferred-error idiom — and
+// switch to the operation context, or every hc.Add below is a silent
+// no-op (the original ctx carries no WAL):
 //
-//	func run(ctx context.Context) (err error) {
+//	func run(ctx context.Context, rt *hc.Runtime) (err error) {
 //		op := workerhc.Start(ctx, rt, meta)
+//		ctx = op.Context()
 //		defer op.End(&err)
+//		hc.Add(ctx, "rows", 42)
 //		...
 //	}
 func Start(ctx context.Context, rt *hc.Runtime, meta JobMeta) *hc.Operation {

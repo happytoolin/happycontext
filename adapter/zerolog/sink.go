@@ -63,7 +63,7 @@ func checkLoggerLayout() {
 // rec.Encoded() is byte-for-byte the event they should emit; loggers
 // built with With()/Hook()/Sample() augment every event and take the
 // typed path. The view is re-read on every Write, so mutating
-// *z.logger between writes is observed.
+// *s.logger between writes is observed.
 //
 // A logger whose only augmentation is the Timestamp() hook counts as
 // plain: the canonical line already carries the timestamp those hooks
@@ -143,7 +143,7 @@ func defaultFieldNames() bool {
 // zerolog.ErrorHandler; custom member-name globals and augmented
 // loggers are rejected (defaultFieldNames, plain) and take the typed
 // path.
-func (z *Sink) writeEncoded(view *loggerView, rec *hc.Record) bool {
+func (s *Sink) writeEncoded(view *loggerView, rec *hc.Record) bool {
 	if !view.plain() || !view.enabled(rec.Level()) || !defaultFieldNames() {
 		return false
 	}
@@ -162,16 +162,16 @@ func (z *Sink) writeEncoded(view *loggerView, rec *hc.Record) bool {
 // carry zerolog context/hooks/samplers fall back to the typed path:
 // the record's fields are appended in insertion order (last-write-wins
 // duplicates resolved) through zerolog's typed constructors.
-func (z *Sink) Write(ctx context.Context, rec *hc.Record) {
-	if z == nil || z.logger == nil || rec == nil {
+func (s *Sink) Write(ctx context.Context, rec *hc.Record) {
+	if s == nil || s.logger == nil || rec == nil {
 		return
 	}
-	view := (*loggerView)(unsafe.Pointer(z.logger))
-	if z.writeEncoded(view, rec) {
+	view := (*loggerView)(unsafe.Pointer(s.logger))
+	if s.writeEncoded(view, rec) {
 		return
 	}
 
-	event := z.eventFor(rec.Level())
+	event := s.eventFor(rec.Level())
 	if !event.Enabled() {
 		return
 	}
@@ -194,16 +194,16 @@ func (z *Sink) Write(ctx context.Context, rec *hc.Record) {
 	event.Msg(rec.Message())
 }
 
-func (z *Sink) eventFor(level hc.Level) *zerolog.Event {
+func (s *Sink) eventFor(level hc.Level) *zerolog.Event {
 	switch level {
 	case hc.LevelDebug:
-		return z.logger.Debug()
+		return s.logger.Debug()
 	case hc.LevelWarn:
-		return z.logger.Warn()
+		return s.logger.Warn()
 	case hc.LevelError:
-		return z.logger.Error()
+		return s.logger.Error()
 	default:
-		return z.logger.Info()
+		return s.logger.Info()
 	}
 }
 
@@ -257,9 +257,6 @@ func appendField(event *zerolog.Event, f hc.Field) *zerolog.Event {
 	if err, ok := f.Err(); ok {
 		return event.Str(key, errMessage(err))
 	}
-	if raw, ok := f.Raw(); ok {
-		return event.RawJSON(key, raw)
-	}
 	return event.Interface(key, f.Any())
 }
 
@@ -267,6 +264,9 @@ func appendField(event *zerolog.Event, f hc.Field) *zerolog.Event {
 // forward emission order — the same duplicate resolution the core
 // encoder applies (allocation-free scan for narrow events, backward
 // seen-set collection for wide ones).
+// The 24 crossover matches hc's dedupeScanLimit so bridges and the
+// canonical line resolve duplicates identically (cross-module
+// contract, pinned by the golden parity tests).
 func lastOccurrences(fields []hc.Field) []int {
 	if len(fields) <= 24 {
 		var stack [24]int // allocation-free narrow path

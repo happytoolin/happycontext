@@ -133,8 +133,8 @@ func RateSampler(rate float64) Sampler {
 	case rate >= 1:
 		return AlwaysSampler()
 	default:
-		return func(in SampleInput) bool {
-			return rand.Float64() < rate
+		return func(SampleInput) bool {
+			return shouldSample(rate)
 		}
 	}
 }

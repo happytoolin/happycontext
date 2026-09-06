@@ -27,11 +27,11 @@ func New(l *zap.Logger) *Sink {
 // Write implements hc.Sink: the record's fields are appended in
 // insertion order (last-write-wins duplicates resolved) as typed zap
 // fields.
-func (z *Sink) Write(ctx context.Context, rec *hc.Record) {
-	if z == nil || z.logger == nil || rec == nil {
+func (s *Sink) Write(ctx context.Context, rec *hc.Record) {
+	if s == nil || s.logger == nil || rec == nil {
 		return
 	}
-	checked := z.check(rec.Level(), rec.Message())
+	checked := s.check(rec.Level(), rec.Message())
 	if checked == nil {
 		return
 	}
@@ -54,9 +54,6 @@ func (z *Sink) Write(ctx context.Context, rec *hc.Record) {
 func fieldOf(f hc.Field) zap.Field {
 	if err, ok := f.Err(); ok {
 		return zap.String(f.Key(), errMessage(err))
-	}
-	if raw, ok := f.Raw(); ok {
-		return zap.Any(f.Key(), raw)
 	}
 	if str, ok := f.Str(); ok {
 		return zap.String(f.Key(), str)
@@ -85,16 +82,16 @@ func fieldOf(f hc.Field) zap.Field {
 	return zap.Any(f.Key(), f.Any())
 }
 
-func (z *Sink) check(level hc.Level, message string) *zapcore.CheckedEntry {
+func (s *Sink) check(level hc.Level, message string) *zapcore.CheckedEntry {
 	switch level {
 	case hc.LevelDebug:
-		return z.logger.Check(zapcore.DebugLevel, message)
+		return s.logger.Check(zapcore.DebugLevel, message)
 	case hc.LevelWarn:
-		return z.logger.Check(zapcore.WarnLevel, message)
+		return s.logger.Check(zapcore.WarnLevel, message)
 	case hc.LevelError:
-		return z.logger.Check(zapcore.ErrorLevel, message)
+		return s.logger.Check(zapcore.ErrorLevel, message)
 	default:
-		return z.logger.Check(zapcore.InfoLevel, message)
+		return s.logger.Check(zapcore.InfoLevel, message)
 	}
 }
 
@@ -102,6 +99,9 @@ func (z *Sink) check(level hc.Level, message string) *zapcore.CheckedEntry {
 // forward emission order — the same duplicate resolution the core
 // encoder applies (linear scan for narrow events, backward seen-set
 // collection for wide ones).
+// The 24 crossover matches hc's dedupeScanLimit so bridges and the
+// canonical line resolve duplicates identically (cross-module
+// contract, pinned by the golden parity tests).
 func lastOccurrences(fields []hc.Field) []int {
 	if len(fields) <= 24 {
 		var stack [24]int // allocation-free narrow path

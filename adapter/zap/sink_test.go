@@ -2,6 +2,7 @@ package zapadapter
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"sync"
 	"testing"
@@ -119,7 +120,7 @@ func TestSinkFloat32AndRawWireFidelity(t *testing.T) {
 	rt := hc.MustCompile(hc.Config{Sink: New(zap.New(core)), SamplingRate: 1})
 	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
 	hc.Add(op.Context(), "f", float32(0.1))
-	hc.AddRawJSON(op.Context(), "meta", []byte(`{"raw":true}`))
+	hc.Add(op.Context(), "meta", json.RawMessage(`{"raw":true}`))
 	op.End(nil)
 
 	ctxMap := logs.All()[0].ContextMap()

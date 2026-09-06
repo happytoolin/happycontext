@@ -189,11 +189,9 @@ func TestRecordEncodedOnce(t *testing.T) {
 	var wg sync.WaitGroup
 	first := make([][]byte, 8)
 	for i := range 8 {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
+		wg.Go(func() {
 			first[i] = r.Encoded()
-		}(i)
+		})
 	}
 	wg.Wait()
 	for i := 1; i < 8; i++ {
@@ -583,14 +581,12 @@ func TestJSONSinkConcurrency(t *testing.T) {
 	sink := NewJSONSink(&buf)
 	var wg sync.WaitGroup
 	for g := range 8 {
-		wg.Add(1)
-		go func(g int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range 100 {
 				rec := recOf(LevelInfo, "concurrent", fieldOf("g", g), fieldOf("i", i))
 				sink.Write(context.Background(), rec)
 			}
-		}(g)
+		})
 	}
 	wg.Wait()
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
@@ -649,6 +645,8 @@ func TestTestSinkCopiesMutableValues(t *testing.T) {
 	}
 }
 
+// FuzzDedupeFields pins the canonical dedupe: every key emitted once,
+// at its last-occurrence position, with its last value.
 //
 // Canonical-key collisions (user fields named "message"/"time"/"level")
 // follow the logrus rename policy (record.go aliasKey): colliding user

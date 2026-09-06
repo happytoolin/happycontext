@@ -415,13 +415,11 @@ func TestSealDuringArmedAppend(t *testing.T) {
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "r"})
 		ctx := op.Context()
 		op.ev.arm() // arm BEFORE End to force the guarded path
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range 50 {
 				Add(ctx, "armed", i)
 			}
-		}()
+		})
 		op.End(nil)
 		wg.Wait()
 	}
@@ -685,6 +683,7 @@ func canaryWrite(stale context.Context) {
 	Error(stale, errors.New("!BUG stale error"))
 }
 
+// Loom-lite oracle note.
 //
 // The one preemption-sensitive fragment is the straggler's append: its
 // single state load happens, then it acts. Between load and act the
@@ -1545,7 +1544,6 @@ func stragglerWrite(ctx context.Context) {
 	SetMessage(ctx, "s-message")
 	SetLevel(ctx, LevelError)
 	Add(ctx, "s-add", "straggler-value")
-	AddRawJSON(ctx, "s-raw", []byte(`{"s":true}`))
 	Error(ctx, errors.New("s-error"))
 	SetRoute(ctx, "/s-route")
 }
@@ -1613,7 +1611,6 @@ func TestStragglerInjectionMatrix(t *testing.T) {
 	}
 	for _, phase := range phases {
 		for _, armed := range []bool{false, true} {
-			phase, armed := phase, armed
 			t.Run(fmt.Sprintf("phase=%s armed=%v", phase, armed), func(t *testing.T) {
 				live := phase.live()
 
@@ -1815,9 +1812,7 @@ func TestStragglerArmedBurst(t *testing.T) {
 		const stragglers = 4
 		var wg sync.WaitGroup
 		for range stragglers {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				mu.Lock()
 				ready++
 				start.Broadcast()
@@ -1826,7 +1821,7 @@ func TestStragglerArmedBurst(t *testing.T) {
 				}
 				mu.Unlock()
 				stragglerWrite(ctx) // armed: serialized under ev.mu
-			}()
+			})
 		}
 		// release all stragglers at once (logrus start-line technique)
 		mu.Lock()
@@ -1869,7 +1864,6 @@ func TestStragglerArmedBurst(t *testing.T) {
 func TestStragglerSealedErrorNoLatch(t *testing.T) {
 	for _, armed := range []bool{false, true} {
 		for _, phase := range []matrixPhase{phasePreScan, phasePrePostSeal, phasePreCommit} {
-			phase, armed := phase, armed
 			t.Run(fmt.Sprintf("phase=%s armed=%v", phase, armed), func(t *testing.T) {
 				sink := &matrixSink{}
 				rt := MustCompile(Config{Sink: sink, SamplingRate: 0}) // healthy drops
@@ -1913,14 +1907,12 @@ func TestArmedSetterSerialization(t *testing.T) {
 		const writes = 2000
 		var wg sync.WaitGroup
 		for i := range setters {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
+			wg.Go(func() {
 				for range writes {
 					SetMessage(ctx, fmt.Sprintf("msg-%d", i))
 					SetLevel(ctx, LevelWarn)
 				}
-			}(i)
+			})
 		}
 		// The owner seals while the setters hammer: armed serialization
 		// means every write either lands pre-seal or drops post-seal.

@@ -440,35 +440,10 @@ func TestAddNoEventNoop(t *testing.T) {
 	Add(context.Background(), "k", 1) // no panic
 	//lint:ignore SA1012 intentional: pin the nil-context no-op contract
 	Add(nil, "k", 1)
-	AddRawJSON(context.Background(), "k", []byte(`{}`))
 	Error(context.Background(), errors.New("x"))
 	SetMessage(context.Background(), "m")
 	SetRoute(context.Background(), "/r")
 	SetLevel(context.Background(), LevelWarn)
-}
-
-func TestAddRawJSONField(t *testing.T) {
-	rt, ts := testRT(t, nil)
-	op := Start(context.Background(), rt, OperationStart{})
-	AddRawJSON(op.Context(), "meta", []byte(`{"nested":true}`))
-	op.End(nil)
-	ev := ts.Events()[0]
-	var found *Field
-	for _, cand := range ev.Fields() {
-		if cand.Key() == "meta" {
-			f := cand
-			found = &f
-		}
-	}
-	if found == nil || found.Kind() != KindRaw {
-		if found == nil {
-			t.Fatal("raw field missing")
-		}
-		t.Fatalf("kind = %v", found.Kind())
-	}
-	if raw, ok := found.Raw(); !ok || string(raw) != `{"nested":true}` {
-		t.Fatalf("raw = %v", raw)
-	}
 }
 
 func TestLevelSamplingRates(t *testing.T) {
@@ -597,9 +572,7 @@ func concurrentEnd(t *testing.T, rate float64, n int) ([]bool, int) {
 	released, ready := false, 0
 	var wg sync.WaitGroup
 	for i := range n {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
+		wg.Go(func() {
 			mu.Lock()
 			ready++
 			start.Broadcast()
@@ -608,7 +581,7 @@ func concurrentEnd(t *testing.T, rate float64, n int) ([]bool, int) {
 			}
 			mu.Unlock()
 			results[i] = op.End(nil)
-		}(i)
+		})
 	}
 	mu.Lock()
 	for ready != n {
@@ -671,9 +644,7 @@ func TestConcurrentEndArmed(t *testing.T) {
 		var wg sync.WaitGroup
 		results := make([]bool, n)
 		for i := range n {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
+			wg.Go(func() {
 				mu.Lock()
 				ready++
 				start.Broadcast()
@@ -687,7 +658,7 @@ func TestConcurrentEndArmed(t *testing.T) {
 					Add(ctx, "async", i) // guarded append racing the seal
 					results[i] = false
 				}
-			}(i)
+			})
 		}
 		mu.Lock()
 		for ready != n {
@@ -729,12 +700,10 @@ func TestConcurrentEndErrorPointer(t *testing.T) {
 		results := make([]bool, 8)
 		var wg sync.WaitGroup
 		for i := range 8 {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
+			wg.Go(func() {
 				err := fmt.Errorf("caller-%d", i)
 				results[i] = op.End(&err)
-			}(i)
+			})
 		}
 		wg.Wait()
 		if len(ts.Events()) != 1 {
@@ -1070,5 +1039,78 @@ func TestTypedNilErrorsContained(t *testing.T) {
 	}
 	if parsed["e"] != "<nil>" {
 		t.Fatalf("typed-nil field = %#v, want \"<nil>\"", parsed["e"])
+	}
+}
+
+// TestPanicWireShapeParity pins the two hand-maintained copies of the
+// canonical panic shape against each other: integration/common's
+// public PanicField/FinalizeRequest path (middleware-recovered
+// panics) and the core's own End path. They live in different
+// packages by design; this test fails if either drifts.
+func TestPanicWireShapeParity(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	recovered := any("wire-parity boom")
+
+	// Core path: End's own panic handling.
+	func() {
+		defer func() { _ = recover() }()
+		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "core"})
+		defer op.End(nil)
+		panic(recovered)
+	}()
+
+	// common path: middleware-style recover + explicit writes + End(nil).
+	op2 := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "common"})
+	Add(op2.Context(), "panic", structuredPanicField(recovered))
+	Error(op2.Context(), fmt.Errorf("panic: %v", recovered))
+	Add(op2.Context(), "op.outcome", string(OutcomePanic))
+	_ = op2.End(nil)
+
+	evs := ts.Events()
+	if len(evs) != 2 {
+		t.Fatalf("events = %d, want 2", len(evs))
+	}
+	for _, key := range []string{"panic", "error", "op.outcome"} {
+		a, okA := evs[0].Lookup(key)
+		b, okB := evs[1].Lookup(key)
+		if okA != okB {
+			t.Fatalf("key %q: core=%v common=%v", key, okA, okB)
+		}
+		if !okA {
+			t.Fatalf("key %q missing", key)
+		}
+		if fmt.Sprint(a) != fmt.Sprint(b) {
+			t.Fatalf("key %q diverges: core=%v common=%v", key, a, b)
+		}
+	}
+	if evs[0].Level() != evs[1].Level() || evs[0].Level() != LevelError {
+		t.Fatalf("levels = %v/%v, want error/error", evs[0].Level(), evs[1].Level())
+	}
+}
+
+// TestAddJSONRawMessage pins the supported raw-JSON path: json.RawMessage
+// through regular Add embeds verbatim on the canonical line (its
+// MarshalJSON contract), no re-marshaling of the decoded value.
+func TestAddJSONRawMessage(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
+	Add(op.Context(), "meta", json.RawMessage(`{"batch":true}`), "sib", 1)
+	if !op.End(nil) {
+		t.Fatal("event dropped")
+	}
+	ev := ts.Events()[0]
+	v, ok := ev.Lookup("meta")
+	b, isBytes := v.(json.RawMessage)
+	if !ok || !isBytes || string(b) != `{"batch":true}` {
+		t.Fatalf("meta = %#v, want the verbatim RawMessage", v)
+	}
+	rec := recOf(LevelInfo, "m", ev.Fields()...)
+	var m map[string]any
+	if err := json.Unmarshal(rec.Encoded(), &m); err != nil {
+		t.Fatalf("line unparseable: %v: %s", err, rec.Encoded())
+	}
+	nested, _ := m["meta"].(map[string]any)
+	if nested["batch"] != true || m["sib"] != float64(1) {
+		t.Fatalf("line = %s", rec.Encoded())
 	}
 }

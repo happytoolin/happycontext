@@ -40,11 +40,11 @@ func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {
 	if events[0].Message() != "done" {
 		t.Fatalf("expected message done, got %q", events[0].Message())
 	}
-	if intField(events[0], "http.status") != http.StatusAccepted {
-		t.Fatalf("expected status %d, got %v", http.StatusAccepted, intField(events[0], "http.status"))
+	if statusField(events[0], "http.status") != http.StatusAccepted {
+		t.Fatalf("expected status %d, got %v", http.StatusAccepted, statusField(events[0], "http.status"))
 	}
-	if fieldOf(events[0], "example") != "std-integration" {
-		t.Fatalf("expected example field, got %v", fieldOf(events[0], "example"))
+	if fieldValue(events[0], "example") != "std-integration" {
+		t.Fatalf("expected example field, got %v", fieldValue(events[0], "example"))
 	}
 }
 
@@ -71,8 +71,8 @@ func TestMiddlewareAppliesCustomMessageFromHandlerContext(t *testing.T) {
 	if events[0].Message() != "order shipped" {
 		t.Fatalf("expected message %q, got %q", "order shipped", events[0].Message())
 	}
-	if intField(events[0], "http.status") != http.StatusAccepted {
-		t.Fatalf("expected status %d, got %v", http.StatusAccepted, intField(events[0], "http.status"))
+	if statusField(events[0], "http.status") != http.StatusAccepted {
+		t.Fatalf("expected status %d, got %v", http.StatusAccepted, statusField(events[0], "http.status"))
 	}
 }
 
@@ -108,10 +108,10 @@ func TestMiddlewarePanicPropagatesAndLogsError(t *testing.T) {
 	if events[0].Level() != hc.LevelError {
 		t.Fatalf("expected error level, got %s", events[0].Level())
 	}
-	if intField(events[0], "http.status") != http.StatusInternalServerError {
-		t.Fatalf("expected status 500, got %v", intField(events[0], "http.status"))
+	if statusField(events[0], "http.status") != http.StatusInternalServerError {
+		t.Fatalf("expected status 500, got %v", statusField(events[0], "http.status"))
 	}
-	if _, ok := fieldOf(events[0], "panic").(map[string]any); !ok {
+	if _, ok := fieldValue(events[0], "panic").(map[string]any); !ok {
 		t.Fatalf("expected panic field in event")
 	}
 }
@@ -139,8 +139,8 @@ func TestMiddlewareWriteHeaderTwiceLogsFirstCommittedStatus(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if intField(events[0], "http.status") != http.StatusCreated {
-		t.Fatalf("expected logged status %d, got %v", http.StatusCreated, intField(events[0], "http.status"))
+	if statusField(events[0], "http.status") != http.StatusCreated {
+		t.Fatalf("expected logged status %d, got %v", http.StatusCreated, statusField(events[0], "http.status"))
 	}
 }
 
@@ -181,8 +181,8 @@ func TestMiddlewarePanicAfterCommittedStatusKeepsCommittedStatus(t *testing.T) {
 	if events[0].Level() != hc.LevelError {
 		t.Fatalf("expected error level, got %s", events[0].Level())
 	}
-	if intField(events[0], "http.status") != http.StatusCreated {
-		t.Fatalf("expected logged status %d, got %v", http.StatusCreated, intField(events[0], "http.status"))
+	if statusField(events[0], "http.status") != http.StatusCreated {
+		t.Fatalf("expected logged status %d, got %v", http.StatusCreated, statusField(events[0], "http.status"))
 	}
 }
 
@@ -211,11 +211,11 @@ func TestMiddlewareSetsRouteFromRequestPattern(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	route, ok := fieldOf(events[0], "http.route").(string)
+	route, ok := fieldValue(events[0], "http.route").(string)
 	if !ok || route == "" {
-		t.Fatalf("expected route template, got %#v", fieldOf(events[0], "http.route"))
+		t.Fatalf("expected route template, got %#v", fieldValue(events[0], "http.route"))
 	}
-	if name, _ := fieldOf(events[0], "op.name").(string); name != route {
+	if name, _ := fieldValue(events[0], "op.name").(string); name != route {
 		t.Fatalf("wire op.name = %q, want route %q", name, route)
 	}
 	if sampledOp != route {
@@ -295,8 +295,8 @@ func TestMiddlewareWriteSetsStatusCode(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if intField(events[0], "http.status") != http.StatusOK {
-		t.Fatalf("expected status 200, got %v", intField(events[0], "http.status"))
+	if statusField(events[0], "http.status") != http.StatusOK {
+		t.Fatalf("expected status 200, got %v", statusField(events[0], "http.status"))
 	}
 }
 
@@ -325,8 +325,8 @@ func TestMiddlewareReadFromSetsStatusCode(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if intField(events[0], "http.status") != http.StatusOK {
-		t.Fatalf("expected status 200, got %v", intField(events[0], "http.status"))
+	if statusField(events[0], "http.status") != http.StatusOK {
+		t.Fatalf("expected status 200, got %v", statusField(events[0], "http.status"))
 	}
 }
 
@@ -361,14 +361,15 @@ func TestMiddlewareSamplingDropForHealthyRequest(t *testing.T) {
 // capturedEvent mirrors the v0 test-facing shape (map fields, int
 // numerics) over the v2 TestSink capture, keeping the assertions below
 // unchanged from the v0 suite.
-// Typed field access on captured events (Lookup carries int64; the
-// constants in these tests are ints).
-func fieldOf(ev hc.CapturedEvent, key string) any {
+// Typed field reads on captured events: fieldValue for any value,
+// statusField for the int64 http.status these tests compare against
+// int constants.
+func fieldValue(ev hc.CapturedEvent, key string) any {
 	v, _ := ev.Lookup(key)
 	return v
 }
 
-func intField(ev hc.CapturedEvent, key string) int64 {
+func statusField(ev hc.CapturedEvent, key string) int64 {
 	v, _ := ev.Lookup(key)
 	n, _ := v.(int64)
 	return n
@@ -494,6 +495,8 @@ func TestMiddlewareFlushCommitsStatus(t *testing.T) {
 	})
 }
 
+// Consolidated from integration/std/crash_test.go: nil-runtime
+// middleware is a documented passthrough.
 func TestCrashNilRuntimePassthrough(t *testing.T) {
 	mw := Middleware(nil)
 	handler := mw(http.NotFoundHandler())

@@ -37,7 +37,7 @@ func TestGoldenZerologBridgeParity(t *testing.T) {
 			hc.Add(ctx, "uni", "héllo ☃ 🍜", "nul", "x\x00y", "del", "d\x7f")
 		}, nil},
 		{"raw_json", func(ctx context.Context) {
-			hc.AddRawJSON(ctx, "meta", []byte(`{"nested":true,"n":1}`))
+			hc.Add(ctx, "meta", json.RawMessage(`{"nested":true,"n":1}`))
 		}, nil},
 		{"any_fallback", func(ctx context.Context) {
 			hc.Add(ctx, "obj", map[string]any{"a": 1}, "sl", []any{1, "x"}, "nil", nil)
