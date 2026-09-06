@@ -3,3 +3,6 @@
 2026-09-06 vendored-hcjson internal/hcjson vendored loops stay byte-faithful to zerolog v1.34.0 for upstream diffability — go fix loop rewrites reverted there
 2026-09-06 t-context-churn root tests keep context.Background() (290 sites, ctx is a WAL carrier here, not worth freeze-time churn); nested-module conversions from go fix kept
 2026-09-06 b-loop bench_test.go's b.N-coupled rebuild windows are deliberate design; b.Loop() would change the steady-state pool logic
+2026-09-06 go126-errors-astype deferred until go.mod floor >= 1.26: 3 sites ready (echo/fiber/fiberv3 statusFrom*Error); compiles under 1.25 but vet stdversion rejects
+2026-09-06 go126-new-expr deferred until floor >= 1.26: 1 site (copyPolicy SamplingRate copy)
+2026-09-06 go127-generic-methods no call sites: bridge.LastIndices is multi-consumer by design; Sink/Sampler are interfaces and generic methods cannot satisfy interfaces
