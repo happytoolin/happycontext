@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>happycontext — v1.0.0 Release · v0 vs v2</title>
+<style>
+  :root{
+    --paper:#faf7f0; --ink:#1a2332; --accent:#1d4ed8; --accent2:#b91c1c;
+    --gold:#92600a; --muted:#6b7280; --line:#e5e0d4; --card:#ffffff;
+    --green:#166534; --mono:'SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace;
+    --serif:'Georgia','Times New Roman',serif; --sans:-apple-system,'Segoe UI',sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.55;font-size:15px}
+  .page{max-width:1060px;margin:0 auto;padding:48px 40px 80px}
+  header.hero{border-bottom:3px solid var(--ink);padding-bottom:28px;margin-bottom:36px}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+  h1{font-family:var(--serif);font-size:44px;line-height:1.06;font-weight:400;letter-spacing:-.01em}
+  h1 em{font-style:italic;color:var(--accent)}
+  .sub{margin-top:12px;color:var(--muted);font-size:15.5px;max-width:66ch}
+  .versus{display:flex;align-items:stretch;gap:0;margin-top:26px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .versus>div{flex:1;padding:20px 24px}
+  .versus .v0{background:#f1ede3}
+  .versus .v2{background:linear-gradient(135deg,#eef2fb,#e4ebfa)}
+  .versus .badge{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  .versus .vname{font-family:var(--serif);font-size:26px;margin-top:2px}
+  .versus .v2 .badge{color:var(--accent)}
+  .versus .vdetail{font-size:12.5px;color:var(--muted);margin-top:6px}
+  .versus .mid{display:flex;align-items:center;padding:0 14px;background:var(--card);border-left:1px solid var(--line);border-right:1px solid var(--line);font-family:var(--serif);font-style:italic;font-size:18px;color:var(--muted)}
+  h2{font-family:var(--serif);font-size:26px;font-weight:400;margin:52px 0 6px;padding-top:26px;border-top:1px solid var(--line)}
+  h2 .no{font-family:var(--mono);font-size:12px;color:var(--accent);vertical-align:super;margin-right:8px;letter-spacing:.1em}
+  .lede{color:var(--muted);margin-bottom:20px;max-width:70ch}
+  h3{font-size:14px;font-weight:700;margin:26px 0 10px;letter-spacing:.01em}
+  p{margin:0 0 14px;max-width:78ch}
+  table{width:100%;border-collapse:collapse;margin:14px 0 22px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13.5px}
+  th{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 14px;border-bottom:2px solid var(--ink);background:#f5f1e8}
+  td{padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td.num,th.num{text-align:right;font-family:var(--mono);white-space:nowrap}
+  .good{color:var(--green);font-weight:600} .bad{color:var(--accent2);font-weight:600} .warn{color:var(--gold);font-weight:600}
+  code{font-family:var(--mono);font-size:12.5px;background:#efe9dc;padding:1px 6px;border-radius:4px}
+  pre{font-family:var(--mono);font-size:11.8px;line-height:1.6;background:#141b2b;color:#dbe4f5;padding:18px 20px;border-radius:10px;overflow-x:auto;margin:12px 0 20px}
+  pre .k{color:#7aa2f7} pre .s{color:#9ece6a} pre .n{color:#ff9e64} pre .c{color:#565f89;font-style:italic}
+  .wiregrid{display:grid;grid-template-columns:1fr;gap:14px;margin:16px 0}
+  .wirelbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .callout{background:#eef2fb;border:1px solid #cdd9f5;border-radius:10px;padding:16px 20px;margin:18px 0;font-size:13.5px}
+  .callout b{color:var(--accent)}
+  .warnout{background:#fbf6ea;border:1px solid #e8d5a8;border-radius:10px;padding:16px 20px;margin:18px 0;font-size:13.5px}
+  .warnout b{color:var(--gold)}
+  .grid{display:grid;gap:14px}
+  .g4{grid-template-columns:repeat(4,1fr)} .g3{grid-template-columns:repeat(3,1fr)} .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:820px){.g4,.g3{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}.versus{flex-direction:column}.versus .mid{border:none;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:8px}}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .stat .n{font-family:var(--mono);font-size:30px;font-weight:600;letter-spacing:-.02em}
+  .stat .n small{font-size:15px;color:var(--muted);font-weight:400}
+  .stat .l{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+  .down .n{color:var(--green)}
+  .flow{display:flex;align-items:center;gap:0;flex-wrap:wrap;margin:20px 0 8px}
+  .fstep{background:var(--card);border:1.5px solid var(--ink);border-radius:10px;padding:12px 16px;min-width:128px;text-align:center}
+  .fstep .fs-t{font-family:var(--mono);font-size:12px;font-weight:700}
+  .fstep .fs-d{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.35}
+  .fstep.hot{background:var(--ink);color:#fff}
+  .fstep.hot .fs-d{color:#b9c2d4}
+  .farrow{padding:0 10px;color:var(--muted);font-family:var(--mono);font-size:14px}
+  .bar-row{display:grid;grid-template-columns:200px 1fr 130px;gap:12px;align-items:center;margin-bottom:9px;font-size:12.5px}
+  .bar-row .lbl{font-family:var(--mono);font-size:11.5px;text-align:right}
+  .track{background:#efe9dc;border-radius:5px;height:20px;position:relative;overflow:hidden}
+  .fill{height:100%;border-radius:5px;position:absolute}
+  .f-v0{background:#c9c2b2} .f-v2{background:linear-gradient(90deg,#2563eb,#1e40af)}
+  .bar-row .val{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .bar-row .val b{color:var(--ink)}
+  .legend{display:flex;gap:18px;margin:8px 0 16px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  .quote{border-left:3px solid var(--accent);background:var(--card);padding:16px 20px;margin:18px 0;border-radius:0 10px 10px 0;font-family:var(--serif);font-size:15.5px;font-style:italic}
+  .quote .who{display:block;font-family:var(--mono);font-style:normal;font-size:10.5px;color:var(--muted);margin-top:8px;letter-spacing:.08em}
+  .checklist{list-style:none;margin:12px 0}
+  .checklist li{padding:7px 0 7px 30px;position:relative;border-bottom:1px dashed var(--line);font-size:13.5px}
+  .checklist li::before{content:'✓';position:absolute;left:4px;color:var(--green);font-weight:700}
+  .checklist li.todo::before{content:'○';color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="hero">
+  <div class="kicker">Release Report · the v2 line</div>
+  <h1>happycontext <em>v1.0.0</em></h1>
+  <p class="sub">The rewrite of the request-lifecycle logging library: same mission, new internals. One structured, canonical event per request — now with a request-scoped write-ahead log, a compiled runtime, a zero-dependency canonical encoder, and a public API small enough to hold in your head.</p>
+  <div class="versus">
+    <div class="v0">
+      <div class="badge">Previous</div>
+      <div class="vname">v0.5.0</div>
+      <div class="vdetail">map-backed <code>Event</code> · per-call <code>Config</code> · random field order · errors sampleable</div>
+    </div>
+    <div class="mid">vs</div>
+    <div class="v2">
+      <div class="badge">This release</div>
+      <div class="vname">v1.0.0</div>
+      <div class="vdetail">typed WAL + <code>Record</code> · compiled <code>Runtime</code> · deterministic wire · structural error bypass</div>
+    </div>
+  </div>
+</header>
+
+<!-- ================= WHY ================= -->
+<h2><span class="no">01</span>Why a rewrite</h2>
+<p class="lede">v0 worked — and taught us exactly where its model ran out.</p>
+<div class="grid g2">
+  <div class="stat">
+    <div class="l">v0's ceiling</div>
+    <p style="margin-top:8px;font-size:14px">The <code>Event</code> was a <code>map[string]any</code>: every field boxed, every read a hash, field order random per run. Config was clamped per-request — a bad rate silently meant "log nothing". The sampler could drop <b>error events</b>. And allocation scaled with field count: 9–14 allocs, 1.6–4.8 KB per request.</p>
+  </div>
+  <div class="stat">
+    <div class="l">v2's answer</div>
+    <p style="margin-top:8px;font-size:14px">A per-request <b>write-ahead log</b>: append-only typed fields on the request goroutine, sealed at <code>End</code>, committed exactly once into a pooled <code>Record</code>. Config compiles once into an immutable <code>Runtime</code>. The encoder emits a deterministic canonical line — <b>2 allocations at any field count</b>. Errors and panics structurally bypass sampling.</p>
+  </div>
+</div>
+
+<h3>The lifecycle, in one line each</h3>
+<div class="flow">
+  <div class="fstep"><div class="fs-t">Start</div><div class="fs-d">attach WAL to ctx · pooled event</div></div>
+  <div class="farrow">→</div>
+  <div class="fstep"><div class="fs-t">Add / Set*</div><div class="fs-d">append typed fields, anywhere ctx flows</div></div>
+  <div class="farrow">→</div>
+  <div class="fstep hot"><div class="fs-t">End(&amp;err)</div><div class="fs-d">seal · scan · sample · commit · recycle</div></div>
+  <div class="farrow">→</div>
+  <div class="fstep"><div class="fs-t">Sink</div><div class="fs-d">Record view or canonical bytes</div></div>
+</div>
+<p style="font-size:12.5px;color:var(--muted)">One event, always: header fields, handler fields in attach order, completion fields — deterministic by construction. <code>End</code> is one-shot (CAS), captures panics, re-panics them, and releases the buffer even if the sink panics. Production code spawns zero goroutines — goleak-proven.</p>
+
+<!-- ================= HEAD TO HEAD ================= -->
+<h2><span class="no">02</span>Head to head</h2>
+<p class="lede">The dimensions that changed between 0.5.0 and 1.0.0.</p>
+<table>
+  <tr><th>Dimension</th><th>v0.5.0</th><th>v1.0.0</th></tr>
+  <tr><td><b>Event model</b></td><td><code>Event</code> = <code>map[string]any</code>, boxed values</td><td>typed WAL → <code>Record</code> (slog.Record conventions), zero-copy reads</td></tr>
+  <tr><td><b>Configuration</b></td><td><code>Config</code> per call, clamped silently</td><td><code>Compile/MustCompile</code> → immutable <code>*Runtime</code>; bad config = construction error with sentinels (<code>%w</code>, <code>errors.Is</code>)</td></tr>
+  <tr><td><b>Wire format</b></td><td>random map order; duplicate JSON keys possible</td><td>deterministic insertion order; last-write-wins dedupe; envelope collisions renamed <code>fields.*</code> (logrus precedent)</td></tr>
+  <tr><td><b>Sampling</b></td><td>sampler sees everything, can drop errors</td><td>errors/panics bypass <em>before</em> any sampler; keep-everything fast path; per-domain policies</td></tr>
+  <tr><td><b>Allocations</b></td><td>9–14 per request, scaling with fields</td><td><b>2, constant</b> (272 B) at any width</td></tr>
+  <tr><td><b>Latency</b></td><td>565 ns lifecycle · 1708 ns dropped-32</td><td><b>264 ns · 748 ns</b> (−53% / −56%)</td></tr>
+  <tr><td><b>zerolog bridge</b></td><td>326 ns typed-path only</td><td><b>7 ns</b> fast path serving pre-encoded bytes (0 allocs); typed fallback intact</td></tr>
+  <tr><td><b>First-party sink</b></td><td>needs a host logger</td><td><code>hc.NewJSONSink(w)</code> — canonical line, zero prod deps</td></tr>
+  <tr><td><b>Panics</b></td><td>recovered, logged</td><td>same, plus: sink/marshaler panics can't corrupt the pool; typed-nil &amp; wrapped typed-nil errors contained (<code>&lt;nil&gt;</code>); panic field shape identical across middlewares</td></tr>
+  <tr><td><b>Testing story</b></td><td>—</td><td><code>TestSink</code> deep-copying captures; synctest bubbles + goleak; wire-level &amp; cross-bridge parity suites; 6 fuzz targets in CI + nightly</td></tr>
+  <tr><td><b>Dependencies</b></td><td>—</td><td><b>zero production deps</b> (vendored hcjson encoder); goleak is test-only</td></tr>
+  <tr><td><b>Go floor</b></td><td>1.23-era</td><td><b>1.25</b> (WaitGroup.Go, synctest, SplitSeq idioms throughout)</td></tr>
+</table>
+
+<!-- ================= WIRE ================= -->
+<h2><span class="no">03</span>The wire, before and after</h2>
+<p class="lede">Same request, both versions. v0's order reshuffles every run; v2's is a contract.</p>
+<div class="wiregrid">
+  <div>
+    <div class="wirelbl">v0.5.0 — random map order, op.code always, error shape varies by adapter</div>
+<pre>{<span class="n">"op.code"</span>:200,<span class="n">"user"</span>:{"id":"u_1","plan":"pro"},<span class="n">"duration_ms"</span>:0,<span class="n">"op.outcome"</span>:"success",<span class="n">"http.method"</span>:"GET",<span class="n">"http.path"</span>:"/users/u_1",<span class="n">"level"</span>:"info",<span class="n">"message"</span>:"request_completed",<span class="n">"time"</span>:"2026-09-01T10:00:00Z",<span class="n">"user_id"</span>:"u_1",<span class="n">"job.attempt"</span>:1}
+<span class="c">// next run: same fields, different order — pipelines can't diff, golden tests can't exist</span></pre>
+  </div>
+  <div>
+    <div class="wirelbl">v1.0.0 — canonical: level → fields in attach order → time → message</div>
+<pre>{<span class="k">"level"</span>:"info",<span class="k">"http.method"</span>:"GET",<span class="k">"http.path"</span>:"/users/u_1",<span class="k">"user"</span>:{"id":"u_1","plan":"pro"},<span class="k">"user_id"</span>:"u_1",<span class="k">"http.route"</span>:"GET /users/{id}",<span class="k">"op.name"</span>:"GET /users/{id}",<span class="k">"http.status"</span>:200,<span class="k">"op.domain"</span>:"http",<span class="k">"duration_ms"</span>:0,<span class="k">"op.outcome"</span>:"success",<span class="k">"time"</span>:"2026-09-01T10:00:00Z",<span class="k">"message"</span>:"request_completed"}
+<span class="c">// deterministic · deduped LWW · user "message"/"time"/"level" auto-alias to fields.*</span></pre>
+  </div>
+</div>
+<div class="warnout"><b>Wire changes to ingest for:</b> field order is now insertion-deterministic (was random) · <code>op.code</code> is non-HTTP-only (HTTP carries <code>http.status</code>) · worker <code>job.*</code> mirrors gone (folded into <code>op.*</code>; <code>job.scheduled_at</code> remains) · duplicate keys resolve last-write-wins, emitted once · envelope-colliding user keys renamed <code>fields.*</code> on the wire only · durations render host-natively through bridges (float ms on the canonical line) · float32 keeps 32-bit precision (<code>0.1</code>, not the widened 0.10000000149011612).</div>
+
+<!-- ================= PERFORMANCE ================= -->
+<h2><span class="no">04</span>Performance</h2>
+<p class="lede">Same machine, same toolchain, benchstat-verified (p=0.008, count=5) — the full comparison shipped with the release PR.</p>
+<div class="legend"><span><i style="background:#c9c2b2"></i>v0.5.0</span><span><i style="background:linear-gradient(90deg,#2563eb,#1e40af)"></i>v1.0.0</span></div>
+<div class="bar-row"><div class="lbl">OperationLifecycle</div><div class="track"><div class="fill f-v0" style="width:100%"></div><div class="fill f-v2" style="width:46.7%"></div></div><div class="val"><b>264ns</b> ← 565ns · <span class="good">−53%</span></div></div>
+<div class="bar-row"><div class="lbl">Dropped · 32 fields</div><div class="track"><div class="fill f-v0" style="width:100%"></div><div class="fill f-v2" style="width:43.8%"></div></div><div class="val"><b>748ns</b> ← 1708ns · <span class="good">−56%</span></div></div>
+<div class="bar-row"><div class="lbl">Dropped · 8 fields</div><div class="track"><div class="fill f-v0" style="width:100%"></div><div class="fill f-v2" style="width:60%"></div></div><div class="val"><b>348ns</b> ← 579ns · <span class="good">−40%</span></div></div>
+<div class="bar-row"><div class="lbl">Non-HTTP job</div><div class="track"><div class="fill f-v0" style="width:100%"></div><div class="fill f-v2" style="width:77.1%"></div></div><div class="val"><b>241ns</b> ← 312ns · <span class="good">−23%</span></div></div>
+<div class="bar-row"><div class="lbl">zerolog bridge (12f)</div><div class="track"><div class="fill f-v0" style="width:100%"></div><div class="fill f-v2" style="width:2.2%"></div></div><div class="val"><b>7ns</b> ← 326ns · <span class="good">−98%</span></div></div>
+<div class="bar-row"><div class="lbl">slog / zap bridges</div><div class="track"><div class="fill f-v0" style="width:100%"></div><div class="fill f-v2" style="width:96.6%"></div></div><div class="val"><b>−3%</b> both · host-bound floor</div></div>
+<div class="grid g3" style="margin-top:20px">
+  <div class="stat down"><div class="n">2 <small>allocs</small></div><div class="l">per request — any field count</div></div>
+  <div class="stat down"><div class="n">272 <small>B</small></div><div class="l">per request (was 1648–4760)</div></div>
+  <div class="stat down"><div class="n">0 <small>allocs</small></div><div class="l">zerolog fast path · 7.0ns</div></div>
+</div>
+
+<!-- ================= API ================= -->
+<h2><span class="no">05</span>The API — migration at a glance</h2>
+<p class="lede">Breaking, on purpose, once: pre-1.0 semver. The full map ships in MIGRATION.md; the shape is this.</p>
+<div class="two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+<div>
+<h3 style="margin-top:0">Gone</h3>
+<table>
+  <tr><th>v0</th><th>Use instead</th></tr>
+  <tr><td><code>Event</code>, <code>EventFields</code>, <code>EventMessage</code>, <code>EventHasError</code>, <code>EventStartTime</code></td><td><code>*Record</code>: <code>Fields()</code>, <code>Lookup</code>, <code>Message()</code>, <code>Level()</code>, <code>Encoded()</code></td></tr>
+  <tr><td><code>FromContext</code> / <code>NewContext</code></td><td>internal — the WAL is write-only mid-flight by design</td></tr>
+  <tr><td><code>NormalizeConfig</code></td><td><code>Compile</code> / <code>MustCompile</code></td></tr>
+  <tr><td><code>GetLevel</code>, <code>Commit</code>, <code>LevelRank</code>, <code>BeginOperation</code>, <code>FinishOperation</code></td><td>level floor via <code>SetLevel</code>; one-shot <code>End</code></td></tr>
+  <tr><td><code>AddRaw</code> / <code>AddRawJSON</code>, <code>KindRaw</code>, <code>Field.Raw()</code></td><td><code>json.RawMessage</code> through <code>Add</code> — verbatim, bridge-identical</td></tr>
+  <tr><td><code>NewWithOptions</code> / <code>SinkOptions</code></td><td><code>New</code> only — no options until one survives reality</td></tr>
+</table>
+</div>
+<div>
+<h3 style="margin-top:0">New &amp; changed</h3>
+<table>
+  <tr><th>Surface</th><th>Contract</th></tr>
+  <tr><td><code>Compile → *Runtime</code></td><td>immutable, shared; sentinels + <code>%w</code></td></tr>
+  <tr><td><code>Middleware(rt)</code></td><td>all five frameworks + worker; nil = passthrough</td></tr>
+  <tr><td><code>End(errp) bool</code></td><td>one-shot, panic-capturing (defer it directly)</td></tr>
+  <tr><td><code>Record.Encoded()</code></td><td>canonical line, encode-once, copy to retain</td></tr>
+  <tr><td><code>Field.WireKey()</code></td><td>wire-aliasing view for flat-JSON sinks</td></tr>
+  <tr><td><code>SampleInput</code></td><td><code>Operation</code> = route; <code>Code</code> = canonical code; <code>Lookup</code>/<code>Fields()</code></td></tr>
+  <tr><td><code>NewJSONSink(w)</code> · <code>TestSink</code></td><td>first-party sink · deep-copying captures</td></tr>
+</table>
+</div>
+</div>
+<div class="callout"><b>Typical migration size:</b> the quick-start diff is two lines — <code>Middleware(hc.Config{…})</code> → <code>Middleware(hc.MustCompile(hc.Config{…}))</code>, and any <code>EventFields(in.Event)</code> sampler becomes <code>in.Lookup(key)</code>. Everything else compiles as-is unless you touched the removed list; MIGRATION.md maps every symbol.</div>
+
+<!-- ================= USAGE ================= -->
+<h2><span class="no">06</span>Using it — the ten-line tour</h2>
+<p class="lede">Zero-config HTTP logging, background jobs, sampling rules, and every logger you already run — the whole API fits on one screen.</p>
+
+<h3 style="margin-top:0">HTTP service, zero logger dependencies</h3>
+<pre><span class="k">import</span> ( hc <span class="s">"github.com/happytoolin/happycontext"</span>; stdhc <span class="s">".../integration/std"</span> )
+
+sink := hc.<span class="n">NewJSONSink</span>(os.Stdout)                      <span class="c">// first-party: canonical line, no host logger</span>
+rt := hc.<span class="n">MustCompile</span>(hc.Config{Sink: sink, SamplingRate: <span class="n">0.05</span>}) <span class="c">// compile once; errors always kept</span>
+mux := http.NewServeMux()
+mux.HandleFunc(<span class="s">"GET /orders/{id}"</span>, <span class="k">func</span>(w http.ResponseWriter, r *http.Request) {
+    hc.<span class="n">Add</span>(r.Context(), <span class="s">"user_id"</span>, <span class="s">"u_8472"</span>, <span class="s">"feature"</span>, <span class="s">"checkout"</span>) <span class="c">// variadic pairs</span>
+    hc.<span class="n">Add</span>(r.Context(), <span class="s">"cart"</span>, json.<span class="n">RawMessage</span>(preEncodedCart))     <span class="c">// pre-encoded JSON, verbatim</span>
+    <span class="k">if</span> err := charge(r.Context()); err != <span class="k">nil</span> {
+        hc.<span class="n">SetMessage</span>(r.Context(), <span class="s">"checkout_failed"</span>)
+        hc.<span class="n">Error</span>(r.Context(), err)                    <span class="c">// structured error field; bypasses sampling</span>
+        http.Error(w, <span class="s">"internal error"</span>, <span class="n">500</span>)
+        <span class="k">return</span>
+    }
+    w.WriteHeader(http.StatusOK)
+})
+<span class="n">_</span> = http.ListenAndServe("<span class="s">:8080</span>", stdhc.<span class="n">Middleware</span>(rt)(mux))</pre>
+<p style="font-size:13px;color:var(--muted);margin-top:-10px">Every request emits exactly one line: <code>{"level":"info","http.method":"GET","http.path":"/orders/o_1","user_id":"u_8472","feature":"checkout","cart":{…},"http.route":"GET /orders/{id}","op.name":"GET /orders/{id}","http.status":200,"op.domain":"http","duration_ms":12,"op.outcome":"success","time":"…","message":"request_completed"}</code></p>
+
+<h3>Background job — one operation, deferred error capture</h3>
+<pre><span class="k">func</span> runImport(ctx context.Context, rt *hc.Runtime) (err <span class="k">error</span>) {
+    op := hc.<span class="n">Start</span>(ctx, rt, hc.OperationStart{Domain: hc.DomainJob, Name: <span class="s">"import"</span>, ID: <span class="s">"job_8472"</span>, Attempt: <span class="n">2</span>})
+    ctx = op.<span class="n">Context</span>()                     <span class="c">// switch, or every Add below is a no-op</span>
+    <span class="k">defer</span> op.<span class="n">End</span>(&amp;err)                    <span class="c">// commit exactly once; captures errors AND panics; re-panics</span>
+
+    hc.<span class="n">Add</span>(ctx, <span class="s">"rows"</span>, <span class="n">42</span>, <span class="s">"source"</span>, <span class="s">"queue"</span>)
+    <span class="k">return</span> doImport(ctx)                     <span class="c">// non-nil err → error field + outcome=failure + ERROR level, kept</span>
+}</pre>
+
+<h3>Sampling rules — compose what you keep</h3>
+<pre>rt := hc.<span class="n">MustCompile</span>(hc.Config{
+    Sink: sink,
+    Sampler: hc.<span class="n">ChainSampler</span>(
+        hc.<span class="n">RateSampler</span>(<span class="n">0.05</span>),                       <span class="c">// base: 5% of healthy traffic</span>
+        hc.<span class="n">KeepErrors</span>(),                            <span class="c">// belt-and-suspenders (bypass is structural anyway)</span>
+        hc.<span class="n">KeepPathPrefix</span>(<span class="s">"/admin"</span>),                  <span class="c">// always keep admin</span>
+        hc.<span class="n">KeepSlowerThan</span>(<span class="n">250</span>*time.Millisecond),           <span class="c">// always keep slow</span>
+        <span class="k">func</span>(next hc.Sampler) hc.Sampler {           <span class="c">// custom: read the request's fields</span>
+            <span class="k">return func</span>(in hc.SampleInput) <span class="k">bool</span> {
+                <span class="k">if</span> tier, _ := in.<span class="n">Lookup</span>(<span class="s">"user_tier"</span>); tier == <span class="s">"enterprise"</span> { <span class="k">return</span> <span class="k">true</span> }
+                <span class="k">return</span> next(in)
+            }
+        },
+    ),
+})</pre>
+
+<h3>Your logger, your pipeline — bridges stay out of the way</h3>
+<pre>slogSink  := sloghc.<span class="n">New</span>(slog.Default())              <span class="c">// log/slog — native attrs</span>
+zapSink   := zaphc.<span class="n">New</span>(zapLogger)                  <span class="c">// zap — typed fields</span>
+zeroSink  := zerologhc.<span class="n">New</span>(&amp;zerologLogger)          <span class="c">// zerolog — 7ns fast path on plain loggers</span>
+
+hc.<span class="n">Add</span>(ctx, <span class="s">"took"</span>, <span class="n">1500</span>*time.Millisecond, <span class="s">"ok"</span>, <span class="k">true</span>) <span class="c">// typed: duration, bool — no boxing</span>
+hc.<span class="n">SetLevel</span>(ctx, hc.LevelWarn)                   <span class="c">// severity floor (raises, never lowers)</span>
+hc.<span class="n">SetRoute</span>(ctx, <span class="s">"GET /orders/{id}"</span>)               <span class="c">// middlewares do this for you</span></pre>
+<p style="font-size:13px;color:var(--muted);margin-top:-8px">Same <code>Record</code> reaches every bridge; cross-bridge parity tests guarantee they agree on the canonical field set. A custom sink is one method: <code>Write(ctx, rec *hc.Record)</code> — read <code>Fields()</code>/<code>Lookup</code> during the call, or take <code>rec.Encoded()</code> bytes (copy to retain).</p>
+
+<h3>Testing against it</h3>
+<pre>sink := hc.<span class="n">NewTestSink</span>()
+rt := hc.<span class="n">MustCompile</span>(hc.Config{Sink: sink, SamplingRate: <span class="n">1</span>})
+<span class="c">// ... drive a request through httptest ...</span>
+ev := sink.<span class="n">Events</span>()[<span class="n">0</span>]
+st, _ := ev.<span class="n">Lookup</span>(<span class="s">"http.status"</span>)          <span class="c">// int64(200)</span>
+route, _ := ev.<span class="n">Lookup</span>(<span class="s">"op.name"</span>)           <span class="c">// "GET /orders/{id}" — the route template</span>
+<span class="c">// deep-copied capture: safe to assert after the handler returns</span></pre>
+
+<!-- ================= SAFETY ================= -->
+<h2><span class="no">07</span>Hard-won guarantees</h2>
+<p class="lede">v1.0.0 ships after six independent model audits and two adversarial crash-testing rounds — 16 defects found and fixed along the way, zero known open.</p>
+<ul class="checklist">
+  <li><b>Failures are never sampled away</b> — structural bypass before any custom sampler</li>
+  <li><b>One event per request, even under abuse</b> — concurrent <code>End</code>, double-End, End-from-closure, nested operations: all characterized and pinned</li>
+  <li><b>Stragglers are no-ops</b> — async writes after <code>End</code> can't corrupt the pool (generation-guarded recycle; the nanosecond TOCTOU residual is documented)</li>
+  <li><b>Panics can't take the pipeline down</b> — sink, sampler, and marshaler panics contained; typed-nil and <code>%w</code>-wrapped typed-nil errors render <code>&lt;nil&gt;</code></li>
+  <li><b>The wire never lies</b> — flush-then-panic logs the status the client received; canonical-code semantics are coherent per domain (non-HTTP 5xx <code>op.code</code> resolves failure)</li>
+  <li><b>Zero goroutines in production</b> — goleak-gated suite, synctest bubbles for per-test hygiene</li>
+  <li><b>Deterministic output</b> — insertion order, LWW dedupe, envelope aliasing: golden and cross-bridge parity tests hold the canonical line to every bridge</li>
+  <li class="todo"><b>v1.1, already paved:</b> the armed-mode watchdog protocol ships in the core (no callers yet, no breaking change later); buffered sink + in-flight records follow the plan</li>
+</ul>
+
+<!-- ================= RELEASE ================= -->
+<h2><span class="no">08</span>Release mechanics</h2>
+<div class="grid g4">
+  <div class="stat"><div class="n">10</div><div class="l">modules, lockstep</div><div class="l" style="text-transform:none;letter-spacing:0;font-size:11.5px;margin-top:2px">root + 3 bridges + 5 integrations + worker</div></div>
+  <div class="stat"><div class="n">1.25+</div><div class="l">Go floor</div></div>
+  <div class="stat"><div class="n">0</div><div class="l">production deps</div></div>
+  <div class="stat"><div class="n">274</div><div class="l">tests · 6 fuzz targets</div></div>
+</div>
+<p style="margin-top:16px">Tagged <code>v1.0.0</code> via release-please on the v2 line; nested modules tag <code>&lt;path&gt;/v1.0.0</code> in lockstep, module indexes refreshed, and the sync/publish/discovery all share one list. CI gates: 3-version matrix × <code>-race</code> × vet × gofmt/gofumpt/staticcheck, plus 60s-per-target fuzz on every PR and 10m nightly. MIGRATION.md published <em>before</em> the merge, per the release contract.</p>
+<div class="quote">"The core is essentially ready to tag 1.0.0."<span class="who">final whole-branch audit verdict</span></div>
+
+<footer>
+  <span>happycontext v1.0.0 · release report · 2026-09-06</span>
+  <span>v0.5.0 → v1.0.0 · 39 commits · 6 audits · deterministic wire</span>
+</footer>
+
+</div>
+</body>
+</html>

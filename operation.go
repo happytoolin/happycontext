@@ -122,7 +122,7 @@ claimed:
 
 	scan := scanWAL(ev)
 	code := scan.code
-	isHTTP := normalizeDomain(start.Domain) == DomainHTTP
+	isHTTP := start.Domain == DomainHTTP
 	// The canonical code drives the 5xx outcome rule: http.status for
 	// HTTP, op.code for everything else (a non-HTTP op's http.status is
 	// user data, not canonical) — so a job surfacing failure via
@@ -278,25 +278,24 @@ func shouldWriteHealthy(rt *Runtime, policy OperationPolicy, in SampleInput) boo
 // while it runs. A key the request already wrote is skipped — appending
 // later would flip the LWW fold and clobber the user's override (the
 // route-name contract in the HTTP integrations depends on this).
-func applyOperationStartFields(ev *event, ref *walRef, start OperationStart, scan walScan) {
-	gen := ref.gen
+func appendStartFields(start OperationStart, scan walScan, add func(Field)) {
 	if !scan.hasDomain {
-		ev.appendSealed(gen, fieldStr("op.domain", string(normalizeDomain(start.Domain))))
+		add(fieldStr("op.domain", string(start.Domain)))
 	}
 	if !scan.hasName {
-		ev.appendSealed(gen, fieldStr("op.name", start.Name))
+		add(fieldStr("op.name", start.Name))
 	}
 	if !scan.hasID && start.ID != "" {
-		ev.appendSealed(gen, fieldStr("op.id", start.ID))
+		add(fieldStr("op.id", start.ID))
 	}
 	if !scan.hasSource && start.Source != "" {
-		ev.appendSealed(gen, fieldStr("op.source", start.Source))
+		add(fieldStr("op.source", start.Source))
 	}
 	if !scan.hasAttempt && start.Attempt > 0 {
-		ev.appendSealed(gen, fieldInt64("op.attempt", int64(start.Attempt)))
+		add(fieldInt64("op.attempt", int64(start.Attempt)))
 	}
 	if !scan.hasMaxAttempts && start.MaxAttempts > 0 {
-		ev.appendSealed(gen, fieldInt64("op.max_attempts", int64(start.MaxAttempts)))
+		add(fieldInt64("op.max_attempts", int64(start.MaxAttempts)))
 	}
 }
 
@@ -320,13 +319,27 @@ func annotateOperationFailures(ev *event, ref *walRef, err error, recovered any)
 // operations surface their explicit op.code here (ledger: canonical
 // fields).
 func annotatePostSeal(ev *event, ref *walRef, start OperationStart, duration time.Duration, isHTTP bool, scan walScan, outcome Outcome) {
-	gen := ref.gen
-	applyOperationStartFields(ev, ref, start, scan)
-	ev.appendSealed(gen, fieldInt64("duration_ms", duration.Milliseconds()))
-	if !isHTTP && scan.hasOpCode {
-		ev.appendSealed(gen, fieldInt64("op.code", int64(scan.opCode)))
+	// The owner is the only writer past the seal, so the state and the
+	// generation are stable across this entire block (release is
+	// deferred to post-commit, reset requires a pool round-trip): one
+	// armed check and one lock/unlock bracket replace the per-append
+	// atomic-load-and-maybe-mutex round trip of the old appendSealed
+	// loop — ~9 atomic loads and N indirect calls saved per request.
+	armed := walState(ev.state.Load()&walStateMask) == walSealedArmed
+	if armed {
+		ev.mu.Lock()
+		defer ev.mu.Unlock()
 	}
-	ev.appendSealed(gen, fieldStr("op.outcome", string(outcome)))
+
+	fields := ev.fields
+	add := func(f Field) { fields = append(fields, f) }
+	appendStartFields(start, scan, add)
+	add(fieldInt64("duration_ms", duration.Milliseconds()))
+	if !isHTTP && scan.hasOpCode {
+		add(fieldInt64("op.code", int64(scan.opCode)))
+	}
+	add(fieldStr("op.outcome", string(outcome)))
+	ev.fields = fields
 }
 
 // resolveOutcomeV2 applies the v2 precedence: panic > error > explicit
@@ -364,11 +377,11 @@ func buildSampleInput(ev *event, start OperationStart, outcome Outcome, code int
 	// canonical op.code (the README's non-HTTP contract for Code).
 	// StatusCode stays the HTTP-compat view of http.status in both.
 	samplerCode := code
-	if normalizeDomain(start.Domain) != DomainHTTP && scan.hasOpCode {
+	if start.Domain != DomainHTTP && scan.hasOpCode {
 		samplerCode = scan.opCode
 	}
 	in := SampleInput{
-		Domain:     normalizeDomain(start.Domain),
+		Domain:     start.Domain,
 		Operation:  opName,
 		Outcome:    outcome,
 		Code:       samplerCode,
@@ -390,7 +403,7 @@ func resolveEventMessage(configured string, domain Domain, eventMessage string) 
 	if configured != "" {
 		return configured
 	}
-	if normalizeDomain(domain) == DomainHTTP {
+	if domain == DomainHTTP {
 		return DefaultMessage
 	}
 	return DefaultOperationMessage
