@@ -1511,11 +1511,11 @@ func (g *recordGrabber) Write(_ context.Context, rec *Record) { g.rec = rec }
 // Fanout: one sink fanning out to several downstream sinks
 // concurrently — the Sink contract requires the fanout itself to be
 // safe, and the first-party sinks it calls must be too.
-type fanoutSink struct {
+type concurrentFanoutSink struct {
 	inner []Sink
 }
 
-func (f *fanoutSink) Write(ctx context.Context, rec *Record) {
+func (f *concurrentFanoutSink) Write(ctx context.Context, rec *Record) {
 	var wg sync.WaitGroup
 	for _, s := range f.inner {
 		wg.Go(func() {
@@ -1528,7 +1528,7 @@ func (f *fanoutSink) Write(ctx context.Context, rec *Record) {
 func TestCrashFanoutSinks(t *testing.T) {
 	var buf strings.Builder
 	ts := NewTestSink()
-	fan := &fanoutSink{inner: []Sink{NewJSONSink(&buf), ts, NewJSONSink(&strings.Builder{})}}
+	fan := &concurrentFanoutSink{inner: []Sink{NewJSONSink(&buf), ts, NewJSONSink(&strings.Builder{})}}
 	rt := MustCompile(Config{Sink: fan, SamplingRate: 1})
 
 	var wg sync.WaitGroup

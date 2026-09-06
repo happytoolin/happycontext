@@ -22,7 +22,8 @@ func eventFromContext(ctx context.Context) *walRef {
 // helper family.
 //
 // Additional pairs may be passed variadically: Add(ctx, "a", 1, "b", 2).
-// Every pair key must be a string; malformed tails are skipped.
+// Every pair key must be a non-empty string; empty and non-string keys
+// are skipped uniformly, leading pair included.
 //
 // The request goroutine is the sole writer: passing the enriched
 // context to child goroutines is fine, but hc.Add from a child
@@ -34,7 +35,9 @@ func Add(ctx context.Context, key string, value any, kv ...any) {
 		return
 	}
 	if len(kv) == 0 {
-		ref.ev.append(ref.gen, fieldOf(key, value)) // single-pair fast path
+		if key != "" { // single-pair fast path
+			ref.ev.append(ref.gen, fieldOf(key, value))
+		}
 		return
 	}
 	ref.ev.addKV(ref, key, value, kv...)

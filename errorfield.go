@@ -81,11 +81,16 @@ func safeErrorMessage(err error) (msg string) {
 	return err.Error()
 }
 
+// maxUnwrapDepth bounds the Unwrap walk in deepestUnwrappedError.
+// Real wrapped chains are shallow; the bound also ends any chain that
+// manages to cycle without repeating a comparable error value.
+const maxUnwrapDepth = 100
+
 func deepestUnwrappedError(err error) error {
 	current := err
 	seen := make(map[error]struct{})
 	for depth := 0; current != nil; depth++ {
-		if depth >= 100 {
+		if depth >= maxUnwrapDepth {
 			return current
 		}
 		if isComparableError(current) {

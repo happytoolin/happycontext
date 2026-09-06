@@ -5,7 +5,7 @@ package ginhappycontext
 
 import (
 	"github.com/gin-gonic/gin"
-	hc "github.com/happytoolin/happycontext"
+	"github.com/happytoolin/happycontext"
 	"github.com/happytoolin/happycontext/integration/common"
 )
 
@@ -30,7 +30,12 @@ func Middleware(rt *hc.Runtime) gin.HandlerFunc {
 					err = last.Err
 				}
 			}
-			status := common.ResolveStatus(c.Writer.Status(), err, recovered, c.Writer.Written(), 0)
+			status := common.ResolveStatus(common.StatusInput{
+				Committed:       c.Writer.Status(),
+				Err:             err,
+				Recovered:       recovered,
+				ResponseStarted: c.Writer.Written(),
+			})
 			common.FinalizeRequest(op, c.FullPath(), status, err, recovered)
 
 			if recovered != nil {

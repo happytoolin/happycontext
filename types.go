@@ -36,13 +36,6 @@ type OperationPolicy struct {
 	SamplingRate  *float64
 }
 
-func normalizeDomain(domain Domain) Domain {
-	if domain == "" {
-		return defaultDomainValue
-	}
-	return domain
-}
-
 // IsValidOutcome reports whether outcome is a valid operation outcome.
 func IsValidOutcome(outcome Outcome) bool {
 	switch outcome {

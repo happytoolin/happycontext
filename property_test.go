@@ -1428,7 +1428,7 @@ func (m *lifeModel) outcome() Outcome {
 		return explicit
 	}
 	// The 5xx rule reads the canonical code: http.status for HTTP,
-	// op.code for everything else (mirrors resolveOutcomeV2).
+	// op.code for everything else (mirrors resolveOutcome).
 	if normalizeDomain(m.start) == DomainHTTP {
 		if hasCode && code >= 500 {
 			return OutcomeFailure

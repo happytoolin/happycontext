@@ -1,6 +1,9 @@
 // Package hcjson is a minimal append-only JSON encoder, vendored from
 // zerolog v1.34.0's internal/json package (MIT; see LICENSE and README.md
-// in this directory) and trimmed to what happycontext uses.
+// in this directory). The hot paths happycontext uses (string/bytes
+// escaping, scalars, time, interface fallback) were kept verbatim in
+// shape — including the unused-width scalar constructors — for easy
+// diffing against the upstream original.
 //
 // The upgrade over the vendored original is a hybrid SWAR escape fast path
 // in AppendString/AppendBytes: strings of 16 bytes or more are scanned 8

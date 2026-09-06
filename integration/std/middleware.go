@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"sync"
 
-	hc "github.com/happytoolin/happycontext"
+	"github.com/happytoolin/happycontext"
 	"github.com/happytoolin/happycontext/integration/common"
 )
 
@@ -36,7 +36,11 @@ func Middleware(rt *hc.Runtime) func(http.Handler) http.Handler {
 				statusCode, wroteHeader := core.statusCode, core.wroteHeader
 				core.release()
 				recovered := recover()
-				status := common.ResolveStatus(statusCode, nil, recovered, wroteHeader, 0)
+				status := common.ResolveStatus(common.StatusInput{
+					Committed:       statusCode,
+					Recovered:       recovered,
+					ResponseStarted: wroteHeader,
+				})
 				common.FinalizeRequest(op, req.Pattern, status, nil, recovered)
 
 				if recovered != nil {

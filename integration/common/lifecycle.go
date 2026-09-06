@@ -19,7 +19,7 @@ func StartRequest(baseCtx context.Context, rt *hc.Runtime, method, path string) 
 		Domain: hc.DomainHTTP,
 		Name:   "request",
 	})
-	hc.Add(op.Context(), "http.method", method, "http.path", path)
+	hc.Add(op.Context(), hc.KeyHTTPMethod, method, hc.KeyHTTPPath, path)
 	return op
 }
 
@@ -42,29 +42,25 @@ func FinalizeRequest(op *hc.Operation, route string, statusCode int, err error, 
 		// One ctx lookup for all three canonical writes (v0 parity:
 		// op.name is the resolved route template, last-write-wins over
 		// StartRequest's "request").
-		hc.Add(op.Context(), "http.route", route, "op.name", route, "http.status", statusCode)
+		hc.Add(op.Context(), hc.KeyHTTPRoute, route, hc.KeyOpName, route, hc.KeyHTTPStatus, statusCode)
 	} else {
-		hc.Add(op.Context(), "http.status", statusCode)
+		hc.Add(op.Context(), hc.KeyHTTPStatus, statusCode)
 	}
 
 	if recovered != nil {
-		hc.Add(op.Context(), "panic", PanicField(recovered))
+		hc.Add(op.Context(), hc.KeyPanic, PanicField(recovered))
 		// The real error (if any) wins over the synthetic panic one.
 		if err != nil {
 			hc.Error(op.Context(), err)
 		} else {
 			hc.Error(op.Context(), fmt.Errorf("panic: %v", recovered))
 		}
-		hc.Add(op.Context(), "op.outcome", string(hc.OutcomePanic))
+		hc.Add(op.Context(), hc.KeyOpOutcome, string(hc.OutcomePanic))
 		_ = op.End(nil)
 		return
 	}
-	if err != nil {
-		// No explicit hc.Error here: End(&err) writes the canonical
-		// error field itself (annotateOperationFailures). The v0 map
-		// folded a double write invisibly; the append-only WAL would
-		// keep both entries in Fields().
-	}
+	// No explicit hc.Error on the error path: End(&err) writes the
+	// canonical error field itself (annotateOperationFailures).
 	_ = op.End(&err)
 }
 
@@ -77,22 +73,37 @@ func PanicField(recovered any) map[string]any {
 	}
 }
 
-// ResolveStatus determines the final HTTP status to log.
-func ResolveStatus(currentStatus int, err error, recovered any, responseStarted bool, errorStatus int) int {
-	if recovered != nil && !responseStarted {
+// StatusInput carries what a middleware knows when it finalizes: the
+// status the framework writer currently holds, the terminal error and
+// recovered panic, whether the response already started, and the HTTP
+// status the error implies (0 if none).
+type StatusInput struct {
+	Committed       int
+	Err             error
+	Recovered       any
+	ResponseStarted bool
+	ErrorStatus     int
+}
+
+// ResolveStatus determines the final HTTP status to log from in:
+// panics and handler errors before the response started resolve to a
+// 5xx (the error's own status when it carries one), an unwritten
+// writer resolves to 200, and a committed status stands.
+func ResolveStatus(in StatusInput) int {
+	if in.Recovered != nil && !in.ResponseStarted {
 		return http.StatusInternalServerError
 	}
 
-	if err != nil && !responseStarted {
-		if errorStatus >= 400 {
-			return errorStatus
+	if in.Err != nil && !in.ResponseStarted {
+		if in.ErrorStatus >= 400 {
+			return in.ErrorStatus
 		}
 		return http.StatusInternalServerError
 	}
 
-	if currentStatus == 0 {
+	if in.Committed == 0 {
 		return http.StatusOK
 	}
 
-	return currentStatus
+	return in.Committed
 }

@@ -200,61 +200,6 @@ func TestWALStartedAt(t *testing.T) {
 	}
 }
 
-// TestWALAppendSealedStaleGeneration pins the appendSealed generation
-// check — the owner's post-seal write path must reject a stale
-// generation exactly like append does. The state word alone is not
-// enough: a post-seal write against an event a newer request already
-// reset belongs to that request. Found as a gap by mutation testing
-// (M3): removing the check passed the whole suite because no test
-// drove appendSealed with a stale generation.
-//
-// Recycle is simulated in place with seal()+reset() — exactly the
-// release-then-newEvent sequence — rather than through the pool: the
-// race runtime drops a share of sync.Pool Puts (zap internal/pool
-// note; TestPoolReuseCanary retries around it), which would make a
-// pool round-trip nondeterministic here. reset() is the operation
-// that must invalidate the old generation.
-func TestWALAppendSealedStaleGeneration(t *testing.T) {
-	ev := newEvent()
-	staleGen := ev.state.Load() >> walStateBits
-	ev.append(staleGen, fieldStr("own", "first"))
-	ev.seal()  // End's terminal step (release() seals before pooling)
-	ev.reset() // the next request's newEvent() after the pool hands it out
-
-	currentGen := ev.state.Load() >> walStateBits
-	if currentGen == staleGen {
-		t.Fatal("reset did not advance the generation")
-	}
-
-	// The stale owner-style post-seal write must no-op: the event now
-	// belongs to another request.
-	ev.appendSealed(staleGen, fieldStr("stale", "x"))
-	for _, f := range ev.fields {
-		if f.key == "stale" {
-			t.Fatalf("appendSealed with stale generation %d landed on the recycled event", staleGen)
-		}
-	}
-
-	// Positive controls: the current generation writes through the same
-	// path both before sealing and after it (the real annotatePostSeal
-	// shape runs post-seal under the sealed state).
-	ev.appendSealed(currentGen, fieldStr("live", "1"))
-	ev.seal()
-	ev.appendSealed(currentGen, fieldStr("sealed", "2"))
-	keys := map[string]bool{}
-	for _, f := range ev.fields {
-		keys[f.key] = true
-	}
-	for _, want := range []string{"live", "sealed"} {
-		if !keys[want] {
-			t.Fatalf("current-generation appendSealed lost %q", want)
-		}
-	}
-	if keys["stale"] {
-		t.Fatal("stale write landed next to the current-generation fields")
-	}
-}
-
 // TestWALStaleSettersAfterReset pins the live() generation checks in
 // the setter entry points that do not route through append's gen check:
 // setMessage, setLevel, and setError's hasErr latch all trust live()
@@ -593,7 +538,7 @@ func TestStragglerStartLine(t *testing.T) {
 // of runs never see the exact event again), so the test fires its
 // sentinel writes across a churn of requests and guards whichever
 // events the pool hands out; the deterministic reset-path half lives
-// in TestWALAppendSealedStaleGeneration.
+// in TestWALStaleSettersAfterReset.
 func TestPoolReuseCanary(t *testing.T) {
 	oldGC := debug.SetGCPercent(-1) // zap: keep the pool hot for the whole test
 	defer debug.SetGCPercent(oldGC)
@@ -617,7 +562,7 @@ func TestPoolReuseCanary(t *testing.T) {
 	// fires the stale writes against whatever event the pool returned
 	// (recycled or fresh — both must reject them), and the reset-path
 	// generation bump is deterministically covered by
-	// TestWALAppendSealedStaleGeneration. A round that gets op1's event
+	// TestWALStaleSettersAfterReset. A round that gets op1's event
 	// back additionally guards the write-after-reset window.
 	ctx2 := context.Background()
 	recycled := false
@@ -698,7 +643,8 @@ func canaryWrite(stale context.Context) {
 //     generation never lands; live-load landings may land late (the
 //     documented nanosecond-scale residual) but always exactly once;
 //     armed-load landings depend on the in-lock recheck.
-//  2. The owner's post-seal writes (appendSealed) always land.
+//  2. The owner's post-seal writes (the inline annotatePostSeal
+//     appends) always land.
 //  3. Snapshots are never torn: each equals the field prefix at its
 //     copy point.
 //  4. Recycle: a stale-generation write never lands when its load
@@ -1238,7 +1184,15 @@ func postOp(key string) simStep {
 	return simStep{
 		name: "post-" + key,
 		run:  func(s *sim) { s.simAppendSealed(key) },
-		real: func(ev *event, _ *sim) { ev.appendSealed(genOf(ev), fieldOf(key, key)) },
+		// The real owner post-seal fragment, as inlined in
+		// annotatePostSeal: lock only when the event was armed, append.
+		real: func(ev *event, _ *sim) {
+			if walState(ev.state.Load()&walStateMask) == walSealedArmed {
+				ev.mu.Lock()
+				defer ev.mu.Unlock()
+			}
+			ev.fields = append(ev.fields, fieldOf(key, key))
+		},
 	}
 }
 
@@ -1569,35 +1523,43 @@ func (s *matrixSink) Write(_ context.Context, rec *Record) {
 // boundary fire (used when the sink fires instead). The caller
 // releases the event when it wants the pool phases.
 func stagedEnd(op *Operation, fireAt matrixPhase, fire func(ctx context.Context)) bool {
-	ev := op.ev
-	rt := op.rt
-	start := op.start
-
 	now := time.Now()
-	duration := now.Sub(ev.startedAt)
+	duration := now.Sub(op.ev.startedAt)
 
 	if fireAt == phasePreAnnotate {
 		fire(op.Context())
 	}
-	annotateOperationFailures(ev, &op.ref, nil, nil)
+	annotateOperationFailures(op.ev, &op.ref, nil, nil)
 	if fireAt == phasePreSeal {
 		fire(op.Context())
 	}
-	ev.seal()
+	op.ev.seal()
 	if fireAt == phasePreScan {
 		fire(op.Context())
 	}
-	scan := scanWAL(ev)
+	scan := scanWAL(op.ev)
 	code := scan.code
-	outcome := resolveOutcomeV2(nil, nil, code, scan.outcome)
+	outcome := resolveOutcome(nil, nil, code, scan.outcome)
 	if fireAt == phasePrePostSeal {
 		fire(op.Context())
 	}
-	annotatePostSeal(ev, &op.ref, start, duration, normalizeDomain(start.Domain) == DomainHTTP, scan, outcome)
+	op.annotatePostSeal(commitInput{
+		outcome:  outcome,
+		code:     code,
+		duration: duration,
+		now:      now,
+		scan:     scan,
+	})
 	if fireAt == phasePreCommit {
 		fire(op.Context())
 	}
-	return op.commit(ev, rt, start, outcome, code, duration, now, nil, false, scan)
+	return op.commit(commitInput{
+		outcome:  outcome,
+		code:     code,
+		duration: duration,
+		now:      now,
+		scan:     scan,
+	})
 }
 
 // TestStragglerInjectionMatrix drives every phase in both armed modes

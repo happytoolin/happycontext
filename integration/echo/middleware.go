@@ -7,7 +7,7 @@ import (
 	"errors"
 	"net/http"
 
-	hc "github.com/happytoolin/happycontext"
+	"github.com/happytoolin/happycontext"
 	"github.com/happytoolin/happycontext/integration/common"
 	"github.com/labstack/echo/v4"
 )
@@ -32,13 +32,13 @@ func Middleware(rt *hc.Runtime) echo.MiddlewareFunc {
 			defer func() {
 				recovered := recover()
 				route := c.Path()
-				status := common.ResolveStatus(
-					c.Response().Status,
-					finalizeErr,
-					recovered,
-					c.Response().Committed,
-					statusFromEchoError(finalizeErr),
-				)
+				status := common.ResolveStatus(common.StatusInput{
+					Committed:       c.Response().Status,
+					Err:             finalizeErr,
+					Recovered:       recovered,
+					ResponseStarted: c.Response().Committed,
+					ErrorStatus:     statusFromEchoError(finalizeErr),
+				})
 				common.FinalizeRequest(op, route, status, finalizeErr, recovered)
 
 				if recovered != nil {

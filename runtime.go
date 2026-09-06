@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 )
 
-// Compile-time error contract (amendment 17).
+// Compile-time error contract: Compile returns errors wrapping these
+// sentinels with an "hc: " prefix; errors.Is works.
 var (
 	// ErrInvalidRate wraps out-of-range sampling rates.
 	ErrInvalidRate = errors.New("invalid rate")
@@ -32,7 +34,7 @@ type Config struct {
 	LevelSamplingRates map[Level]float64
 
 	// Sampler overrides built-in rate sampling when set. Errors and
-	// panics bypass it structurally (amendment 4).
+	// panics bypass it structurally.
 	Sampler Sampler
 
 	// OperationPolicies optionally customizes lifecycle behavior by
@@ -96,19 +98,18 @@ func Compile(cfg Config) (*Runtime, error) {
 
 	if len(cfg.OperationPolicies) > 0 {
 		rt.policies = make(map[Domain]OperationPolicy, len(cfg.OperationPolicies))
-		alias, hasAlias := cfg.OperationPolicies[""]
-		if hasAlias {
-			if err := validatePolicy(alias); err != nil {
-				return nil, fmt.Errorf("hc: policy for domain %q: %w", defaultDomainValue, err)
-			}
-		}
-		for domain, policy := range cfg.OperationPolicies {
+		// Sorted iteration: the "" alias (which sorts first) lands before
+		// any explicit key, so an explicit "operation" overwrites it
+		// deterministically — and with multiple invalid policies, the
+		// first error reported is deterministic too.
+		for _, domain := range slices.Sorted(maps.Keys(cfg.OperationPolicies)) {
+			policy := cfg.OperationPolicies[domain]
 			explicit := domain != ""
 			if !explicit {
 				domain = defaultDomainValue
 			}
 			if _, clash := rt.policies[domain]; clash && !explicit {
-				continue // an explicit key wins over the "" alias deterministically
+				continue // unreachable under sorted iteration; kept as a guard
 			}
 			if err := validatePolicy(policy); err != nil {
 				return nil, fmt.Errorf("hc: policy for domain %q: %w", domain, err)
@@ -173,23 +174,23 @@ func copyPolicy(policy OperationPolicy) OperationPolicy {
 }
 
 // levelFromPolicy resolves the final severity for an outcome under a
-// domain policy (zero fields mean the defaults).
+// domain policy. Zero fields mean the defaults; every other value was
+// validated by Compile, so no re-validation is needed here.
 func levelFromPolicy(policy OperationPolicy, outcome Outcome) Level {
-	if outcomeLevel, ok := policy.OutcomeLevels[outcome]; ok && IsValidLevel(outcomeLevel) {
+	if outcomeLevel, ok := policy.OutcomeLevels[outcome]; ok {
 		return outcomeLevel
 	}
 
-	// Zero policy fields mean the defaults; the zero Level is Info, which
-	// is the success default anyway. Explicit per-outcome control beyond
-	// that goes through OutcomeLevels.
+	// Zero policy fields mean the defaults; the zero Level is Info,
+	// which is the success default anyway.
 	successLevel, failureLevel, panicLevel := LevelInfo, LevelError, LevelError
-	if policy.SuccessLevel != 0 && IsValidLevel(policy.SuccessLevel) {
+	if policy.SuccessLevel != 0 {
 		successLevel = policy.SuccessLevel
 	}
-	if policy.FailureLevel != 0 && IsValidLevel(policy.FailureLevel) {
+	if policy.FailureLevel != 0 {
 		failureLevel = policy.FailureLevel
 	}
-	if policy.PanicLevel != 0 && IsValidLevel(policy.PanicLevel) {
+	if policy.PanicLevel != 0 {
 		panicLevel = policy.PanicLevel
 	}
 
@@ -205,6 +206,15 @@ func levelFromPolicy(policy OperationPolicy, outcome Outcome) Level {
 
 // noop reports whether the runtime can never emit (nil sink).
 func (rt *Runtime) noop() bool { return rt == nil || rt.sink == nil }
+
+// normalizeDomain maps the zero Domain to the default "operation"
+// domain; every other value passes through unchanged.
+func normalizeDomain(domain Domain) Domain {
+	if domain == "" {
+		return defaultDomainValue
+	}
+	return domain
+}
 
 // policyFor returns the domain policy (zero value when unconfigured).
 func (rt *Runtime) policyFor(domain Domain) OperationPolicy {
