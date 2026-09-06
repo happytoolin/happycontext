@@ -75,7 +75,11 @@ func (r *Record) Encoded() []byte {
 // last-write-wins), RFC3339 completion time, message — the exact field
 // order and shapes the v0.6 zerolog-parity JSON sink established.
 func (r *Record) encode() []byte {
-	b := make([]byte, 0, 64+len(r.fields)*24)
+	// 96 covers the envelope (level + time + message ≈ 82 bytes at
+	// minimum); 24/field covers the common short-key/value shapes
+	// without a grow-and-copy (measured: the old 64-byte base forced
+	// one growth on every ≤12-field event).
+	b := make([]byte, 0, 96+len(r.fields)*24)
 	b = append(b, jsonLevelPrefix(r.level)...)
 	fields := r.fields
 	if needsFieldAliasing(fields) {

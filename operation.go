@@ -278,25 +278,24 @@ func shouldWriteHealthy(rt *Runtime, policy OperationPolicy, in SampleInput) boo
 // while it runs. A key the request already wrote is skipped — appending
 // later would flip the LWW fold and clobber the user's override (the
 // route-name contract in the HTTP integrations depends on this).
-func applyOperationStartFields(ev *event, ref *walRef, start OperationStart, scan walScan) {
-	gen := ref.gen
+func applyOperationStartFieldsLocked(ev *event, ref *walRef, start OperationStart, scan walScan, append func(Field)) {
 	if !scan.hasDomain {
-		ev.appendSealed(gen, fieldStr("op.domain", string(normalizeDomain(start.Domain))))
+		append(fieldStr("op.domain", string(start.Domain)))
 	}
 	if !scan.hasName {
-		ev.appendSealed(gen, fieldStr("op.name", start.Name))
+		append(fieldStr("op.name", start.Name))
 	}
 	if !scan.hasID && start.ID != "" {
-		ev.appendSealed(gen, fieldStr("op.id", start.ID))
+		append(fieldStr("op.id", start.ID))
 	}
 	if !scan.hasSource && start.Source != "" {
-		ev.appendSealed(gen, fieldStr("op.source", start.Source))
+		append(fieldStr("op.source", start.Source))
 	}
 	if !scan.hasAttempt && start.Attempt > 0 {
-		ev.appendSealed(gen, fieldInt64("op.attempt", int64(start.Attempt)))
+		append(fieldInt64("op.attempt", int64(start.Attempt)))
 	}
 	if !scan.hasMaxAttempts && start.MaxAttempts > 0 {
-		ev.appendSealed(gen, fieldInt64("op.max_attempts", int64(start.MaxAttempts)))
+		append(fieldInt64("op.max_attempts", int64(start.MaxAttempts)))
 	}
 }
 
@@ -321,12 +320,28 @@ func annotateOperationFailures(ev *event, ref *walRef, err error, recovered any)
 // fields).
 func annotatePostSeal(ev *event, ref *walRef, start OperationStart, duration time.Duration, isHTTP bool, scan walScan, outcome Outcome) {
 	gen := ref.gen
-	applyOperationStartFields(ev, ref, start, scan)
-	ev.appendSealed(gen, fieldInt64("duration_ms", duration.Milliseconds()))
-	if !isHTTP && scan.hasOpCode {
-		ev.appendSealed(gen, fieldInt64("op.code", int64(scan.opCode)))
+	// Lock ONCE for the whole post-seal block when armed (the owner is
+	// the only writer past the seal, so the state cannot change between
+	// appends — and one lock/unlock replaces the per-appendSealed
+	// atomic-load-and-maybe-mutex round trip).
+	if walState(ev.state.Load()&walStateMask) == walSealedArmed {
+		ev.mu.Lock()
 	}
-	ev.appendSealed(gen, fieldStr("op.outcome", string(outcome)))
+	app := func(f Field) {
+		if ev.state.Load()>>walStateBits != gen {
+			return // event recycled under us: not our buffer anymore
+		}
+		ev.fields = append(ev.fields, f)
+	}
+	applyOperationStartFieldsLocked(ev, ref, start, scan, app)
+	app(fieldInt64("duration_ms", duration.Milliseconds()))
+	if !isHTTP && scan.hasOpCode {
+		app(fieldInt64("op.code", int64(scan.opCode)))
+	}
+	app(fieldStr("op.outcome", string(outcome)))
+	if walState(ev.state.Load()&walStateMask) == walSealedArmed {
+		ev.mu.Unlock()
+	}
 }
 
 // resolveOutcomeV2 applies the v2 precedence: panic > error > explicit
@@ -364,11 +379,11 @@ func buildSampleInput(ev *event, start OperationStart, outcome Outcome, code int
 	// canonical op.code (the README's non-HTTP contract for Code).
 	// StatusCode stays the HTTP-compat view of http.status in both.
 	samplerCode := code
-	if normalizeDomain(start.Domain) != DomainHTTP && scan.hasOpCode {
+	if start.Domain != DomainHTTP && scan.hasOpCode {
 		samplerCode = scan.opCode
 	}
 	in := SampleInput{
-		Domain:     normalizeDomain(start.Domain),
+		Domain:     start.Domain,
 		Operation:  opName,
 		Outcome:    outcome,
 		Code:       samplerCode,

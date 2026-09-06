@@ -39,12 +39,13 @@ func FinalizeRequest(op *hc.Operation, route string, statusCode int, err error, 
 		return
 	}
 	if route != "" {
-		hc.Add(op.Context(), "http.route", route)
-		// v0 parity: the operation's name is the resolved route template
-		// (last-write-wins keeps this over StartRequest's "request").
-		hc.Add(op.Context(), "op.name", route)
+		// One ctx lookup for all three canonical writes (v0 parity:
+		// op.name is the resolved route template, last-write-wins over
+		// StartRequest's "request").
+		hc.Add(op.Context(), "http.route", route, "op.name", route, "http.status", statusCode)
+	} else {
+		hc.Add(op.Context(), "http.status", statusCode)
 	}
-	hc.Add(op.Context(), "http.status", statusCode)
 
 	if recovered != nil {
 		hc.Add(op.Context(), "panic", PanicField(recovered))
