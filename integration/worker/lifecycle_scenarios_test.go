@@ -24,8 +24,7 @@ import (
 func TestWorkerRetryMetadata(t *testing.T) {
 	ts := hc.NewTestSink()
 	rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: 1})
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	err := errors.New("retryable")
 	op := Start(ctx, rt, JobMeta{Name: "sync", Attempt: 3, MaxAttempts: 5})

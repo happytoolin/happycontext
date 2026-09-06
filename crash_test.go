@@ -1546,7 +1546,7 @@ func TestCrashFanoutSinks(t *testing.T) {
 	if got, want := len(ts.Events()), 200; got != want {
 		t.Fatalf("captured = %d, want %d", got, want)
 	}
-	for _, ln := range strings.Split(strings.TrimRight(buf.String(), "\n"), "\n") {
+	for ln := range strings.SplitSeq(strings.TrimRight(buf.String(), "\n"), "\n") {
 		if ln == "" {
 			continue
 		}

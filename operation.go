@@ -1,10 +1,12 @@
 package hc
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"runtime"
+	"slices"
 	"sync/atomic"
 	"time"
 )
@@ -201,8 +203,7 @@ type walScan struct {
 
 func scanWAL(ev *event) walScan {
 	var s walScan
-	for i := len(ev.fields) - 1; i >= 0; i-- {
-		f := ev.fields[i]
+	for _, f := range slices.Backward(ev.fields) {
 		switch f.key {
 		case KeyOpOutcome:
 			if !s.hasOutcome && f.kind == KindString {
@@ -440,16 +441,10 @@ func buildSampleInput(ev *event, start OperationStart, in commitInput, level Lev
 }
 
 func resolveEventMessage(configured string, domain Domain, eventMessage string) string {
-	if eventMessage != "" {
-		return eventMessage
-	}
-	if configured != "" {
-		return configured
-	}
 	if domain == DomainHTTP {
-		return DefaultMessage
+		return cmp.Or(eventMessage, configured, DefaultMessage)
 	}
-	return DefaultOperationMessage
+	return cmp.Or(eventMessage, configured, DefaultOperationMessage)
 }
 
 const defaultDomainValue Domain = "operation"
