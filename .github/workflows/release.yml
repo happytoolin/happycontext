@@ -5,6 +5,7 @@ name: release
 on:
   push:
     branches: [v2]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -25,10 +26,13 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: .release-please-config.json
           manifest-file: .release-please-manifest.json
-          # v2 is the release line (§9 amendment): the action's default
-          # branch input is the repo default (main), which made it scan
-          # frozen main and find nothing releasable.
-          branch: v2
+          # v2 is the release line (§9 amendment). v4 of the action has
+          # no `branch` input — the earlier `branch: v2` was silently
+          # ignored, release-please kept scanning frozen main, and no
+          # release PR ever opened (four green runs, zero PRs). The
+          # real input is target-branch: read commits from v2 and open
+          # the release PR against v2.
+          target-branch: v2
 
       - name: Checkout
         if: ${{ steps.release.outputs.release_created == 'true' }}
