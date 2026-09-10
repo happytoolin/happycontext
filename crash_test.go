@@ -16,8 +16,8 @@ package hc
 //   H  deep and wide payloads (nesting, mega fields, huge strings)
 //   I  lifecycle misuse (chains, scrambled ends, stale contexts)
 //   J  sink contract edges (Encoded race, fanout, recycle hazards)
-//   K  adversarial fuzz targets (values, armed interleavings)
-//   L  armed-mode DST (mixed writers vs single End, arm-vs-seal)
+//   K  adversarial fuzz targets (values, guarded interleavings)
+//   L  guarded-mode DST (mixed writers vs single End, snapshot-vs-seal)
 //   N  testing/synctest bubbles (per-test goroutine hygiene, watchdog)
 //      (M was the ad-hoc live-chaos runs; intentionally not a file here)
 
@@ -334,9 +334,9 @@ func TestCrashStragglerStormOverRecycledPool(t *testing.T) {
 	}
 }
 
-// Armed-mode variant: the watchdog protocol path must give the same
-// guarantees under the same storm.
-func TestCrashStragglerStormArmed(t *testing.T) {
+// Straggler storm on guarded events: concurrent writers must not race,
+// lose fields, or corrupt the pool.
+func TestCrashStragglerStormGuarded(t *testing.T) {
 	rt, ts := testRT(t, nil)
 	const workers = 8
 	const perWorker = 40
@@ -345,7 +345,6 @@ func TestCrashStragglerStormArmed(t *testing.T) {
 		wg.Go(func() {
 			for i := range perWorker {
 				op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
-				op.ev.arm()
 				Add(op.Context(), "mine", fmt.Sprintf("a%d-%d", w, i))
 				_ = op.End(nil)
 				Add(op.Context(), "straggler", 1)
@@ -359,7 +358,7 @@ func TestCrashStragglerStormArmed(t *testing.T) {
 	}
 	for _, ev := range evs {
 		if _, ok := ev.Lookup("straggler"); ok {
-			t.Fatal("armed straggler field reached the wire")
+			t.Fatal("guarded straggler field reached the wire")
 		}
 	}
 }
@@ -661,6 +660,41 @@ func TestCrashTypedNilAndWeirdAny(t *testing.T) {
 	}
 	if m["chan"] == nil && m["func"] == nil {
 		t.Fatal("both unmarshalable values vanished without a trace")
+	}
+}
+
+// TestTestSinkNestedEmptySlices pins the deep-copy identity fix: empty
+// slices of different types all report Pointer() == 0, and the old
+// uintptr visited key aliased them into one cache entry, then panicked
+// inside End on reflect.Set. The capture must preserve both values.
+func TestTestSinkNestedEmptySlices(t *testing.T) {
+	ts := NewTestSink()
+	rt := MustCompile(Config{Sink: ts, SamplingRate: 1})
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "x"})
+	Add(op.Context(), "mixed", [2]any{[]string(nil), []int(nil)})
+	Add(op.Context(), "empty", []string{})
+	if !op.End(nil) {
+		t.Fatal("event dropped")
+	}
+
+	mixed, ok := ts.Events()[0].Lookup("mixed")
+	if !ok {
+		t.Fatal("mixed field missing")
+	}
+	arr, ok := mixed.([2]any)
+	if !ok {
+		t.Fatalf("mixed = %#v, want [2]any", mixed)
+	}
+	if s, ok := arr[0].([]string); !ok || s != nil {
+		t.Fatalf("arr[0] = %#v, want a nil []string", arr[0])
+	}
+	if i, ok := arr[1].([]int); !ok || i != nil {
+		t.Fatalf("arr[1] = %#v, want a nil []int", arr[1])
+	}
+	if empty, ok := ts.Events()[0].Lookup("empty"); !ok {
+		t.Fatal("empty field missing")
+	} else if s, ok := empty.([]string); !ok || s == nil {
+		t.Fatalf("empty = %#v, want a non-nil empty []string", empty)
 	}
 }
 
@@ -1586,16 +1620,15 @@ func (s *encodingStragglerSink) Write(_ context.Context, rec *Record) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Agent L — armed-mode deterministic stress
+// Agent L — guarded-mode deterministic stress
 // ════════════════════════════════════════════════════════════════════
 
-// Mixed writers on one ARMED event plus one End: no race (pinned by
+// Mixed writers on one guarded event plus one End: no race (pinned by
 // -race), exactly one event, line valid.
-func TestCrashArmedMixedWritersSingleEnd(t *testing.T) {
+func TestCrashMixedWritersSingleEnd(t *testing.T) {
 	for round := range 10 {
 		rt, ts := testRT(t, nil)
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
-		op.ev.arm()
 
 		var wg sync.WaitGroup
 		stop := make(chan struct{})
@@ -1638,7 +1671,7 @@ func TestCrashArmedMixedWritersSingleEnd(t *testing.T) {
 				case <-stop:
 					return
 				default:
-					_ = op.ev.snapshotFields()
+					_, _ = op.ev.snapshotFields(genOf(op.ev))
 				}
 			}
 		})
@@ -1658,9 +1691,9 @@ func TestCrashArmedMixedWritersSingleEnd(t *testing.T) {
 	}
 }
 
-// arm() racing End's seal: arm takes the mutex and only converts live
-// events; seal-of-armed takes it too. Both interleavings must be safe.
-func TestCrashArmRacingSeal(t *testing.T) {
+// A watchdog snapshot racing End's seal: both take the same mutex, so
+// every interleaving must be safe and the committed line complete.
+func TestCrashSnapshotRacingSeal(t *testing.T) {
 	for round := range 20 {
 		rt, ts := testRT(t, nil)
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
@@ -1674,7 +1707,7 @@ func TestCrashArmRacingSeal(t *testing.T) {
 				case <-stop:
 					return
 				default:
-					op.ev.arm()
+					_, _ = op.ev.snapshotFields(genOf(op.ev))
 				}
 			}
 		})
@@ -1688,15 +1721,14 @@ func TestCrashArmRacingSeal(t *testing.T) {
 	}
 }
 
-// setError racing seal on an armed event: the P5 discipline (append +
+// setError racing seal on a guarded event: the P5 discipline (append +
 // hasErr latch under the same mutex as the seal) must keep the latch
 // consistent — an error that landed is never lost, a straggler error
 // post-seal never latches.
-func TestCrashArmedErrorVsSeal(t *testing.T) {
+func TestCrashErrorVsSeal(t *testing.T) {
 	for round := range 20 {
 		rt, ts := testRT(t, nil)
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
-		op.ev.arm()
 
 		var wg sync.WaitGroup
 		wg.Go(func() {
@@ -1734,7 +1766,6 @@ func TestCrashArmedErrorVsSeal(t *testing.T) {
 func TestCrashSnapshotVsPostSealAppends(t *testing.T) {
 	rt, ts := testRT(t, nil)
 	op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
-	op.ev.arm()
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
@@ -1744,7 +1775,7 @@ func TestCrashSnapshotVsPostSealAppends(t *testing.T) {
 			case <-stop:
 				return
 			default:
-				_ = op.ev.snapshotFields()
+				_, _ = op.ev.snapshotFields(genOf(op.ev))
 			}
 		}
 	})
@@ -1836,10 +1867,10 @@ func truncate(b []byte, n int) string {
 	return string(b[:n]) + "..."
 }
 
-// FuzzCrashArmedInterleavings: random interleavings of guarded writes,
-// setters, and a single End on an armed event. Oracle: exactly one
+// FuzzCrashGuardedInterleavings: random interleavings of guarded writes,
+// setters, and a single End on a guarded event. Oracle: exactly one
 // event, valid line, no lost completion fields.
-func FuzzCrashArmedInterleavings(f *testing.F) {
+func FuzzCrashGuardedInterleavings(f *testing.F) {
 	f.Add(0, 0, 0, 0)
 	f.Add(1, 10, 3, 7)
 	f.Add(2, 0, 0, 1)
@@ -1855,9 +1886,6 @@ func FuzzCrashArmedInterleavings(f *testing.F) {
 		}
 		rt, ts := testRT(t, nil)
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
-		if variant%2 == 0 {
-			op.ev.arm()
-		}
 		for i := range writes {
 			Add(op.Context(), key2(i), i)
 		}
@@ -1927,7 +1955,7 @@ func (errBoom2) Error() string { return "boom2" }
 // library path that sleeps while another goroutine spins cannot be
 // bubble-tested with real time.Sleep in the winner's path — including
 // the v1.1 watchdog itself, which would sleep on real timers while
-// request writers spin in the armed-add path: the same livelock,
+// request writers spin in the guarded-add path: the same livelock,
 // mirrored. Use channel gates instead.
 func TestSynctestConcurrentEndGatedSink(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -1972,14 +2000,13 @@ func (s *gateSink) Write(_ context.Context, _ *Record) {
 	s.writes++
 }
 
-// Armed-mode mixed writers plus a snapshotter against a single End:
+// Guarded-mode mixed writers plus a snapshotter against a single End:
 // the bubble returning proves every goroutine exited (a per-test leak
 // assertion), and the committed line is complete and valid.
-func TestSynctestArmedWritersAllExit(t *testing.T) {
+func TestSynctestGuardedWritersAllExit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rt, ts := testRT(t, nil)
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
-		op.ev.arm()
 		stop := make(chan struct{})
 		var wg sync.WaitGroup
 		for w := range 6 {
@@ -2000,7 +2027,7 @@ func TestSynctestArmedWritersAllExit(t *testing.T) {
 				case <-stop:
 					return
 				default:
-					_ = op.ev.snapshotFields()
+					_, _ = op.ev.snapshotFields(genOf(op.ev))
 				}
 			}
 		})
@@ -2020,7 +2047,7 @@ func TestSynctestArmedWritersAllExit(t *testing.T) {
 }
 
 // The v1.1 watchdog shape, simulated deterministically under the
-// virtual clock: a stalled request gets armed (what the watchdog will
+// virtual clock: a stalled request is guarded (what the watchdog will
 // do), the watchdog takes a mid-flight snapshot after its stall
 // threshold, the request resumes writing, then commits. The snapshot
 // is a stable copy of a strict prefix of the committed WAL.
@@ -2030,10 +2057,12 @@ func TestSynctestWatchdogShape(t *testing.T) {
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "stalled"})
 		Add(op.Context(), "phase", "before-stall")
 
-		// The watchdog arms a stalled request and snapshots it.
-		op.ev.arm()
+		// The watchdog snapshots a stalled request.
 		time.Sleep(500 * time.Millisecond) // virtual: instant, deterministic
-		snap := op.ev.snapshotFields()
+		snap, ok := op.ev.snapshotFields(genOf(op.ev))
+		if !ok {
+			t.Fatal("snapshot refused")
+		}
 
 		// The request wakes, REWRITES a snapshotted key, adds a new
 		// one, then commits. The rewrite is what makes the stability

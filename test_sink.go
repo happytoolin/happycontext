@@ -45,9 +45,12 @@ func NewTestSink() *TestSink {
 // scalars are immutable by construction. Pointer payloads are NOT
 // cloned (the pointed-to value stays shared with the caller), except
 // that error identity is deliberately preserved so errors.Is works
-// on captured fields. Mutate-through-a-pointer after End is visible
-// in the capture — copy it yourself before End if you need a frozen
-// snapshot of pointer-bearing data.
+// on captured fields. Struct payloads copy shallowly: a struct that
+// wraps a map or slice stays shared with the caller, because a
+// reflect field copy cannot set unexported fields (and would break
+// time.Time). Mutate-through-a-pointer after End is visible in the
+// capture — copy it yourself before End if you need a frozen snapshot
+// of pointer-bearing or struct-bearing data.
 func (t *TestSink) Write(_ context.Context, rec *Record) {
 	if t == nil || rec == nil {
 		return
@@ -120,8 +123,8 @@ func deepCopyValue(v any, seen *visitSet) any {
 		case reflect.Map, reflect.Slice, reflect.Array:
 			if rv.CanInterface() {
 				cp := reflect.New(rv.Type()).Elem()
-				seen := map[uintptr]reflect.Value{}
-				deepCopyReflect(rv, cp, seen)
+				local := map[visitKey]reflect.Value{}
+				deepCopyReflect(rv, cp, local)
 				return cp.Interface()
 			}
 		}
@@ -129,27 +132,40 @@ func deepCopyValue(v any, seen *visitSet) any {
 	}
 }
 
-func deepCopyReflect(src, dst reflect.Value, seen map[uintptr]reflect.Value) {
+func deepCopyReflect(src, dst reflect.Value, seen map[visitKey]reflect.Value) {
 	switch k := src.Kind(); k {
 	case reflect.Map:
-		if prior, ok := seen[src.Pointer()]; ok {
+		key := visitKey{typ: src.Type(), ptr: src.Pointer()}
+		if prior, ok := seen[key]; ok {
 			dst.Set(prior)
 			return
 		}
 		dst.Set(reflect.MakeMapWithSize(src.Type(), src.Len()))
-		seen[src.Pointer()] = dst
+		seen[key] = dst
 		for _, k := range src.MapKeys() {
 			ev := reflect.New(src.Type().Elem()).Elem()
 			deepCopyReflect(src.MapIndex(k), ev, seen)
 			dst.SetMapIndex(k, ev)
 		}
 	case reflect.Slice:
-		if prior, ok := seen[src.Pointer()]; ok {
+		// Zero-length slices all report Pointer() == 0. Copy them
+		// directly instead of caching them: a shared cache key would
+		// alias two empty slices of different types and panic on Set.
+		if src.Len() == 0 {
+			if src.IsNil() {
+				dst.SetZero()
+				return
+			}
+			dst.Set(reflect.MakeSlice(src.Type(), 0, src.Cap()))
+			return
+		}
+		key := visitKey{typ: src.Type(), ptr: src.Pointer()}
+		if prior, ok := seen[key]; ok {
 			dst.Set(prior)
 			return
 		}
 		dst.Set(reflect.MakeSlice(src.Type(), src.Len(), src.Cap()))
-		seen[src.Pointer()] = dst
+		seen[key] = dst
 		for i := range src.Len() {
 			deepCopyReflect(src.Index(i), dst.Index(i), seen)
 		}
@@ -161,12 +177,13 @@ func deepCopyReflect(src, dst reflect.Value, seen map[uintptr]reflect.Value) {
 		if src.IsNil() {
 			return
 		}
-		if prior, ok := seen[src.Pointer()]; ok {
+		key := visitKey{typ: src.Type(), ptr: src.Pointer()}
+		if prior, ok := seen[key]; ok {
 			dst.Set(prior)
 			return
 		}
 		cp := reflect.New(src.Type().Elem())
-		seen[src.Pointer()] = cp
+		seen[key] = cp
 		deepCopyReflect(src.Elem(), cp.Elem(), seen)
 		dst.Set(cp)
 	case reflect.Interface:

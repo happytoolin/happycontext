@@ -15,6 +15,11 @@ import (
 // Middleware wraps an http.Handler with happycontext request lifecycle
 // logging. rt comes from hc.Compile/MustCompile; a nil *hc.Runtime is a
 // passthrough (the no-op runtime semantics).
+//
+// The handler must finish all response writes before it returns, as
+// net/http requires. The middleware returns the pooled response writer
+// to the pool when the handler returns; a write after that point can
+// touch the writer of a different request.
 func Middleware(rt *hc.Runtime) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

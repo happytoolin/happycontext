@@ -102,20 +102,19 @@ func TestWALSealingAfterRelease(t *testing.T) {
 	}
 }
 
-// TestWALArmingProtocol exercises the amendment-1 protocol: armed
-// events serialize appends and snapshots under the mutex, and the race
-// detector must stay clean (spec scenario: watchdog snapshot mid-flight).
-func TestWALArmingProtocol(t *testing.T) {
+// TestWALGuardedProtocol exercises the guarded protocol: appends and
+// snapshots serialize under the mutex, and the race detector must stay
+// clean (spec scenario: watchdog snapshot mid-flight).
+func TestWALGuardedProtocol(t *testing.T) {
 	ev := newEvent()
 	ref := &walRef{ev: ev, gen: ev.state.Load() >> walStateBits}
-	ev.arm()
 
 	var wg sync.WaitGroup
 	wg.Add(3)
 	go func() { // watchdog-style snapshots
 		defer wg.Done()
 		for range 2000 {
-			_ = ev.snapshotFields()
+			_, _ = ev.snapshotFields(genOf(ev))
 		}
 	}()
 	go func() { // guarded appends
@@ -201,14 +200,14 @@ func TestWALStartedAt(t *testing.T) {
 	}
 }
 
-// TestWALStaleSettersAfterReset pins the live() generation checks in
-// the setter entry points that do not route through append's gen check:
-// setMessage, setLevel, and setError's hasErr latch all trust live()
-// alone. Found as a gap by review (GLM finding 1): removing live() from
-// setMessage passed the entire non-race suite — the pool canary's
-// sentinel oracle only observes field-key landings (the "!BUG" Add),
-// never msg/requestedLevel mutations, which are invisible on the wire
-// until a later request reuses the event.
+// TestWALStaleSettersAfterReset pins the generation checks in the
+// setter entry points that do not route through append's gen check:
+// setMessage, setLevel, and setError's hasErr latch all trust their
+// own pre-check alone. Found as a gap by review (GLM finding 1):
+// removing the state check from setMessage passed the entire non-race
+// suite — the pool canary's sentinel oracle only observes field-key
+// landings (the "!BUG" Add), never msg/requestedLevel mutations, which
+// are invisible on the wire until a later request reuses the event.
 // (Black-box counterpart: TestStragglerSettersAfterRecycle drives the
 // same invariant through the public API and asserts the emitted
 // event; this white-box test pins the internal latches.)
@@ -351,19 +350,18 @@ func TestStragglerSettersAfterRecycle(t *testing.T) {
 	}
 }
 
-// TestSealDuringArmedAppend pins the armed-path seal protocol: an armed
-// append in flight while End seals either lands before the seal or is
-// dropped — never a torn or recycled-buffer write.
-func TestSealDuringArmedAppend(t *testing.T) {
+// TestSealDuringAppend pins the append-vs-seal protocol: an append in
+// flight while End seals either lands before the seal or is dropped —
+// never a torn or recycled-buffer write.
+func TestSealDuringAppend(t *testing.T) {
 	rt := MustCompile(Config{Sink: NewTestSink(), SamplingRate: 1})
 	var wg sync.WaitGroup
 	for range 200 {
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "r"})
 		ctx := op.Context()
-		op.ev.arm() // arm BEFORE End to force the guarded path
 		wg.Go(func() {
 			for i := range 50 {
-				Add(ctx, "armed", i)
+				Add(ctx, "guarded", i)
 			}
 		})
 		op.End(nil)
@@ -371,18 +369,68 @@ func TestSealDuringArmedAppend(t *testing.T) {
 	}
 }
 
-// TestArmingStaleGeneration pins both recycle directions: stale (past)
+// TestAppendStaleGeneration pins both recycle directions: stale (past)
 // and future generations are rejected.
-func TestArmingStaleGeneration(t *testing.T) {
+func TestAppendStaleGeneration(t *testing.T) {
 	ev := newEvent()
 	ref := &walRef{ev: ev, gen: ev.state.Load() >> walStateBits}
-	ev.arm()
 	ev.append(ref.gen-1, fieldStr("past", "x"))   // stale past
 	ev.append(ref.gen+1, fieldStr("future", "x")) // future
 	for _, f := range ev.fields {
 		if f.key == "past" || f.key == "future" {
 			t.Fatal("generation check failed")
 		}
+	}
+}
+
+// TestSnapshotGenerationGuard pins the watchdog snapshot guard: a stale
+// generation is refused, and active and sealed events snapshot a
+// race-free copy.
+func TestSnapshotGenerationGuard(t *testing.T) {
+	ev := newEvent()
+	stale := genOf(ev)
+
+	ev.reset() // pool recycle: a new generation
+	if _, ok := ev.snapshotFields(stale); ok {
+		t.Fatal("stale snapshot accepted")
+	}
+
+	// Positive control: the current generation snapshots.
+	ev.append(genOf(ev), fieldStr("k", "v"))
+	snap, ok := ev.snapshotFields(genOf(ev))
+	if !ok || len(snap) != 1 || snap[0].key != "k" {
+		t.Fatalf("active snapshot = %v (ok=%v), want one k field", snap, ok)
+	}
+
+	// A sealed event snapshots its tail: the owner's post-seal writes
+	// serialize under the same mutex.
+	ev.seal()
+	if snap, ok := ev.snapshotFields(genOf(ev)); !ok || len(snap) != 1 {
+		t.Fatalf("sealed snapshot = %v (ok=%v), want one k field", snap, ok)
+	}
+	ev.release()
+}
+
+// TestSnapshotResetSerialization pins the reset side of the snapshot
+// discipline: reset takes the append mutex, so a stale watchdog
+// snapshot that already passed its generation check copies the sealed
+// fields safely while the next request recycles the event. The race
+// detector is the oracle — without the lock, reset's write races the
+// snapshot's copy.
+func TestSnapshotResetSerialization(t *testing.T) {
+	for range 50 {
+		ev := newEvent()
+		gen := genOf(ev)
+		for j := range 256 {
+			ev.append(gen, fieldInt64("k", int64(j)))
+		}
+		ev.seal()
+
+		var wg sync.WaitGroup
+		wg.Go(func() { _, _ = ev.snapshotFields(gen) })
+		time.Sleep(100 * time.Microsecond) // let the snapshot take the mutex
+		ev.reset()
+		wg.Wait()
 	}
 }
 
@@ -636,14 +684,13 @@ func canaryWrite(stale context.Context) {
 // owner may seal or recycle, so the straggler steps are split
 // (load / act) exactly at that boundary; the act replays the real
 // post-load fragment (live: direct append — the documented residual;
-// armed: lock + recheck + append).
+// guarded: lock + recheck + append).
 //
 // Invariants checked at the end of every schedule:
 //
 //  1. A straggler whose load observed a sealed state or a mismatched
-//     generation never lands; live-load landings may land late (the
-//     documented nanosecond-scale residual) but always exactly once;
-//     armed-load landings depend on the in-lock recheck.
+//     generation never lands; an active-load landing depends on the
+//     in-lock recheck.
 //  2. The owner's post-seal writes (the inline annotatePostSeal
 //     appends) always land.
 //  3. Snapshots are never torn: each equals the field prefix at its
@@ -664,7 +711,7 @@ func canaryWrite(stale context.Context) {
 // is the only source of ordering.
 type simEvent struct {
 	gen    uint64
-	state  walState // real constants: walLive/walArmed/walSealed/walSealedArmed
+	state  walState // real constants: walActive/walSealed
 	muHeld bool
 
 	fields []string // keys in landing order (reset clears)
@@ -675,12 +722,10 @@ type simEvent struct {
 type stragglerMode uint8
 
 const (
-	modeDrop     stragglerMode = iota // load saw sealed or a mismatched generation
-	modeLive                          // load saw live: unconditional landing at act
-	modeArmed                         // load saw armed: mu + recheck at act
-	modeSetLive                       // setter load saw live
-	modeSetArmed                      // setter load saw armed (mu + recheck at act)
-	modeSetDrop                       // setter load saw sealed / wrong gen
+	modeDrop       stragglerMode = iota // load saw sealed or a mismatched generation
+	modeGuarded                         // load saw active: mu + recheck at act
+	modeSetGuarded                      // setter load saw active (mu + recheck at act)
+	modeSetDrop                         // setter load saw sealed / wrong gen
 )
 
 // stragglerPlan is the per-straggler decision state, shared by its
@@ -726,7 +771,7 @@ type sim struct {
 
 func newSim(gen uint64, nStragglers int) *sim {
 	return &sim{
-		ev:    simEvent{gen: gen, state: walLive},
+		ev:    simEvent{gen: gen, state: walActive},
 		plans: make([]stragglerPlan, nStragglers),
 		flags: map[string]bool{},
 	}
@@ -754,51 +799,33 @@ func (s *sim) clone() *sim {
 // mirror mapping is annotated so a production change to the real
 // protocol must update the mirror or the replay comparison fails).
 
-// simAppend mirrors event.append's live fast path and guarded path as
-// one schedule step (the owner's own adds are not split — the real
-// owner is the single writer of its generation).
+// simAppend mirrors event.append's guarded path as one schedule step
+// (the owner's own adds are not split — the real owner is the single
+// writer of its generation). The runnable gate ensures the mutex is
+// free; a stale generation or a sealed state drops the write.
 func (s *sim) simAppend(key string) {
-	switch s.ev.state {
-	case walLive:
-		s.land(key)
-	case walArmed:
-		// guarded: the caller checked muHeld (runnable gate)
+	if s.ev.state == walActive {
 		s.land(key)
 	}
 }
 
-// simAppendSealed mirrors event.appendSealed (owner post-seal writes):
-// the generation always matches (the owner runs it), so it lands on
-// live/sealed and on sealedArmed under the mutex.
+// simAppendSealed mirrors the owner's post-seal writes as inlined in
+// annotatePostSeal: the generation always matches (the owner runs it)
+// and the owner holds the append mutex.
 func (s *sim) simAppendSealed(key string) {
 	s.land(key)
 }
 
-// simSeal mirrors event.seal.
+// simSeal mirrors event.seal: the mutex is held, so the state flips to
+// sealed with no append in flight. Idempotent.
 func (s *sim) simSeal() {
-	switch s.ev.state {
-	case walArmed:
-		s.releaseMu()
-		s.ev.state = walSealedArmed
-	case walLive:
-		s.ev.state = walSealed
-	}
-	// sealed states: idempotent
+	s.ev.state = walSealed
 }
 
-// simArm mirrors event.arm: live → armed under the mutex.
-func (s *sim) simArm() {
-	if s.ev.state == walLive {
-		s.acquireMu()
-		s.ev.state = walArmed
-		s.releaseMu()
-	}
-}
-
-// simReset mirrors event.reset: the next generation, live, cleared.
+// simReset mirrors event.reset: the next generation, active, cleared.
 func (s *sim) simReset() {
 	s.ev.gen++
-	s.ev.state = walLive
+	s.ev.state = walActive
 	s.ev.fields = nil
 	s.ev.msg = ""
 	s.landings = nil
@@ -822,37 +849,32 @@ func (s *sim) stragglerLoad(plan int) {
 	switch {
 	case p.loadGen != p.refGen:
 		p.mode = modeDrop
-	case p.loadState == walLive:
-		p.mode = modeLive
-	case p.loadState == walArmed:
-		p.mode = modeArmed
+	case p.loadState == walActive:
+		p.mode = modeGuarded
 	default:
 		p.mode = modeDrop
 	}
 }
 
-// stragglerActRunnable reports whether the act step may run: an armed
+// stragglerActRunnable reports whether the act step may run: a guarded
 // decision needs the mutex, which a concurrent holder blocks.
 func (s *sim) stragglerActRunnable(plan int) bool {
-	return s.plans[plan].mode != modeArmed || !s.ev.muHeld
+	return s.plans[plan].mode != modeGuarded || !s.ev.muHeld
 }
 
-// stragglerAct mirrors the post-load fragment of event.append: live
-// decisions append unconditionally (the documented residual — the load
-// may predate a seal or recycle), armed decisions lock, recheck the
-// state word, and append only while still armed.
+// stragglerAct mirrors the post-load fragment of event.append: a
+// guarded decision locks, rechecks the generation and state, and
+// appends only while the generation still matches and the event is
+// active.
 func (s *sim) stragglerAct(plan int) {
 	p := &s.plans[plan]
 	p.actGen = s.ev.gen
 	p.actState = s.ev.state
 	switch p.mode {
 	case modeDrop:
-	case modeLive:
-		s.land(p.key)
-		p.landed = true
-	case modeArmed:
+	case modeGuarded:
 		s.acquireMu()
-		if s.ev.gen == p.refGen && s.ev.state == walArmed {
+		if s.ev.gen == p.refGen && s.ev.state == walActive {
 			s.land(p.key)
 			p.landed = true
 		}
@@ -860,8 +882,8 @@ func (s *sim) stragglerAct(plan int) {
 	}
 }
 
-// setterLoad/Act mirror event.setMessage: live writes the message,
-// armed writes under the mutex with a recheck, sealed states drop.
+// setterLoad/Act mirror event.setMessage: active writes the message
+// under the mutex with a recheck, a sealed state drops.
 func (s *sim) setterLoad(plan int) {
 	p := &s.plans[plan]
 	p.loadGen = s.ev.gen
@@ -869,17 +891,15 @@ func (s *sim) setterLoad(plan int) {
 	switch {
 	case p.loadGen != p.refGen:
 		p.mode = modeSetDrop
-	case p.loadState == walLive:
-		p.mode = modeSetLive
-	case p.loadState == walArmed:
-		p.mode = modeSetArmed
+	case p.loadState == walActive:
+		p.mode = modeSetGuarded
 	default:
 		p.mode = modeSetDrop
 	}
 }
 
 func (s *sim) setterActRunnable(plan int) bool {
-	return s.plans[plan].mode != modeSetArmed || !s.ev.muHeld
+	return s.plans[plan].mode != modeSetGuarded || !s.ev.muHeld
 }
 
 func (s *sim) setterAct(plan int) {
@@ -887,12 +907,9 @@ func (s *sim) setterAct(plan int) {
 	p.actGen = s.ev.gen
 	p.actState = s.ev.state
 	switch p.mode {
-	case modeSetLive:
-		s.ev.msg = p.msg
-		p.landed = true
-	case modeSetArmed:
+	case modeSetGuarded:
 		s.acquireMu()
-		if s.ev.gen == p.refGen && s.ev.state == walArmed {
+		if s.ev.gen == p.refGen && s.ev.state == walActive {
 			s.ev.msg = p.msg
 			p.landed = true
 		}
@@ -1082,15 +1099,10 @@ func verifySchedule(t *testing.T, s *sim, replay bool) {
 		p := &s.plans[i]
 		want := false
 		switch p.mode {
-		case modeLive, modeSetLive:
-			// A live load with a matching generation lands
-			// unconditionally at act — even across a seal or recycle
-			// (the documented residual).
-			want = p.loadGen == p.refGen
-		case modeArmed, modeSetArmed:
-			// An armed load lands iff the act-time recheck still sees
-			// the same generation in the armed state.
-			want = p.actGen == p.refGen && p.actState == walArmed
+		case modeGuarded, modeSetGuarded:
+			// A guarded load lands iff the act-time recheck still sees
+			// the same generation in the active state.
+			want = p.actGen == p.refGen && p.actState == walActive
 		}
 		if p.landed != want {
 			t.Fatalf("straggler %d: landed=%v, re-derived=%v (load gen %d state %v, act gen %d state %v)\nschedule: %s",
@@ -1173,7 +1185,7 @@ func addOp(key string) simStep {
 	real := func(ev *event, _ *sim) { ev.append(genOf(ev), fieldOf(key, key)) }
 	return simStep{
 		name:     "add-" + key,
-		runnable: func(s *sim) bool { return s.ev.state != walArmed || !s.ev.muHeld },
+		runnable: func(s *sim) bool { return s.ev.state == walSealed || !s.ev.muHeld },
 		run:      run,
 		real:     real,
 	}
@@ -1181,15 +1193,18 @@ func addOp(key string) simStep {
 
 func postOp(key string) simStep {
 	return simStep{
-		name: "post-" + key,
-		run:  func(s *sim) { s.simAppendSealed(key) },
+		name:     "post-" + key,
+		runnable: func(s *sim) bool { return !s.ev.muHeld },
+		run: func(s *sim) {
+			s.acquireMu()
+			s.simAppendSealed(key)
+			s.releaseMu()
+		},
 		// The real owner post-seal fragment, as inlined in
-		// annotatePostSeal: lock only when the event was armed, append.
+		// annotatePostSeal: take the append mutex, append.
 		real: func(ev *event, _ *sim) {
-			if walState(ev.state.Load()&walStateMask) == walSealedArmed {
-				ev.mu.Lock()
-				defer ev.mu.Unlock()
-			}
+			ev.mu.Lock()
+			defer ev.mu.Unlock()
 			ev.fields = append(ev.fields, fieldOf(key, key))
 		},
 	}
@@ -1198,18 +1213,9 @@ func postOp(key string) simStep {
 func sealOp() simStep {
 	return simStep{
 		name:     "seal",
-		runnable: func(s *sim) bool { return s.ev.state != walArmed || !s.ev.muHeld },
+		runnable: func(s *sim) bool { return s.ev.state == walSealed || !s.ev.muHeld },
 		run:      func(s *sim) { s.simSeal() },
 		real:     func(ev *event, _ *sim) { ev.seal() },
-	}
-}
-
-func armOp() simStep {
-	return simStep{
-		name:     "arm",
-		runnable: func(s *sim) bool { return !s.ev.muHeld },
-		run:      func(s *sim) { s.simArm() },
-		real:     func(ev *event, _ *sim) { ev.arm() },
 	}
 }
 
@@ -1237,8 +1243,7 @@ func resetOp(flag string) simStep {
 
 // stragglerSteps returns the load/act step pair for one append
 // straggler. The load mirrors the real append's single state load; the
-// act mirrors the post-load fragment (live: unconditional append —
-// the documented residual; armed: lock + recheck + append).
+// act mirrors the post-load fragment (lock + recheck + append).
 func stragglerSteps(name string, plan int, refGen uint64, key string) []simStep {
 	return []simStep{
 		{name: name + "-load", run: func(s *sim) { s.stragglerLoad(plan) }},
@@ -1249,14 +1254,10 @@ func stragglerSteps(name string, plan int, refGen uint64, key string) []simStep 
 			real: func(ev *event, s *sim) {
 				p := &s.plans[plan]
 				switch p.mode {
-				case modeLive:
-					// The documented residual: the load predated the
-					// seal/recycle; the append lands regardless.
-					ev.fields = append(ev.fields, fieldOf(key, key))
-				case modeArmed:
+				case modeGuarded:
 					ev.mu.Lock()
 					if cur := ev.state.Load(); cur>>walStateBits == p.refGen &&
-						walState(cur&walStateMask) == walArmed {
+						walState(cur&walStateMask) == walActive {
 						ev.fields = append(ev.fields, fieldOf(key, key))
 					}
 					ev.mu.Unlock()
@@ -1267,7 +1268,7 @@ func stragglerSteps(name string, plan int, refGen uint64, key string) []simStep 
 }
 
 // setterSteps returns the load/act pair for one SetMessage straggler
-// (the armed-mu discipline pinned in T3).
+// (the guarded-mu discipline pinned in T3).
 func setterSteps(name string, plan int, refGen uint64, msg string) []simStep {
 	return []simStep{
 		{name: name + "-load", run: func(s *sim) { s.setterLoad(plan) }},
@@ -1278,12 +1279,10 @@ func setterSteps(name string, plan int, refGen uint64, msg string) []simStep {
 			real: func(ev *event, s *sim) {
 				p := &s.plans[plan]
 				switch p.mode {
-				case modeSetLive:
-					ev.msg = msg
-				case modeSetArmed:
+				case modeSetGuarded:
 					ev.mu.Lock()
 					if cur := ev.state.Load(); cur>>walStateBits == p.refGen &&
-						walState(cur&walStateMask) == walArmed {
+						walState(cur&walStateMask) == walActive {
 						ev.msg = msg
 					}
 					ev.mu.Unlock()
@@ -1293,21 +1292,14 @@ func setterSteps(name string, plan int, refGen uint64, msg string) []simStep {
 	}
 }
 
-// snapshotSteps returns the lock/copy/unlock triple. Snapshots are the
-// armed watchdog read (the protocol's usage contract), so the lock is
-// only runnable while the event is armed and the mutex is free.
+// snapshotSteps returns the lock/copy/unlock triple. The watchdog
+// snapshot is guarded: the lock is runnable whenever the mutex is free,
+// and the real snapshotFields refuses only a stale generation.
 func snapshotSteps() []simStep {
 	lock := simStep{
-		name: "snap-lock",
-		// The watchdog snapshots armed events; once armed, a snapshot
-		// may be taken before or after the seal (sealedArmed) whenever
-		// the mutex is free — the real snapshotFields has no state
-		// check. Live-state snapshots are excluded by the usage
-		// contract (they would race the owner's lock-free fast path).
-		runnable: func(s *sim) bool {
-			return (s.ev.state == walArmed || s.ev.state == walSealedArmed) && !s.ev.muHeld
-		},
-		run: func(s *sim) { s.acquireMu() },
+		name:     "snap-lock",
+		runnable: func(s *sim) bool { return !s.ev.muHeld },
+		run:      func(s *sim) { s.acquireMu() },
 	}
 	copy := simStep{
 		name: "snap-copy",
@@ -1318,7 +1310,11 @@ func snapshotSteps() []simStep {
 			})
 		},
 		real: func(ev *event, s *sim) {
-			s.realSnapshots = append(s.realSnapshots, fieldKeys(ev.snapshotFields()))
+			snap, ok := ev.snapshotFields(genOf(ev))
+			if !ok {
+				snap = nil
+			}
+			s.realSnapshots = append(s.realSnapshots, fieldKeys(snap))
 		},
 	}
 	unlock := simStep{name: "snap-unlock", run: func(s *sim) { s.releaseMu() }}
@@ -1342,7 +1338,7 @@ func runScenario(t *testing.T, label string, actors []simActor, base *sim, repla
 
 // Scenario tests
 
-// TestLoomLiteSealRace: unarmed owner sealing while two current-gen
+// TestLoomLiteSealRace: owner sealing while two current-gen
 // stragglers are in flight. Every schedule must produce a protocol-
 // legal field history; the real event must match the shadow. Raw
 // multinomial: 9!/(5!·2!·2!) = 756 schedules.
@@ -1361,27 +1357,27 @@ func TestLoomLiteSealRace(t *testing.T) {
 	runScenario(t, "seal-race", []simActor{owner, s1, s2}, base, true, 756)
 }
 
-// TestLoomLiteArmedSnapshot: armed owner sealing under the mutex while
-// a straggler and a snapshotter interleave. The arm-before-snapshot
-// usage constraint trims the raw multinomial 10!/(5!·2!·3!) = 2520.
-func TestLoomLiteArmedSnapshot(t *testing.T) {
+// TestLoomLiteSnapshot: owner sealing under the mutex while a
+// straggler and a snapshotter interleave. Snapshots are guarded like
+// appends, so the snapshotter needs no arm step.
+func TestLoomLiteSnapshot(t *testing.T) {
 	base := newSim(1, 1)
 	base.plans[0] = stragglerPlan{refGen: 1, key: "s1"}
 	base.postKeys = []string{"o.outcome"}
 
 	owner := simActor{name: "owner", steps: []simStep{
-		armOp(), addOp("o1"), addOp("o2"), sealOp(), postOp("o.outcome"),
+		addOp("o1"), addOp("o2"), sealOp(), postOp("o.outcome"),
 	}}
 	s1 := simActor{name: "s1", steps: stragglerSteps("s1", 0, 1, "s1")}
 	snap := simActor{name: "snap", steps: snapshotSteps()}
-	runScenario(t, "armed-snapshot", []simActor{owner, s1, snap}, base, true, 264)
+	runScenario(t, "snapshot", []simActor{owner, s1, snap}, base, true, 147)
 }
 
 // TestLoomLiteRecycleStale: request 1 seals and releases; request 2
 // recycles the event (reset bumps the generation); a stale straggler
 // holding request 1's generation interleaves everywhere. Its write may
-// land only when its LOAD predated request 1's seal (the documented
-// residual); a post-recycle load sees the new generation and drops.
+// land only if its in-lock recheck still sees the old generation
+// active; a post-seal or post-recycle recheck drops.
 // The release-before-reset pool rule trims the raw multinomial
 // 9!/(4!·3!·2!) = 1260.
 func TestLoomLiteRecycleStale(t *testing.T) {
@@ -1398,42 +1394,32 @@ func TestLoomLiteRecycleStale(t *testing.T) {
 	runScenario(t, "recycle-stale", []simActor{owner1, stale, owner2}, base, true, 36)
 }
 
-// TestLoomLiteArmedTwoStragglers: the largest state space — two
-// stragglers and a snapshotter around an armed seal. Raw multinomial:
-// 11!/(4!·2!·2!·3!) = 69,300 schedules.
-func TestLoomLiteArmedTwoStragglers(t *testing.T) {
+// TestLoomLiteTwoStragglers: two stragglers and a snapshotter around a
+// seal. Raw multinomial: 11!/(4!·2!·2!·3!) = 69,300 schedules.
+func TestLoomLiteTwoStragglers(t *testing.T) {
 	base := newSim(1, 2)
 	base.plans[0] = stragglerPlan{refGen: 1, key: "s1"}
 	base.plans[1] = stragglerPlan{refGen: 1, key: "s2"}
 	base.postKeys = []string{"o.outcome"}
 
 	owner := simActor{name: "owner", steps: []simStep{
-		armOp(), addOp("o1"), sealOp(), postOp("o.outcome"),
+		addOp("o1"), sealOp(), postOp("o.outcome"),
 	}}
 	s1 := simActor{name: "s1", steps: stragglerSteps("s1", 0, 1, "s1")}
 	s2 := simActor{name: "s2", steps: stragglerSteps("s2", 1, 1, "s2")}
 	snap := simActor{name: "snap", steps: snapshotSteps()}
-	runScenario(t, "armed-two-stragglers", []simActor{owner, s1, s2, snap}, base, true, 8756)
+	runScenario(t, "two-stragglers", []simActor{owner, s1, s2, snap}, base, true, 3492)
 }
 
-// TestLoomLiteSetterRaces: SetMessage stragglers (unarmed and armed).
-// The message may change only when the setter's load saw a live/armed
-// state (armed: recheck at act); a post-seal load never writes.
+// TestLoomLiteSetterRaces: a SetMessage straggler interleaved with the
+// owner. The message may change only when the setter's in-lock recheck
+// still sees the old generation active; a post-seal load never writes.
 func TestLoomLiteSetterRaces(t *testing.T) {
-	t.Run("unarmed", func(t *testing.T) {
-		base := newSim(1, 1)
-		base.plans[0] = stragglerPlan{refGen: 1, msg: "stale-msg"}
-		owner := simActor{name: "owner", steps: []simStep{addOp("o1"), sealOp()}}
-		set := simActor{name: "set", steps: setterSteps("set", 0, 1, "stale-msg")}
-		runScenario(t, "setter-unarmed", []simActor{owner, set}, base, true, 6)
-	})
-	t.Run("armed", func(t *testing.T) {
-		base := newSim(1, 1)
-		base.plans[0] = stragglerPlan{refGen: 1, msg: "stale-msg"}
-		owner := simActor{name: "owner", steps: []simStep{armOp(), addOp("o1"), sealOp()}}
-		set := simActor{name: "set", steps: setterSteps("set", 0, 1, "stale-msg")}
-		runScenario(t, "setter-armed", []simActor{owner, set}, base, true, 10)
-	})
+	base := newSim(1, 1)
+	base.plans[0] = stragglerPlan{refGen: 1, msg: "stale-msg"}
+	owner := simActor{name: "owner", steps: []simStep{addOp("o1"), sealOp()}}
+	set := simActor{name: "set", steps: setterSteps("set", 0, 1, "stale-msg")}
+	runScenario(t, "setter", []simActor{owner, set}, base, true, 6)
 }
 
 //
@@ -1457,8 +1443,9 @@ func TestLoomLiteSetterRaces(t *testing.T) {
 //     the request context must never corrupt the pool or a later
 //     request.
 //
-// Armed events serialize appends under the per-event mutex, so every
-// phase also runs armed; TestStragglerArmedBurst exercises the mutex
+// Every event is guarded: appends serialize under the per-event mutex,
+// so a pre-seal straggler write lands (serialized with the owner's) and
+// a post-seal write drops. TestStragglerGuardedBurst exercises the mutex
 // discipline concurrently under -race.
 
 // matrixPhase enumerates the staged-End boundaries.
@@ -1490,9 +1477,9 @@ func (p matrixPhase) live() bool { return p == phasePreAnnotate || p == phasePre
 // stragglerWrite fires all six public mutation shapes through ctx —
 // the full straggler vocabulary the matrix applies at every phase.
 func stragglerWrite(ctx context.Context) {
-	// SetMessage/SetLevel fire FIRST: they are the shapes whose armed
+	// SetMessage/SetLevel fire FIRST: they are the shapes whose guarded
 	// serialization under the event mutex is the review-pinned
-	// discipline (TestArmedSetterSerialization), so putting them first
+	// discipline (TestSetterSerialization), so putting them first
 	// widens the race window the concurrent tests need.
 	SetMessage(ctx, "s-message")
 	SetLevel(ctx, LevelError)
@@ -1542,7 +1529,7 @@ func stagedEnd(op *Operation, fireAt matrixPhase, fire func(ctx context.Context)
 	if fireAt == phasePrePostSeal {
 		fire(op.Context())
 	}
-	op.annotatePostSeal(commitInput{
+	op.annotatePostSeal(&commitInput{
 		outcome:  outcome,
 		code:     code,
 		duration: duration,
@@ -1552,7 +1539,7 @@ func stagedEnd(op *Operation, fireAt matrixPhase, fire func(ctx context.Context)
 	if fireAt == phasePreCommit {
 		fire(op.Context())
 	}
-	return op.commit(commitInput{
+	return op.commit(&commitInput{
 		outcome:  outcome,
 		code:     code,
 		duration: duration,
@@ -1561,7 +1548,7 @@ func stagedEnd(op *Operation, fireAt matrixPhase, fire func(ctx context.Context)
 	})
 }
 
-// TestStragglerInjectionMatrix drives every phase in both armed modes
+// TestStragglerInjectionMatrix drives every phase
 // and compares the committed record against its control (the same
 // writes as owner writes for live phases, no writes for sealed ones).
 func TestStragglerInjectionMatrix(t *testing.T) {
@@ -1571,108 +1558,100 @@ func TestStragglerInjectionMatrix(t *testing.T) {
 		phasePostRelease, phasePostRecycle,
 	}
 	for _, phase := range phases {
-		for _, armed := range []bool{false, true} {
-			t.Run(fmt.Sprintf("phase=%s armed=%v", phase, armed), func(t *testing.T) {
-				live := phase.live()
+		t.Run(fmt.Sprintf("phase=%s", phase), func(t *testing.T) {
+			live := phase.live()
 
-				// Control run: identical setup, straggler writes made by
-				// the owner (live) or not at all (sealed), ended for real.
-				controlSink := &matrixSink{}
-				cop := Start(context.Background(),
-					MustCompile(Config{Sink: controlSink, SamplingRate: 1}),
-					OperationStart{Domain: DomainJob, Name: "m"})
-				if armed {
-					cop.ev.arm()
-				}
-				if live {
-					stragglerWrite(cop.Context())
-				}
-				cop.End(nil)
-				if len(controlSink.capture) != 1 {
-					t.Fatalf("control captured %d events", len(controlSink.capture))
-				}
-				control := controlSink.capture[0]
+			// Control run: identical setup, straggler writes made by
+			// the owner (live) or not at all (sealed), ended for real.
+			controlSink := &matrixSink{}
+			cop := Start(context.Background(),
+				MustCompile(Config{Sink: controlSink, SamplingRate: 1}),
+				OperationStart{Domain: DomainJob, Name: "m"})
+			if live {
+				stragglerWrite(cop.Context())
+			}
+			cop.End(nil)
+			if len(controlSink.capture) != 1 {
+				t.Fatalf("control captured %d events", len(controlSink.capture))
+			}
+			control := controlSink.capture[0]
 
-				// Matrix run.
-				sink := &matrixSink{}
-				rt := MustCompile(Config{Sink: sink, SamplingRate: 1})
-				op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "m"})
-				ctx := op.Context()
-				if armed {
-					op.ev.arm()
-				}
-				// The state assertion runs at the phase boundary, right
-				// after the straggler fires: live phases must still be
-				// live/armed, sealed phases must be sealed.
-				checkState := func(wantLive bool) {
-					state := walState(op.ev.state.Load() & walStateMask)
-					if wantLive {
-						if state != walLive && state != walArmed {
-							t.Fatalf("phase %v: state %v, want live/armed", phase, state)
-						}
-					} else if state != walSealed && state != walSealedArmed {
-						t.Fatalf("phase %v: state %v, want sealed", phase, state)
-					}
-				}
-				fire := func(context.Context) {
-					stragglerWrite(ctx)
-					checkState(phase.live())
-				}
-
-				switch phase {
-				case phaseInWrite:
-					// The sink fires inside commit's emit: post-seal.
-					sink.fire = func() { fire(ctx) }
-					stagedEnd(op, -1, fire)
-				case phasePostCommitPreRelease:
-					stagedEnd(op, -1, fire)
-					fire(ctx)
-					op.ev.release()
-				case phasePostRelease:
-					stagedEnd(op, -1, fire)
-					op.ev.release()
-					fire(ctx)
-				case phasePostRecycle:
-					stagedEnd(op, -1, fire)
-					op.ev.release()
-					op2 := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "two"})
-					Add(op2.Context(), "own", "field")
-					op2.End(nil)
-					fire(ctx) // stale writes must drop everywhere
-				default:
-					stagedEnd(op, phase, fire)
-				}
-
-				// After the full staged End the event is sealed in every
-				// mode.
+			// Matrix run.
+			sink := &matrixSink{}
+			rt := MustCompile(Config{Sink: sink, SamplingRate: 1})
+			op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "m"})
+			ctx := op.Context()
+			// The state assertion runs at the phase boundary, right
+			// after the straggler fires: pre-seal phases must still be
+			// active, post-seal phases must be sealed.
+			checkState := func(wantActive bool) {
 				state := walState(op.ev.state.Load() & walStateMask)
-				if state != walSealed && state != walSealedArmed {
-					t.Fatalf("phase %v: final state %v, want sealed", phase, state)
+				if wantActive {
+					if state != walActive {
+						t.Fatalf("phase %v: state %v, want active", phase, state)
+					}
+				} else if state != walSealed {
+					t.Fatalf("phase %v: state %v, want sealed", phase, state)
 				}
+			}
+			fire := func(context.Context) {
+				stragglerWrite(ctx)
+				checkState(phase.live())
+			}
 
-				label := fmt.Sprintf("phase=%s armed=%v", phase, armed)
-				if phase == phasePostRecycle {
-					// Two captures: the matrix event and the second
-					// request's own event. The first must equal the
-					// control; the second must carry only its own data.
-					if len(sink.capture) != 2 {
-						t.Fatalf("%s: captured %d events, want 2", label, len(sink.capture))
-					}
-					compareLifecycleLines(t, control, sink.capture[0], label)
-					if !bytes.Contains(sink.capture[1], []byte(`"own":"field"`)) {
-						t.Fatalf("%s: second event lost its own field: %s", label, sink.capture[1])
-					}
-					if bytes.Contains(sink.capture[1], []byte(`"s-add"`)) {
-						t.Fatalf("%s: straggler leaked into the second event: %s", label, sink.capture[1])
-					}
-					return
-				}
-				if len(sink.capture) != 1 {
-					t.Fatalf("%s: captured %d events, want 1", label, len(sink.capture))
+			switch phase {
+			case phaseInWrite:
+				// The sink fires inside commit's emit: post-seal.
+				sink.fire = func() { fire(ctx) }
+				stagedEnd(op, -1, fire)
+			case phasePostCommitPreRelease:
+				stagedEnd(op, -1, fire)
+				fire(ctx)
+				op.ev.release()
+			case phasePostRelease:
+				stagedEnd(op, -1, fire)
+				op.ev.release()
+				fire(ctx)
+			case phasePostRecycle:
+				stagedEnd(op, -1, fire)
+				op.ev.release()
+				op2 := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "two"})
+				Add(op2.Context(), "own", "field")
+				op2.End(nil)
+				fire(ctx) // stale writes must drop everywhere
+			default:
+				stagedEnd(op, phase, fire)
+			}
+
+			// After the full staged End the event is sealed in every
+			// mode.
+			state := walState(op.ev.state.Load() & walStateMask)
+			if state != walSealed {
+				t.Fatalf("phase %v: final state %v, want sealed", phase, state)
+			}
+
+			label := fmt.Sprintf("phase=%s", phase)
+			if phase == phasePostRecycle {
+				// Two captures: the matrix event and the second
+				// request's own event. The first must equal the
+				// control; the second must carry only its own data.
+				if len(sink.capture) != 2 {
+					t.Fatalf("%s: captured %d events, want 2", label, len(sink.capture))
 				}
 				compareLifecycleLines(t, control, sink.capture[0], label)
-			})
-		}
+				if !bytes.Contains(sink.capture[1], []byte(`"own":"field"`)) {
+					t.Fatalf("%s: second event lost its own field: %s", label, sink.capture[1])
+				}
+				if bytes.Contains(sink.capture[1], []byte(`"s-add"`)) {
+					t.Fatalf("%s: straggler leaked into the second event: %s", label, sink.capture[1])
+				}
+				return
+			}
+			if len(sink.capture) != 1 {
+				t.Fatalf("%s: captured %d events, want 1", label, len(sink.capture))
+			}
+			compareLifecycleLines(t, control, sink.capture[0], label)
+		})
 	}
 }
 
@@ -1754,18 +1733,17 @@ func verifyPoolCleanLine(t *testing.T, lines [][]byte) bool {
 	return true
 }
 
-// TestStragglerArmedBurst releases straggler goroutines on an armed
+// TestStragglerGuardedBurst releases straggler goroutines on a guarded
 // event while the owner commits: the per-event mutex serializes every
-// append, so under -race this pins the armed-seal discipline. The
+// append, so under -race this pins the guard discipline. The
 // assertions are interleaving-tolerant (each write either lands
 // pre-seal or drops post-seal; never a torn state).
-func TestStragglerArmedBurst(t *testing.T) {
+func TestStragglerGuardedBurst(t *testing.T) {
 	for round := range 50 {
 		sink := &matrixSink{}
 		rt := MustCompile(Config{Sink: sink, SamplingRate: 1})
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "burst"})
 		ctx := op.Context()
-		op.ev.arm()
 
 		var mu sync.Mutex
 		start := sync.NewCond(&mu)
@@ -1781,7 +1759,7 @@ func TestStragglerArmedBurst(t *testing.T) {
 					start.Wait()
 				}
 				mu.Unlock()
-				stragglerWrite(ctx) // armed: serialized under ev.mu
+				stragglerWrite(ctx) // guarded: serialized under ev.mu
 			})
 		}
 		// release all stragglers at once (logrus start-line technique)
@@ -1794,7 +1772,7 @@ func TestStragglerArmedBurst(t *testing.T) {
 		mu.Unlock()
 
 		// The owner ends while the stragglers are mid-flight: guarded
-		// appends land only while the event is armed (pre-seal).
+		// appends land only while the event is active (pre-seal).
 		op.End(nil)
 		wg.Wait()
 
@@ -1823,46 +1801,40 @@ func TestStragglerArmedBurst(t *testing.T) {
 // it — so the matrix runs at rate 0: zero captures is the oracle. The
 // hasErr field is asserted directly as well.
 func TestStragglerSealedErrorNoLatch(t *testing.T) {
-	for _, armed := range []bool{false, true} {
-		for _, phase := range []matrixPhase{phasePreScan, phasePrePostSeal, phasePreCommit} {
-			t.Run(fmt.Sprintf("phase=%s armed=%v", phase, armed), func(t *testing.T) {
-				sink := &matrixSink{}
-				rt := MustCompile(Config{Sink: sink, SamplingRate: 0}) // healthy drops
-				op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "latch"})
-				ctx := op.Context()
-				if armed {
-					op.ev.arm()
-				}
-				stagedEnd(op, phase, func(context.Context) {
-					Error(ctx, errors.New("s-error"))
-				})
-				if op.ev.hasErr {
-					t.Fatalf("phase %v armed=%v: hasErr latched by a sealed-phase straggler", phase, armed)
-				}
-				if len(sink.capture) != 0 {
-					t.Fatalf("phase %v armed=%v: %d events at rate 0 — the latched "+
-						"hasErr bypassed sampling", phase, armed, len(sink.capture))
-				}
+	for _, phase := range []matrixPhase{phasePreScan, phasePrePostSeal, phasePreCommit} {
+		t.Run(fmt.Sprintf("phase=%s", phase), func(t *testing.T) {
+			sink := &matrixSink{}
+			rt := MustCompile(Config{Sink: sink, SamplingRate: 0}) // healthy drops
+			op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "latch"})
+			ctx := op.Context()
+			stagedEnd(op, phase, func(context.Context) {
+				Error(ctx, errors.New("s-error"))
 			})
-		}
+			if op.ev.hasErr {
+				t.Fatalf("phase %v: hasErr latched by a sealed-phase straggler", phase)
+			}
+			if len(sink.capture) != 0 {
+				t.Fatalf("phase %v: %d events at rate 0 — the latched "+
+					"hasErr bypassed sampling", phase, len(sink.capture))
+			}
+		})
 	}
 }
 
-// TestArmedSetterSerialization is the deterministic companion to the
-// -race burst: concurrent SetMessage/SetLevel calls on an armed event
-// must serialize under the event mutex. A regression dropping the mu
-// is a plain data race, so this test's detection power is the -race
-// window — it widens that window by hammering ONLY the setter shapes
-// (the ones the fix serialized) across many rounds while the owner
-// seals. The assertions (single event, sane message) hold under both
-// the fixed and the reverted code; the race detector is the oracle.
-func TestArmedSetterSerialization(t *testing.T) {
+// TestSetterSerialization is the deterministic companion to the -race
+// burst: concurrent SetMessage/SetLevel calls on an open event must
+// serialize under the event mutex. A regression dropping the mu is a
+// plain data race, so this test's detection power is the -race window —
+// it widens that window by hammering ONLY the setter shapes across many
+// rounds while the owner seals.
+// The assertions (single event, sane message) hold under both the fixed
+// and the reverted code; the race detector is the oracle.
+func TestSetterSerialization(t *testing.T) {
 	for round := range 40 {
 		sink := &matrixSink{}
 		rt := MustCompile(Config{Sink: sink, SamplingRate: 1})
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "setter-race"})
 		ctx := op.Context()
-		op.ev.arm()
 
 		const setters = 6
 		const writes = 2000
@@ -1875,7 +1847,7 @@ func TestArmedSetterSerialization(t *testing.T) {
 				}
 			})
 		}
-		// The owner seals while the setters hammer: armed serialization
+		// The owner seals while the setters hammer: guarded serialization
 		// means every write either lands pre-seal or drops post-seal.
 		op.End(nil)
 		wg.Wait()
