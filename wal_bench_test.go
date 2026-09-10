@@ -1,13 +1,10 @@
 package hc
 
-// Benchmarks for the WAL (event) state machine itself — the append
-// paths, the arming protocol (amendment 1), sealing, straggler no-ops
-// (amendment 20), the watchdog snapshot, and pool recycling. The
-// lifecycle-level gates live in bench_test.go and the benches module;
-// these isolate the wal.go primitives so the armed protocol that v1.1's
-// watchdog will exercise has a perf record before it ships. (The
-// owner's post-seal appends have no primitive since the modernize
-// pass: annotatePostSeal appends directly under one bracketed lock.)
+// Benchmarks for the WAL (event) state machine itself — the guarded
+// append path, sealing, straggler no-ops, the watchdog snapshot, the
+// setters, and pool recycling. The lifecycle-level gates live in
+// bench_test.go and the benches module; these isolate the wal.go
+// primitives so the watchdog protocol has a perf record.
 
 import (
 	"errors"
@@ -22,32 +19,11 @@ const benchPre = 4096
 
 func benchField() Field { return fieldStr("user_id", "u_8472") }
 
-// BenchmarkEventAppendLive is the unarmed fast path: one atomic load,
-// one slice append (amendment 1's ~1 ns budget line).
-func BenchmarkEventAppendLive(b *testing.B) {
+// BenchmarkEventAppendGuarded is the append hot path: one atomic load,
+// one mutex round trip, one slice append. Every open event is guarded,
+// so this is the per-field cost the request pays.
+func BenchmarkEventAppendGuarded(b *testing.B) {
 	ev := newEvent()
-	ev.fields = make([]Field, 0, benchPre)
-	gen := ev.state.Load() >> walStateBits
-	f := benchField()
-	b.ReportAllocs()
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
-		if n&(benchPre-1) == 0 && n > 0 {
-			b.StopTimer()
-			ev.fields = ev.fields[:0]
-			b.StartTimer()
-		}
-		ev.append(gen, f)
-	}
-	ev.release()
-}
-
-// BenchmarkEventAppendArmed is the guarded path: the same append with
-// the event armed — mutex round trip per field. The armed/live ratio is
-// the cost the v1.1 watchdog imposes on stalled requests.
-func BenchmarkEventAppendArmed(b *testing.B) {
-	ev := newEvent()
-	ev.arm(genOf(ev))
 	ev.fields = make([]Field, 0, benchPre)
 	gen := ev.state.Load() >> walStateBits
 	f := benchField()
@@ -65,7 +41,7 @@ func BenchmarkEventAppendArmed(b *testing.B) {
 }
 
 // BenchmarkEventAppendStaleGen is the straggler no-op for a recycled
-// event: generation mismatch, one load and return (amendment 20).
+// event: generation mismatch, one load and return.
 func BenchmarkEventAppendStaleGen(b *testing.B) {
 	ev := newEvent()
 	gen := ev.state.Load() >> walStateBits
@@ -92,33 +68,9 @@ func BenchmarkEventAppendSealed(b *testing.B) {
 	ev.release()
 }
 
-// BenchmarkEventArm is the live→armed transition (watchdog arming).
-func BenchmarkEventArm(b *testing.B) {
-	events := make([]*event, benchPre)
-	rebuild := func() {
-		for i := range events {
-			events[i] = newEvent()
-		}
-	}
-	rebuild()
-	b.ReportAllocs()
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
-		if n&(benchPre-1) == 0 && n > 0 {
-			b.StopTimer()
-			rebuild()
-			b.StartTimer()
-		}
-		e := events[n&(benchPre-1)]
-		e.arm(genOf(e))
-	}
-	for _, ev := range events {
-		ev.release()
-	}
-}
-
-// BenchmarkEventSealLive is the unarmed seal: one CAS, no mutex.
-func BenchmarkEventSealLive(b *testing.B) {
+// BenchmarkEventSeal is the seal path End and release run: lock, set
+// the sealed bit, unlock.
+func BenchmarkEventSeal(b *testing.B) {
 	events := make([]*event, benchPre)
 	rebuild := func() {
 		for i := range events {
@@ -141,50 +93,22 @@ func BenchmarkEventSealLive(b *testing.B) {
 	}
 }
 
-// BenchmarkEventSealArmed is the armed seal: lock, store SealedArmed,
-// unlock — the path a watchdog-stalled request takes through End.
-func BenchmarkEventSealArmed(b *testing.B) {
-	events := make([]*event, benchPre)
-	rebuild := func() {
-		for i := range events {
-			ev := newEvent()
-			ev.arm(genOf(ev))
-			events[i] = ev
-		}
-	}
-	rebuild()
-	b.ReportAllocs()
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
-		if n&(benchPre-1) == 0 && n > 0 {
-			b.StopTimer()
-			rebuild()
-			b.StartTimer()
-		}
-		events[n&(benchPre-1)].seal()
-	}
-	for _, ev := range events {
-		ev.release()
-	}
-}
-
-// BenchmarkEventSnapshotFields is the watchdog's read of an armed WAL:
-// copy of the current tail under the append mutex.
+// BenchmarkEventSnapshotFields is the watchdog's read of a WAL: copy of
+// the current tail under the append mutex.
 func BenchmarkEventSnapshotFields(b *testing.B) {
 	ev := newEvent()
-	ev.arm(genOf(ev))
 	gen := ev.state.Load() >> walStateBits
 	for i := 0; i < 12; i++ {
 		ev.append(gen, fieldStr("k", "v"))
 	}
 	b.ReportAllocs()
 	for b.Loop() {
-		_, _ = ev.snapshotFields(genOf(ev))
+		_, _ = ev.snapshotFields(gen)
 	}
 	ev.release()
 }
 
-// BenchmarkEventSetError is the failure-path setter on a live event:
+// BenchmarkEventSetError is the failure-path setter on an open event:
 // structuredErrorField builds the map (message, type, cause) that every
 // failing request pays at End.
 func BenchmarkEventSetError(b *testing.B) {
@@ -205,7 +129,7 @@ func BenchmarkEventSetError(b *testing.B) {
 	ev.release()
 }
 
-// BenchmarkEventSetMessage is the message override on a live event.
+// BenchmarkEventSetMessage is the message override on an open event.
 func BenchmarkEventSetMessage(b *testing.B) {
 	ev := newEvent()
 	ref := &walRef{ev: ev, gen: ev.state.Load() >> walStateBits}
@@ -216,7 +140,7 @@ func BenchmarkEventSetMessage(b *testing.B) {
 	ev.release()
 }
 
-// BenchmarkEventSetLevel is the requested-level floor on a live event —
+// BenchmarkEventSetLevel is the requested-level floor on an open event —
 // the per-request write the middleware shapes make.
 func BenchmarkEventSetLevel(b *testing.B) {
 	ev := newEvent()

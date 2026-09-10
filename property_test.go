@@ -782,33 +782,31 @@ func TestChainSamplerProperty(t *testing.T) {
 // sealed event: the WAL, the message, the requested level, and the
 // error latch.
 type poolState struct {
-	fields      []Field
-	msg         string
-	level       Level
-	hasLevel    bool
-	hasErr      bool
-	sealed      bool
-	sealedArmed bool
+	fields   []Field
+	msg      string
+	level    Level
+	hasLevel bool
+	hasErr   bool
+	sealed   bool
 }
 
 func snapshotState(ev *event) poolState {
 	s := ev.state.Load()
 	state := walState(s & walStateMask)
 	return poolState{
-		fields:      append([]Field(nil), ev.fields...),
-		msg:         ev.msg,
-		level:       ev.requestedLevel,
-		hasLevel:    ev.hasRequestedLvl,
-		hasErr:      ev.hasErr,
-		sealed:      state == walSealed,
-		sealedArmed: state == walSealedArmed,
+		fields:   append([]Field(nil), ev.fields...),
+		msg:      ev.msg,
+		level:    ev.requestedLevel,
+		hasLevel: ev.hasRequestedLvl,
+		hasErr:   ev.hasErr,
+		sealed:   state == walSealed,
 	}
 }
 
 func statesEqual(a, b poolState) bool {
 	return a.msg == b.msg && a.level == b.level &&
 		a.hasLevel == b.hasLevel && a.hasErr == b.hasErr &&
-		a.sealed == b.sealed && a.sealedArmed == b.sealedArmed &&
+		a.sealed == b.sealed &&
 		reflect.DeepEqual(a.fields, b.fields)
 }
 
@@ -916,7 +914,6 @@ const (
 	opSetMsg
 	opSetLevel
 	opSetRoute
-	opArm
 	opEndErr
 	opEndPanic
 )
@@ -1091,8 +1088,6 @@ func decodeProgram(b []byte) lifeProgram {
 				route = fmt.Sprintf("/route-%d", c.next())
 			}
 			ops = append(ops, lifeOp{kind: opSetRoute, val: route})
-		case opArm:
-			ops = append(ops, lifeOp{kind: opArm})
 		case opEndErr:
 			var err error
 			switch c.next() % 4 {
@@ -1240,8 +1235,6 @@ func executeProgramOn(prog lifeProgram, op *Operation) {
 			SetLevel(ctx, o.val.(Level))
 		case opSetRoute:
 			SetRoute(ctx, o.val.(string))
-		case opArm:
-			op.ev.arm(genOf(op.ev))
 		case opEndErr:
 			if ended {
 				continue // one-shot End; later ends are no-ops
@@ -1334,9 +1327,6 @@ func buildModel(prog lifeProgram) *lifeModel {
 			if route := o.val.(string); route != "" {
 				m.append(fieldStr("http.route", route))
 			}
-		case opArm:
-			// arming serializes guarded appends; a sequential owner
-			// sees no behavioral difference
 		case opEndErr:
 			if e, ok := o.val.(error); ok && e != nil {
 				m.endErr = e
@@ -1888,9 +1878,6 @@ func seedPrograms() []seedProg {
 	// straggler-after-seal: writes after End must no-op.
 	add("straggler-after-seal", p(modeRate1, DomainJob,
 		strOp("k0", "before"), endErr(nil), strOp("k0", "after"), errOp("late"), intOp("op.code", 5)))
-	// arm-then-seal: guarded-mode lifecycle.
-	add("arm-then-seal", p(modeRate1, DomainHTTP,
-		lifeOp{kind: opArm}, strOp("http.path", "/x"), endErr(nil)))
 	// duplicate keys at the dedupe width boundaries (keys cycle k0-k4).
 	for _, w := range []int{1, 24, 25, 32, 33, 80} {
 		ops := make([]lifeOp, 0, w+1)
@@ -2143,7 +2130,6 @@ func encodeProgram(prog lifeProgram) []byte {
 				// decode rebuilds "/route-<digit>"; write the digit value
 				b = append(b, 2, route[len(route)-1]-'0')
 			}
-		case opArm:
 		case opEndErr:
 			if o.val == nil {
 				b = append(b, 0)

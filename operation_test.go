@@ -674,17 +674,16 @@ func TestConcurrentEndCharacterization(t *testing.T) {
 	}
 }
 
-// TestConcurrentEndArmed races End on an armed event: the armed-seal
-// mutex and the claim word must keep the whole race single-emission
-// and race-free (watchdog-style guarded appends interleave with the
-// End callers).
-func TestConcurrentEndArmed(t *testing.T) {
+// TestConcurrentEndGuarded races End on a guarded event: the seal mutex
+// and the claim word must keep the whole race single-emission and
+// race-free (concurrent guarded appends interleave with the End
+// callers).
+func TestConcurrentEndGuarded(t *testing.T) {
 	for round := range 25 {
 		ts := NewTestSink()
 		rt := MustCompile(Config{Sink: ts, SamplingRate: 1})
-		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "armed-race"})
+		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "guarded-race"})
 		ctx := op.Context()
-		op.ev.arm(genOf(op.ev))
 
 		var mu sync.Mutex
 		start := sync.NewCond(&mu)
@@ -733,7 +732,7 @@ func TestConcurrentEndArmed(t *testing.T) {
 		Add(op2.Context(), "clean", true)
 		op2.End(nil)
 		if len(ok.capture) != 1 || !bytes.Contains(ok.capture[0], []byte(`"clean":true`)) {
-			t.Fatalf("round %d: pool corrupted after the armed race", round)
+			t.Fatalf("round %d: pool corrupted after the guarded race", round)
 		}
 	}
 }

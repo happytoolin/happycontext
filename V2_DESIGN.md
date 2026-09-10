@@ -234,22 +234,28 @@ test passing first (§05's cautionary tale).
 | Disabled-level writes | ~3 ns | **no regression** |
 | BufferedSink append (v1.1) | n/a | **≤ 100 ns, never blocks** |
 
-**1.0.0 measurement note** (Go 1.27, Apple M4, quiet machine, `count=8`;
-raw runs and the cross-session check in `.bench/wal-check/`):
+**1.0.0 measurement note** (Go 1.27, Apple M4, interleaved A/B,
+`count=18`; raw runs and the cross-session check in `.bench/wal-check/`):
 
+- The 1.0.0 fix pass (pointer `commitInput` + inline claim) recovered the
+  modernize regression. The always-guarded pass (amendment 22) then
+  added 1.7–4.7 % to buy the post-End guarantee: EndDropPath
+  125 → 131 ns, custom sampler 120 → 125 ns, OperationLifecycle
+  253 → 257 ns, 12 fields 376 → 388 ns, dropped-8 338 → 347 ns.
+  Allocations are unchanged (2 per lifecycle).
 - The End-drop *segment* (sampler + release + pool) is ~43 ns, inside the
-  100 ns gate. The full field-less `End` that `BenchmarkEndDropPath`
-  times is 123 ns after the 1.0.0 fix pass (135–146 ns before it); the
-  benchmark name and the gate now name different scopes explicitly.
-- `OperationLifecycle` measures 250.1 ns / 2 al after the 1.0.0 fix pass
-  (259–284 ns before it) — at the ≤ 250 ns target within measurement
-  resolution.
-- The full dropped lifecycle with 8 fields measures 335 ns against the
+  100 ns gate. `BenchmarkEndDropPath` times the full field-less `End`
+  (131 ns); the gate and the benchmark name different scopes explicitly.
+- `OperationLifecycle` measures 257 ns / 2 al against the ≤ 250 ns
+  target: ~3 % over, accepted for 1.0 as the price of the always-guarded
+  protocol (a data race is worse than 3 %); tracked for 1.1.
+- The dropped lifecycle with 8 fields measures 347 ns against the
   ≤ 300 ns target; tracked.
-- EndDrop 123 ns and CustomSampler 117 ns are ~5 % faster than the
-  pre-modernize tree, so the pass recovered the 1.0.0 regression with
-  margin. Add single pair 19.4 ns / 0 al; first-party sink 12 fields
-  379–388 ns / 2 al (inside their gates).
+- Add single pair 19.4 ns / 0 al (session delta method; the shape is
+  noisy, ±40 % run to run — the guard adds ~0.8 ns per field).
+  First-party sink 12 fields 379–388 ns / 2 al (inside gate).
+  Disabled-level writes +4 % (the guard's per-append mutex); RateSampler
+  unchanged.
 
 
 Quality gates (all releases): matrix benchmarks at 0/8/32/128 fields,
@@ -269,11 +275,12 @@ via opencode) reviewed the locked design. Verdict: 4/4
 the ledger:
 
 1. **Arming protocol specified (was: "fast path never touches the
-   mutex" — false as stated).** Every append performs one atomic load
-   of the armed flag (~1 ns, budgeted in the 20 ns gate). Unarmed: pure
-   append. Armed: append takes the guarded-mode mutex; the watchdog
-   snapshots under the same mutex. The transition itself is a
-   mutex-protected flag flip — no torn records, `-race` clean.
+   mutex" — false as stated).** *Superseded by amendment 22: every
+   open event is guarded from creation.* Every append performs one
+   atomic load of the state flag (~1 ns, budgeted in the 20 ns gate).
+   Unarmed: pure append. Armed: append takes the guarded-mode mutex;
+   the watchdog snapshots under the same mutex. The transition itself
+   is a mutex-protected flag flip — no torn records, `-race` clean.
 2. **Sink concurrency contract added.** The watchdog may `Write`
    `operation_stalled` while the request goroutine later `Write`s the
    commit; the drainer writes concurrently by design. Contract: **Sink
@@ -364,9 +371,10 @@ fix, one integration decision, and a parking lot.
     possibly-reused buffer — a use-after-recycle bug class that v0's
     mutex-and-map hid but v2's pooling makes real (evlog calls this
     sealing and warns with dropped keys). Spec: every WAL mutation
-    checks a sealed flag (one atomic load, folded into the existing
-    armed-flag load); post-`End` writes are no-ops. Build debug mode
-    may log dropped keys.
+    checks a sealed flag (one atomic load, then a guarded recheck under
+    the append mutex); post-`End` writes are guaranteed no-ops even
+    across pool recycle (amendment 22). Build debug mode may log
+    dropped keys.
 21. **OTel: correlate, don't build — parked post-1.0.** Tracing stays
     out of scope; when integration happens it is a small bridge
     module in the adapter pattern (never core): stamp
@@ -376,6 +384,18 @@ fix, one integration decision, and a parking lot.
     standard backends ingest the events. The black-box timeline
     remains shelved per owner decision; if it ever ships it is framed
     as the no-tracer fallback, not a tracing substitute.
+22. **Always-guarded WAL (supersedes amendment 1).** Every open event
+    is guarded from creation: appends, setters, and snapshots serialize
+    under the per-event mutex, and `seal` takes the same mutex. The
+    earlier design ran the request on a lock-free fast path and accepted
+    a nanosecond-scale window where a write that began before `End`
+    could land in a recycled buffer. That window is a data race in a
+    public API, so 1.0 closes it structurally: a write after `End` is
+    guaranteed to be a no-op, including across pool recycle. Cost on the
+    1.0 gate machine: append 5.64 → 6.48 ns (+0.84 ns per field);
+    lifecycle +1.7–4.7 % (recorded in §4's 1.0.0 note). Concurrent `Add`
+    calls from child goroutines are now safe (serialized; order not
+    defined), so the “sole writer” warning is retired.
 
 Parking lot (noted, not scheduled): `fork`-style parent-ID
 correlation for child operations (one `ParentID` field); a redaction
@@ -428,7 +448,7 @@ Every question raised during design, and its final answer.
 | Event storage | typed `[]Field` WAL records — not a map, not a pre-encoded buffer |
 | Field order | insertion order; structural; no sort anywhere (removed in v0.5.0) |
 | Duplicate keys | pure append at Add; last-write-wins resolved at encode with an on-demand seen-set (amendment 3) |
-| Concurrency | request-confined; **one atomic armed-flag load per append**; guarded-mode mutex only when armed; Sinks must be concurrency-safe |
+| Concurrency | request-confined; one atomic load per append, then a guarded append under the per-event mutex; concurrent Adds serialize (order undefined); Sinks must be concurrency-safe |
 | Sink contract | `Write(ctx, *Record)` read-only view (slog.Handle shape); no clone; no retention; concurrency-safe |
 | Field introspection | `Lookup` + `Fields()` on SampleInput and Record; no live-Event access; `FromContext` removed |
 | Time field | completion-time RFC3339 string (v0 parity) by default; epoch-ms opt-in; start-reading reused for duration/timeline |
@@ -441,10 +461,10 @@ Every question raised during design, and its final answer.
 | Bridges | `New` only; `SinkOptions` removed entirely at 1.0 |
 | Sinks per config | single; compose (`BufferedSink`, custom fan-out with `Encoded()` reuse) |
 | Buffered sink | opt-in; drop-oldest after optional retry-backoff; counted; `Flush` at shutdown |
-| WAL lifecycle | sealed after `End` — straggler writes are no-ops (amendment 20) |
+| WAL lifecycle | sealed after `End` — straggler writes are guaranteed no-ops, including across pool recycle (amendment 22) |
 | Tracing / OTel | out of scope to build; correlate via bridge module post-1.0 (amendment 21); timeline shelved |
 | Destination adapters | bridges (slog/zap/zerolog) = formats, shipped at 1.0; `adapter/otlp` = the only first-party destination, post-1.0; per-vendor drains rejected — the Sink interface plus a documented recipe covers custom destinations |
-| Timeline / watchdog | off by default; arm-on-stall; `t_ms` only when armed |
+| Timeline / watchdog | off by default; snapshot-on-stall (the WAL needs no arming step); `t_ms` only while stalled |
 | Disk-backed WAL | rejected — shipper territory |
 | Compatibility window | none needed — zero users; `v2` is the only release line (owner, 2026-08-31), main frozen at v0.5.0; port-back lane retired |
 
@@ -464,7 +484,7 @@ Every question raised during design, and its final answer.
    PR there (the release workflow triggers on v2 pushes; CI gates v2
    PRs).
 2. **The break develops on v2** — sequenced PRs targeting the `v2`
-   branch: core first (W3 typed WAL with sealing and arming), then W5
+   branch: core first (W3 typed WAL with sealing and guarding), then W5
    Compile/Runtime, W4 Record/Sink, W7 lifecycle, W6 sampler, then W8
    bridges, W9 dedupe, integrations, `MIGRATION.md`, runnable examples.
    Every PR carries the full matrix, `-race`, and benchstat evidence

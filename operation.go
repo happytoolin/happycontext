@@ -83,9 +83,8 @@ func (op *Operation) Context() context.Context {
 // silently disables panic capture. Reentrant use is not supported: a
 // second End from inside a sink's Write deadlocks on the one-shot
 // claim. Concurrent first calls are safe: exactly one wins the claim
-// and commits; the others wait and return the published result. Writes
-// through the operation context after End returns have the caveat
-// described on Add: they are not guaranteed to be dropped.
+// and commits; the others wait and return the published result. After
+// End every write through the operation context is dropped.
 func (op *Operation) End(errp *error) (emitted bool) {
 	// A nil *Operation and the zero Operation are both no-ops: the zero
 	// value carries no event, so there is nothing to commit. This keeps
@@ -371,17 +370,12 @@ func annotateOperationFailures(ev *event, ref *walRef, err error, recovered any)
 // fields).
 func (op *Operation) annotatePostSeal(in *commitInput) {
 	ev := op.ev
-	// The owner is the only writer past the seal, so the state and the
-	// generation are stable across this entire block (release is
-	// deferred to post-commit, reset requires a pool round-trip): one
-	// armed check and one lock/unlock bracket replace the per-append
-	// atomic-load-and-maybe-mutex round trip of a per-field sealed
-	// append — ~9 atomic loads and N indirect calls saved per request.
-	armed := walState(ev.state.Load()&walStateMask) == walSealedArmed
-	if armed {
-		ev.mu.Lock()
-		defer ev.mu.Unlock()
-	}
+	// The owner's post-seal writes take the same mutex the seal and the
+	// watchdog snapshots use, so the record handed to sinks is complete
+	// and race-free. The owner is the only writer past the seal, so one
+	// lock/unlock bracket covers the whole block.
+	ev.mu.Lock()
+	defer ev.mu.Unlock()
 
 	fields := ev.fields
 	add := func(f Field) { fields = append(fields, f) }
