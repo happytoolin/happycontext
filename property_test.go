@@ -1454,9 +1454,12 @@ func (m *lifeModel) message() string {
 }
 
 // hasError mirrors buildSampleInput's error predicate: any error
-// source latched or the resolved outcome is not success.
+// source latched, or a resolved outcome that is neither success nor an
+// explicit retry. A retry is not an error, so it samples like a healthy
+// event.
 func (m *lifeModel) hasError(outcome Outcome) bool {
-	return m.endErr != nil || m.endPanicked || m.errOp || outcome != OutcomeSuccess
+	return m.endErr != nil || m.endPanicked || m.errOp ||
+		(outcome != OutcomeSuccess && outcome != OutcomeRetry)
 }
 
 // emitted predicts whether commit writes the event: nil runtime/sink
@@ -1950,9 +1953,11 @@ func seedPrograms() []seedProg {
 	// nil runtime with a full program: nothing emits, nothing panics.
 	add("nil-runtime", p(modeNilRuntime, DomainHTTP,
 		strOp("k0", "v"), errOp("e"), intOp("http.status", 500), endErr(errors.New("boom"))))
-	// rate 0: healthy events drop, errors bypass.
+	// rate 0: healthy events drop, errors bypass. An explicit retry is
+	// not an error, so it drops like a healthy event.
 	add("rate0-healthy-drops", p(modeRate0, DomainJob, strOp("k0", "v"), endErr(nil)))
 	add("rate0-error-kept", p(modeRate0, DomainJob, strOp("k0", "v"), endErr(errors.New("e"))))
+	add("rate0-retry-drops", p(modeRate0, DomainJob, strOp("op.outcome", "retry"), endErr(nil)))
 	// 5xx without error, 4xx success.
 	add("http-500", p(modeRate1, DomainHTTP, intOp("http.status", 500), endErr(nil)))
 	add("http-404", p(modeRate1, DomainHTTP, intOp("http.status", 404), endErr(nil)))
