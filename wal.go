@@ -75,7 +75,13 @@ func newEvent() *event {
 	return ev
 }
 
+// reset prepares the event for its next generation. It takes the same
+// mutex as appends, seals, and snapshots: a stale watchdog snapshot can
+// hold the lock with a matching old generation, and without the lock
+// the reset would truncate the fields under its copy.
 func (e *event) reset() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	s := e.state.Add(walGenOne) // new generation; any straggler now mismatches
 	e.state.Store(s&^walStateMask | uint64(walActive))
 	e.fields = e.fields[:0]

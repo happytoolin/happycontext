@@ -411,6 +411,29 @@ func TestSnapshotGenerationGuard(t *testing.T) {
 	ev.release()
 }
 
+// TestSnapshotResetSerialization pins the reset side of the snapshot
+// discipline: reset takes the append mutex, so a stale watchdog
+// snapshot that already passed its generation check copies the sealed
+// fields safely while the next request recycles the event. The race
+// detector is the oracle — without the lock, reset's write races the
+// snapshot's copy.
+func TestSnapshotResetSerialization(t *testing.T) {
+	for range 50 {
+		ev := newEvent()
+		gen := genOf(ev)
+		for j := range 256 {
+			ev.append(gen, fieldInt64("k", int64(j)))
+		}
+		ev.seal()
+
+		var wg sync.WaitGroup
+		wg.Go(func() { _, _ = ev.snapshotFields(gen) })
+		time.Sleep(100 * time.Microsecond) // let the snapshot take the mutex
+		ev.reset()
+		wg.Wait()
+	}
+}
+
 // TestStragglerStartLine stresses the straggler-vs-recycle window with
 // logrus's start-line technique (logrus_test.go,
 // TestLoggingRaceWithHooksOnEntry — sync.NewCond + Broadcast): every
