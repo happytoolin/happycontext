@@ -108,14 +108,14 @@ func TestWALSealingAfterRelease(t *testing.T) {
 func TestWALArmingProtocol(t *testing.T) {
 	ev := newEvent()
 	ref := &walRef{ev: ev, gen: ev.state.Load() >> walStateBits}
-	ev.arm()
+	ev.arm(genOf(ev))
 
 	var wg sync.WaitGroup
 	wg.Add(3)
 	go func() { // watchdog-style snapshots
 		defer wg.Done()
 		for range 2000 {
-			_ = ev.snapshotFields()
+			_, _ = ev.snapshotFields(genOf(ev))
 		}
 	}()
 	go func() { // guarded appends
@@ -360,7 +360,7 @@ func TestSealDuringArmedAppend(t *testing.T) {
 	for range 200 {
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "r"})
 		ctx := op.Context()
-		op.ev.arm() // arm BEFORE End to force the guarded path
+		op.ev.arm(genOf(op.ev)) // arm BEFORE End to force the guarded path
 		wg.Go(func() {
 			for i := range 50 {
 				Add(ctx, "armed", i)
@@ -376,7 +376,7 @@ func TestSealDuringArmedAppend(t *testing.T) {
 func TestArmingStaleGeneration(t *testing.T) {
 	ev := newEvent()
 	ref := &walRef{ev: ev, gen: ev.state.Load() >> walStateBits}
-	ev.arm()
+	ev.arm(genOf(ev))
 	ev.append(ref.gen-1, fieldStr("past", "x"))   // stale past
 	ev.append(ref.gen+1, fieldStr("future", "x")) // future
 	for _, f := range ev.fields {
@@ -384,6 +384,57 @@ func TestArmingStaleGeneration(t *testing.T) {
 			t.Fatal("generation check failed")
 		}
 	}
+}
+
+// TestArmRejectsStaleGeneration pins the watchdog-handle guard: a stale
+// arm must not arm the next request's recycled event, a live event must
+// refuse snapshots (a live copy would race the fast path), and an armed
+// or sealed event snapshots a race-free copy.
+func TestArmRejectsStaleGeneration(t *testing.T) {
+	ev := newEvent()
+	stale := genOf(ev)
+
+	ev.reset() // pool recycle: a new generation
+	if ev.arm(stale) {
+		t.Fatal("stale arm accepted")
+	}
+	if got := walState(ev.state.Load() & walStateMask); got != walLive {
+		t.Fatalf("state after stale arm = %v, want live", got)
+	}
+	if _, ok := ev.snapshotFields(stale); ok {
+		t.Fatal("stale snapshot accepted")
+	}
+	if _, ok := ev.snapshotFields(genOf(ev)); ok {
+		t.Fatal("live snapshot accepted (a live copy would race the fast path)")
+	}
+
+	// Positive control: the current generation arms and snapshots.
+	if !ev.arm(genOf(ev)) {
+		t.Fatal("current-generation arm refused")
+	}
+	ev.append(genOf(ev), fieldStr("k", "v"))
+	snap, ok := ev.snapshotFields(genOf(ev))
+	if !ok || len(snap) != 1 || snap[0].key != "k" {
+		t.Fatalf("armed snapshot = %v (ok=%v), want one k field", snap, ok)
+	}
+
+	// A sealedArmed event still snapshots its tail: the owner's
+	// post-seal writes serialize under the same mutex.
+	ev.seal()
+	if snap, ok := ev.snapshotFields(genOf(ev)); !ok || len(snap) != 1 {
+		t.Fatalf("sealedArmed snapshot = %v (ok=%v), want one k field", snap, ok)
+	}
+	ev.release()
+
+	// A plain-sealed event (arm never won) refuses snapshots: the owner
+	// writes its post-seal fields lock-free, so the mutex-taking copy
+	// would race.
+	unarmed := newEvent()
+	unarmed.seal()
+	if snap, ok := unarmed.snapshotFields(genOf(unarmed)); ok {
+		t.Fatalf("plain-sealed snapshot accepted: %v", snap)
+	}
+	unarmed.release()
 }
 
 // TestStragglerStartLine stresses the straggler-vs-recycle window with
@@ -767,9 +818,9 @@ func (s *sim) simAppend(key string) {
 	}
 }
 
-// simAppendSealed mirrors event.appendSealed (owner post-seal writes):
-// the generation always matches (the owner runs it), so it lands on
-// live/sealed and on sealedArmed under the mutex.
+// simAppendSealed mirrors the owner's post-seal writes as inlined in
+// annotatePostSeal: the generation always matches (the owner runs it),
+// so it lands on live/sealed and on sealedArmed under the mutex.
 func (s *sim) simAppendSealed(key string) {
 	s.land(key)
 }
@@ -1209,7 +1260,7 @@ func armOp() simStep {
 		name:     "arm",
 		runnable: func(s *sim) bool { return !s.ev.muHeld },
 		run:      func(s *sim) { s.simArm() },
-		real:     func(ev *event, _ *sim) { ev.arm() },
+		real:     func(ev *event, _ *sim) { ev.arm(genOf(ev)) },
 	}
 }
 
@@ -1301,9 +1352,9 @@ func snapshotSteps() []simStep {
 		name: "snap-lock",
 		// The watchdog snapshots armed events; once armed, a snapshot
 		// may be taken before or after the seal (sealedArmed) whenever
-		// the mutex is free — the real snapshotFields has no state
-		// check. Live-state snapshots are excluded by the usage
-		// contract (they would race the owner's lock-free fast path).
+		// the mutex is free. The real snapshotFields accepts exactly
+		// those two states: live and plain-sealed copies would race a
+		// lock-free owner write.
 		runnable: func(s *sim) bool {
 			return (s.ev.state == walArmed || s.ev.state == walSealedArmed) && !s.ev.muHeld
 		},
@@ -1318,7 +1369,11 @@ func snapshotSteps() []simStep {
 			})
 		},
 		real: func(ev *event, s *sim) {
-			s.realSnapshots = append(s.realSnapshots, fieldKeys(ev.snapshotFields()))
+			snap, ok := ev.snapshotFields(genOf(ev))
+			if !ok {
+				snap = nil
+			}
+			s.realSnapshots = append(s.realSnapshots, fieldKeys(snap))
 		},
 	}
 	unlock := simStep{name: "snap-unlock", run: func(s *sim) { s.releaseMu() }}
@@ -1542,7 +1597,7 @@ func stagedEnd(op *Operation, fireAt matrixPhase, fire func(ctx context.Context)
 	if fireAt == phasePrePostSeal {
 		fire(op.Context())
 	}
-	op.annotatePostSeal(commitInput{
+	op.annotatePostSeal(&commitInput{
 		outcome:  outcome,
 		code:     code,
 		duration: duration,
@@ -1552,7 +1607,7 @@ func stagedEnd(op *Operation, fireAt matrixPhase, fire func(ctx context.Context)
 	if fireAt == phasePreCommit {
 		fire(op.Context())
 	}
-	return op.commit(commitInput{
+	return op.commit(&commitInput{
 		outcome:  outcome,
 		code:     code,
 		duration: duration,
@@ -1582,7 +1637,7 @@ func TestStragglerInjectionMatrix(t *testing.T) {
 					MustCompile(Config{Sink: controlSink, SamplingRate: 1}),
 					OperationStart{Domain: DomainJob, Name: "m"})
 				if armed {
-					cop.ev.arm()
+					cop.ev.arm(genOf(cop.ev))
 				}
 				if live {
 					stragglerWrite(cop.Context())
@@ -1599,7 +1654,7 @@ func TestStragglerInjectionMatrix(t *testing.T) {
 				op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "m"})
 				ctx := op.Context()
 				if armed {
-					op.ev.arm()
+					op.ev.arm(genOf(op.ev))
 				}
 				// The state assertion runs at the phase boundary, right
 				// after the straggler fires: live phases must still be
@@ -1765,7 +1820,7 @@ func TestStragglerArmedBurst(t *testing.T) {
 		rt := MustCompile(Config{Sink: sink, SamplingRate: 1})
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "burst"})
 		ctx := op.Context()
-		op.ev.arm()
+		op.ev.arm(genOf(op.ev))
 
 		var mu sync.Mutex
 		start := sync.NewCond(&mu)
@@ -1831,7 +1886,7 @@ func TestStragglerSealedErrorNoLatch(t *testing.T) {
 				op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "latch"})
 				ctx := op.Context()
 				if armed {
-					op.ev.arm()
+					op.ev.arm(genOf(op.ev))
 				}
 				stagedEnd(op, phase, func(context.Context) {
 					Error(ctx, errors.New("s-error"))
@@ -1862,7 +1917,7 @@ func TestArmedSetterSerialization(t *testing.T) {
 		rt := MustCompile(Config{Sink: sink, SamplingRate: 1})
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "setter-race"})
 		ctx := op.Context()
-		op.ev.arm()
+		op.ev.arm(genOf(op.ev))
 
 		const setters = 6
 		const writes = 2000

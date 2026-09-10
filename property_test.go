@@ -1241,7 +1241,7 @@ func executeProgramOn(prog lifeProgram, op *Operation) {
 		case opSetRoute:
 			SetRoute(ctx, o.val.(string))
 		case opArm:
-			op.ev.arm()
+			op.ev.arm(genOf(op.ev))
 		case opEndErr:
 			if ended {
 				continue // one-shot End; later ends are no-ops

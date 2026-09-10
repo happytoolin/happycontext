@@ -103,16 +103,19 @@ func (e *event) seal() {
 	}
 }
 
-// arm switches the live event to guarded mode: appends and snapshots
-// serialize under the per-event mutex. The watchdog (v1.1) arms stalled
-// requests; the protocol ships in the core now so arming is never a
-// breaking change.
-func (e *event) arm() {
+// arm switches a live event of the given generation to guarded mode:
+// appends and snapshots serialize under the per-event mutex. The
+// generation check rejects a stale watchdog handle, so a watchdog that
+// fires after End cannot arm the next request's recycled event. It
+// reports whether the event was armed.
+func (e *event) arm(gen uint64) bool {
 	e.mu.Lock()
-	if s := e.state.Load(); walState(s&walStateMask) == walLive {
-		e.state.CompareAndSwap(s, s&^walStateMask|uint64(walArmed))
+	defer e.mu.Unlock()
+	s := e.state.Load()
+	if s>>walStateBits != gen || walState(s&walStateMask) != walLive {
+		return false
 	}
-	e.mu.Unlock()
+	return e.state.CompareAndSwap(s, s&^walStateMask|uint64(walArmed))
 }
 
 // append adds one field for the given generation. One atomic load
@@ -178,6 +181,11 @@ func (e *event) setError(ref *walRef, err error) {
 	if err == nil {
 		return
 	}
+	// Build the structured field before any lock: Error()/Unwrap()
+	// implementations are user code and must not run under the armed
+	// mutex (a slow or reentrant error would stall or deadlock the
+	// watchdog path).
+	field := Field{key: KeyError, kind: KindAny, val: structuredErrorField(err)}
 	s := e.state.Load()
 	if s>>walStateBits != ref.gen {
 		return
@@ -187,11 +195,11 @@ func (e *event) setError(ref *walRef, err error) {
 		e.mu.Lock()
 		defer e.mu.Unlock()
 		if cur := e.state.Load(); cur>>walStateBits == ref.gen && walState(cur&walStateMask) == walArmed {
-			e.fields = append(e.fields, Field{key: KeyError, kind: KindAny, val: structuredErrorField(err)})
+			e.fields = append(e.fields, field)
 			e.hasErr = true // only when the write belonged to this generation
 		}
 	case walLive:
-		e.fields = append(e.fields, Field{key: KeyError, kind: KindAny, val: structuredErrorField(err)})
+		e.fields = append(e.fields, field)
 		e.hasErr = true
 	}
 }
@@ -251,15 +259,30 @@ func (e *event) setLevel(ref *walRef, level Level) {
 	}
 }
 
-// snapshotFields returns a copy of the current WAL tail for an armed
-// event's watchdog read; it shares the append mutex so snapshots are
-// race-clean against concurrent guarded appends.
-func (e *event) snapshotFields() []Field {
+// snapshotFields returns a copy of the WAL tail for the watchdog. It
+// rejects a stale generation, a live (unarmed) event, and a plain
+// sealed event. Live snapshots would race the lock-free fast path;
+// plain-sealed snapshots would race the owner's lock-free post-seal
+// writes (annotatePostSeal writes under mu only for sealedArmed), and
+// a successfully armed event never reaches plain walSealed. The copy
+// shares the append mutex, so it is race-clean against guarded appends
+// and the armed owner's post-seal writes. ok is false when the
+// snapshot is refused.
+func (e *event) snapshotFields(gen uint64) (out []Field, ok bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	out := make([]Field, len(e.fields))
-	copy(out, e.fields)
-	return out
+	s := e.state.Load()
+	if s>>walStateBits != gen {
+		return nil, false
+	}
+	switch walState(s & walStateMask) {
+	case walArmed, walSealedArmed:
+		out = make([]Field, len(e.fields))
+		copy(out, e.fields)
+		return out, true
+	default:
+		return nil, false
+	}
 }
 
 // lookup returns the last value written under key (last-write-wins view
