@@ -18,8 +18,15 @@ func eventFromContext(ctx context.Context) *walRef {
 }
 
 // Add records one or more fields on the request's event. With no event
-// attached (or after End) it is a silent no-op, exactly like the slog
-// helper family.
+// attached it is a silent no-op, exactly like the slog helper family.
+//
+// A write through a context whose operation already ended is dropped in
+// practice, but the drop is not guaranteed: a write that loaded the
+// event state before End sealed it can still land in the nanosecond
+// before the pooled event is recycled (the residual window in the WAL
+// protocol). A goroutine that outlives the request must not rely on
+// post-End writes being dropped — finish the writes before End, or fan
+// results back to the request goroutine.
 //
 // Additional pairs may be passed variadically: Add(ctx, "a", 1, "b", 2).
 // Every pair key must be a non-empty string; empty and non-string keys
@@ -44,7 +51,8 @@ func Add(ctx context.Context, key string, value any, kv ...any) {
 }
 
 // Error records err on the request's event as the structured canonical
-// error field.
+// error field. A write after End has the caveat described on Add: it
+// is not guaranteed to be dropped.
 func Error(ctx context.Context, err error) {
 	if err == nil {
 		return
@@ -55,7 +63,8 @@ func Error(ctx context.Context, err error) {
 }
 
 // SetMessage sets a per-event final message override. An empty message
-// is treated as unset during finalization.
+// is treated as unset during finalization. A write after End has the
+// caveat described on Add: it is not guaranteed to be dropped.
 func SetMessage(ctx context.Context, msg string) {
 	if ref := eventFromContext(ctx); ref != nil {
 		ref.ev.setMessage(ref, msg)
@@ -63,6 +72,8 @@ func SetMessage(ctx context.Context, msg string) {
 }
 
 // SetRoute sets a normalized route template (http.route) on the event.
+// A write after End has the caveat described on Add: it is not
+// guaranteed to be dropped.
 func SetRoute(ctx context.Context, route string) {
 	if ref := eventFromContext(ctx); ref != nil {
 		ref.ev.setRoute(ref, route)
@@ -70,7 +81,8 @@ func SetRoute(ctx context.Context, route string) {
 }
 
 // SetLevel requests a severity floor for the final event; the emitted
-// level is never lower than the request.
+// level is never lower than the request. A write after End has the
+// caveat described on Add: it is not guaranteed to be dropped.
 func SetLevel(ctx context.Context, level Level) {
 	if ref := eventFromContext(ctx); ref != nil {
 		ref.ev.setLevel(ref, level)

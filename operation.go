@@ -83,7 +83,9 @@ func (op *Operation) Context() context.Context {
 // silently disables panic capture. Reentrant use is not supported: a
 // second End from inside a sink's Write deadlocks on the one-shot
 // claim. Concurrent first calls are safe: exactly one wins the claim
-// and commits; the others wait and return the published result.
+// and commits; the others wait and return the published result. Writes
+// through the operation context after End returns have the caveat
+// described on Add: they are not guaranteed to be dropped.
 func (op *Operation) End(errp *error) (emitted bool) {
 	// A nil *Operation and the zero Operation are both no-ops: the zero
 	// value carries no event, so there is nothing to commit. This keeps
@@ -92,8 +94,11 @@ func (op *Operation) End(errp *error) (emitted bool) {
 	if op == nil || op.ev == nil {
 		return false
 	}
-	if !op.claim() {
-		return op.emitted // published by the winning caller (race-free, see endState)
+	// Claim the one-shot commit with one inline CAS. Only a concurrent
+	// second End pays for the wait, so the request hot path avoids a
+	// non-inlinable call.
+	if !op.endState.CompareAndSwap(0, 1) {
+		return op.awaitPublication()
 	}
 	// Publish on every exit path, including panics, so waiting callers
 	// can never spin on a winner that died mid-commit. LIFO order: the
@@ -137,7 +142,7 @@ func (op *Operation) End(errp *error) (emitted bool) {
 	}
 	outcome := resolveOutcome(err, recovered, outcomeCode, scan.outcome)
 
-	in := commitInput{
+	in := &commitInput{
 		outcome:  outcome,
 		code:     code,
 		duration: duration,
@@ -157,23 +162,17 @@ func (op *Operation) End(errp *error) (emitted bool) {
 	return emitted
 }
 
-// claim acquires the one-shot commit right (endState 0 → 1 by CAS).
-// A caller that observes the state claimed (1) or published (2) waits
-// for the winner's publication — which every exit path of the
-// winner's End performs, including panics — and then reports false;
-// End reads the published result in that case.
-func (op *Operation) claim() bool {
-	for {
-		switch op.endState.Load() {
-		case 2:
-			return false
-		case 0:
-			if op.endState.CompareAndSwap(0, 1) {
-				return true
-			}
-		}
+// awaitPublication waits for the winning End caller to publish the
+// one-shot result (endState 1 → 2, on every exit path including
+// panics) and returns it. Concurrent End is a rare, documented-safe
+// path; the wait yields with runtime.Gosched instead of blocking on a
+// per-operation primitive, so the common single-caller path pays
+// nothing.
+func (op *Operation) awaitPublication() bool {
+	for op.endState.Load() != 2 {
 		runtime.Gosched()
 	}
+	return op.emitted
 }
 
 // walScan is the single backward walk over the sealed WAL collecting
@@ -182,6 +181,12 @@ func (op *Operation) claim() bool {
 // request wrote any start-metadata key itself (lazy start fields must
 // not clobber a user override — suppressing the canonical append
 // reproduces the old LWW fold exactly).
+//
+// Each scalar takes the last write of its expected kind: a later write
+// of another kind (for example a string http.status) is not a usable
+// canonical value and does not erase an earlier usable one. The
+// encode-time dedupe still resolves the wire member last-write-wins;
+// only the sampler's typed view is kind-sensitive.
 type walScan struct {
 	outcome    Outcome
 	hasOutcome bool
@@ -254,7 +259,9 @@ func scanWAL(ev *event) walScan {
 // for the commit stage — everything that is not already reachable from
 // the Operation itself (ev, rt, start, ctx, record). One struct instead
 // of a ten-parameter call, and the natural home for these semantics:
-// all of it describes the sealed event between seal and commit.
+// all of it describes the sealed event between seal and commit. End
+// passes it by pointer: the struct is 200 bytes (it embeds walScan),
+// and by-value copies showed up in the lifecycle benchmarks.
 type commitInput struct {
 	outcome  Outcome // resolved outcome (panic > error > explicit > 5xx > success)
 	code     int     // resolved http.status (the canonical code for HTTP operations)
@@ -266,7 +273,7 @@ type commitInput struct {
 }
 
 // commit resolves level, message, and sampling, then writes the record.
-func (op *Operation) commit(in commitInput) bool {
+func (op *Operation) commit(in *commitInput) bool {
 	rt := op.rt
 	if rt.noop() {
 		return false
@@ -362,7 +369,7 @@ func annotateOperationFailures(ev *event, ref *walRef, err error, recovered any)
 // Canonical fields: HTTP operations carry http.status; non-HTTP
 // operations surface their explicit op.code here (ledger: canonical
 // fields).
-func (op *Operation) annotatePostSeal(in commitInput) {
+func (op *Operation) annotatePostSeal(in *commitInput) {
 	ev := op.ev
 	// The owner is the only writer past the seal, so the state and the
 	// generation are stable across this entire block (release is
@@ -412,8 +419,12 @@ func resolveOutcome(err error, recovered any, code int, explicit Outcome) Outcom
 	return OutcomeSuccess
 }
 
-func buildSampleInput(ev *event, start OperationStart, in commitInput, level Level) SampleInput {
-	hasError := in.err != nil || in.panicked || ev.hasErr || in.outcome != OutcomeSuccess
+func buildSampleInput(ev *event, start OperationStart, in *commitInput, level Level) SampleInput {
+	// A retry is an explicit non-success outcome, not an error: it does
+	// not bypass sampling (SampleInput.HasError is documented as
+	// error-or-panic).
+	hasError := in.err != nil || in.panicked || ev.hasErr ||
+		(in.outcome != OutcomeSuccess && in.outcome != OutcomeRetry)
 	opName := start.Name
 	if in.scan.name != "" {
 		opName = in.scan.name

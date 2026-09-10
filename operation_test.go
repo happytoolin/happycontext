@@ -298,6 +298,55 @@ func TestErrorsBypassSampling(t *testing.T) {
 	}
 }
 
+// TestRetryDoesNotBypassSampling pins that an explicit non-error
+// outcome is not structurally kept: SampleInput.HasError is documented
+// as error-or-panic, so a retry at rate 0 drops like any healthy event.
+func TestRetryDoesNotBypassSampling(t *testing.T) {
+	ts := NewTestSink()
+	rt := MustCompile(Config{Sink: ts, SamplingRate: 0})
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "retry"})
+	Add(op.Context(), KeyOpOutcome, string(OutcomeRetry))
+	if op.End(nil) {
+		t.Fatal("retry event bypassed sampling at rate 0")
+	}
+	if got := len(ts.Events()); got != 0 {
+		t.Fatalf("emitted %d events at rate 0, want 0", got)
+	}
+
+	// Control: the same outcome at rate 1 is kept.
+	ts.Reset()
+	rt = MustCompile(Config{Sink: ts, SamplingRate: 1})
+	op = Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "retry"})
+	Add(op.Context(), KeyOpOutcome, string(OutcomeRetry))
+	if !op.End(nil) {
+		t.Fatal("retry event was dropped at rate 1")
+	}
+	if got, _ := ts.Events()[0].Lookup(KeyOpOutcome); got != string(OutcomeRetry) {
+		t.Fatalf("outcome = %v, want retry", got)
+	}
+}
+
+// TestCanonicalStatusKeepsLastUsableWrite pins the scanWAL kind rule: a
+// later write of another kind is not a usable canonical value and does
+// not erase an earlier usable one, so a stray string write cannot hide
+// a 5xx.
+func TestCanonicalStatusKeepsLastUsableWrite(t *testing.T) {
+	rt, ts := testRT(t, nil)
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "x"})
+	Add(op.Context(), KeyHTTPStatus, 500)
+	Add(op.Context(), KeyHTTPStatus, "503") // wrong kind: not canonical
+	op.End(nil)
+
+	ev := ts.Events()[0]
+	if got, _ := ev.Lookup(KeyOpOutcome); got != string(OutcomeFailure) {
+		t.Fatalf("outcome = %v, want failure from the usable int status", got)
+	}
+	// Lookup keeps the last-write-wins view: the user's string write.
+	if got, _ := ev.Lookup(KeyHTTPStatus); got != "503" {
+		t.Fatalf("wire status = %v, want the user's last write (503)", got)
+	}
+}
+
 // TestSampleInputUsesWALOpName pins v0 HTTP parity: a last-write
 // op.name on the WAL (the route template) is what Sampler sees as
 // Operation, not the original Start name ("request").
@@ -635,7 +684,7 @@ func TestConcurrentEndArmed(t *testing.T) {
 		rt := MustCompile(Config{Sink: ts, SamplingRate: 1})
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "armed-race"})
 		ctx := op.Context()
-		op.ev.arm()
+		op.ev.arm(genOf(op.ev))
 
 		var mu sync.Mutex
 		start := sync.NewCond(&mu)

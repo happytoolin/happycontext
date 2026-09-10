@@ -63,6 +63,9 @@ func LastIndices[T any](items []T, key func(T) string) []int {
 // contained and the value rendered via fmt, the same fence the core
 // encoder applies).
 func ErrorMessage(err error) (msg string) {
+	if err == nil {
+		return ""
+	}
 	if v := reflect.ValueOf(err); v.Kind() == reflect.Pointer && v.IsNil() {
 		return fmt.Sprint(err)
 	}

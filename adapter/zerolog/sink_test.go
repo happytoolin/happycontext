@@ -327,6 +327,78 @@ func TestSinkCustomizedFieldNamesFallsBackToTypedPath(t *testing.T) {
 	}
 }
 
+// TestSinkCustomizedRenderingFallsBackToTypedPath pins the extended
+// fast-path gate: every global that shapes the rendered line — time
+// format, duration rendering, level marshalling, timestamp function —
+// routes a plain logger to the typed path, which honors it. Each
+// subtest asserts the customized rendering, not only that the fast path
+// was refused.
+func TestSinkCustomizedRenderingFallsBackToTypedPath(t *testing.T) {
+	t.Run("time format", func(t *testing.T) {
+		old := zerolog.TimeFieldFormat
+		zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+		t.Cleanup(func() { zerolog.TimeFieldFormat = old })
+
+		rec := bridgeRecord(t, func(ctx context.Context) { hc.Add(ctx, "k", "v") })
+		var buf bytes.Buffer
+		logger := zerolog.New(&buf) // plain logger: the fast path would serve it
+		New(&logger).Write(context.Background(), rec)
+
+		payload := lastPayload(t, &buf)
+		if _, ok := payload["time"].(float64); !ok {
+			t.Fatalf("time = %v (%T), want the Unix number from TimeFieldFormat", payload["time"], payload["time"])
+		}
+	})
+
+	t.Run("level marshaller", func(t *testing.T) {
+		old := zerolog.LevelFieldMarshalFunc
+		zerolog.LevelFieldMarshalFunc = func(l zerolog.Level) string { return strings.ToUpper(l.String()) }
+		t.Cleanup(func() { zerolog.LevelFieldMarshalFunc = old })
+
+		rec := bridgeRecord(t, func(ctx context.Context) { hc.Add(ctx, "k", "v") })
+		var buf bytes.Buffer
+		logger := zerolog.New(&buf)
+		New(&logger).Write(context.Background(), rec)
+
+		payload := lastPayload(t, &buf)
+		if payload["level"] != "INFO" {
+			t.Fatalf("level = %v, want the marshalled INFO", payload["level"])
+		}
+	})
+
+	t.Run("duration unit", func(t *testing.T) {
+		oldUnit, oldInt := zerolog.DurationFieldUnit, zerolog.DurationFieldInteger
+		zerolog.DurationFieldUnit, zerolog.DurationFieldInteger = time.Second, true
+		t.Cleanup(func() { zerolog.DurationFieldUnit, zerolog.DurationFieldInteger = oldUnit, oldInt })
+
+		rec := bridgeRecord(t, func(ctx context.Context) { hc.Add(ctx, "d", 2500*time.Millisecond) })
+		var buf bytes.Buffer
+		logger := zerolog.New(&buf)
+		New(&logger).Write(context.Background(), rec)
+
+		payload := lastPayload(t, &buf)
+		if payload["d"] != float64(2) {
+			t.Fatalf("d = %v, want 2 seconds from the customized unit", payload["d"])
+		}
+	})
+
+	t.Run("timestamp function", func(t *testing.T) {
+		old := zerolog.TimestampFunc
+		zerolog.TimestampFunc = func() time.Time { return time.Date(1999, 1, 1, 0, 0, 0, 0, time.UTC) }
+		t.Cleanup(func() { zerolog.TimestampFunc = old })
+
+		rec := bridgeRecord(t, func(ctx context.Context) { hc.Add(ctx, "k", "v") })
+		var buf bytes.Buffer
+		logger := zerolog.New(&buf).With().Timestamp().Logger()
+		New(&logger).Write(context.Background(), rec)
+
+		payload := lastPayload(t, &buf)
+		if payload["time"] != "1999-01-01T00:00:00Z" {
+			t.Fatalf("time = %v, want the customized TimestampFunc value", payload["time"])
+		}
+	})
+}
+
 // TestSinkTypedPathStampsRecordCompletionTime pins the F6 symmetry:
 // the enriched-logger typed path stamps the record's own completion
 // time (rec.Time()) — the instant the canonical line carries — rather

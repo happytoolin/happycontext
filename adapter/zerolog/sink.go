@@ -7,7 +7,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"slices"
+	"time"
 	"unsafe"
 
 	"github.com/happytoolin/happycontext"
@@ -116,15 +118,44 @@ func (v *loggerView) enabled(level hc.Level) bool {
 	return zlvlFor(level) >= v.level && zlvlFor(level) >= zerolog.GlobalLevel()
 }
 
-// defaultFieldNames reports whether zerolog's member-name globals are
-// still the defaults the canonical line writes ("level", "time",
-// "message"). When customized, serving the canonical bytes would emit
-// members the user's pipeline does not expect — the typed path, which
-// honors the globals through zerolog's own constructors, takes over.
-func defaultFieldNames() bool {
+// canonicalSettings reports whether every zerolog global that shapes a
+// rendered line is at the value the canonical bytes assume: member
+// names, the time format, the duration unit and integer mode, the
+// level marshaller, and the timestamp function. When any global is
+// customized, the fast path would emit bytes the user's pipeline does
+// not expect — the typed path, which honors the customization through
+// zerolog's own constructors, takes over.
+//
+// zerolog's defaults: TimeFieldFormat is RFC3339 (the canonical line's
+// format), DurationFieldUnit is the millisecond, and DurationFieldInteger
+// is false. Function values cannot be compared with ==, so the two
+// function globals are identified by code pointer against the defaults
+// captured at package init (a nil or replaced function fails the check).
+func canonicalSettings() bool {
 	return zerolog.LevelFieldName == "level" &&
 		zerolog.TimestampFieldName == "time" &&
-		zerolog.MessageFieldName == "message"
+		zerolog.MessageFieldName == "message" &&
+		zerolog.TimeFieldFormat == time.RFC3339 &&
+		zerolog.DurationFieldUnit == time.Millisecond &&
+		!zerolog.DurationFieldInteger &&
+		funcPointer(zerolog.LevelFieldMarshalFunc) == defaultLevelFieldMarshalFunc &&
+		funcPointer(zerolog.TimestampFunc) == defaultTimestampFunc
+}
+
+var (
+	defaultLevelFieldMarshalFunc = funcPointer(zerolog.LevelFieldMarshalFunc)
+	defaultTimestampFunc         = funcPointer(zerolog.TimestampFunc)
+)
+
+// funcPointer identifies a function value by code pointer. It returns 0
+// for a nil or non-function value, which never matches a captured
+// default.
+func funcPointer(fn any) uintptr {
+	v := reflect.ValueOf(fn)
+	if !v.IsValid() || v.Kind() != reflect.Func {
+		return 0
+	}
+	return v.Pointer()
 }
 
 // writeEncoded serves the record's pre-encoded canonical JSON line
@@ -135,11 +166,11 @@ func defaultFieldNames() bool {
 // Deliberate trade-offs: the line is hc's canonical line, byte-
 // identical to the first-party JSON sink, served via one WriteLevel
 // per record so level-aware writers keep working; errors route through
-// zerolog.ErrorHandler; custom member-name globals and augmented
-// loggers are rejected (defaultFieldNames, plain) and take the typed
+// zerolog.ErrorHandler; customized rendering globals and augmented
+// loggers are rejected (canonicalSettings, plain) and take the typed
 // path.
 func (s *Sink) writeEncoded(view *loggerView, rec *hc.Record) bool {
-	if !view.plain() || !view.enabled(rec.Level()) || !defaultFieldNames() {
+	if !view.plain() || !view.enabled(rec.Level()) || !canonicalSettings() {
 		return false
 	}
 	if _, err := view.w.WriteLevel(zlvlFor(rec.Level()), rec.Encoded()); err != nil {

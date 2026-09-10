@@ -345,7 +345,7 @@ func TestCrashStragglerStormArmed(t *testing.T) {
 		wg.Go(func() {
 			for i := range perWorker {
 				op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
-				op.ev.arm()
+				op.ev.arm(genOf(op.ev))
 				Add(op.Context(), "mine", fmt.Sprintf("a%d-%d", w, i))
 				_ = op.End(nil)
 				Add(op.Context(), "straggler", 1)
@@ -661,6 +661,41 @@ func TestCrashTypedNilAndWeirdAny(t *testing.T) {
 	}
 	if m["chan"] == nil && m["func"] == nil {
 		t.Fatal("both unmarshalable values vanished without a trace")
+	}
+}
+
+// TestTestSinkNestedEmptySlices pins the deep-copy identity fix: empty
+// slices of different types all report Pointer() == 0, and the old
+// uintptr visited key aliased them into one cache entry, then panicked
+// inside End on reflect.Set. The capture must preserve both values.
+func TestTestSinkNestedEmptySlices(t *testing.T) {
+	ts := NewTestSink()
+	rt := MustCompile(Config{Sink: ts, SamplingRate: 1})
+	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "x"})
+	Add(op.Context(), "mixed", [2]any{[]string(nil), []int(nil)})
+	Add(op.Context(), "empty", []string{})
+	if !op.End(nil) {
+		t.Fatal("event dropped")
+	}
+
+	mixed, ok := ts.Events()[0].Lookup("mixed")
+	if !ok {
+		t.Fatal("mixed field missing")
+	}
+	arr, ok := mixed.([2]any)
+	if !ok {
+		t.Fatalf("mixed = %#v, want [2]any", mixed)
+	}
+	if s, ok := arr[0].([]string); !ok || s != nil {
+		t.Fatalf("arr[0] = %#v, want a nil []string", arr[0])
+	}
+	if i, ok := arr[1].([]int); !ok || i != nil {
+		t.Fatalf("arr[1] = %#v, want a nil []int", arr[1])
+	}
+	if empty, ok := ts.Events()[0].Lookup("empty"); !ok {
+		t.Fatal("empty field missing")
+	} else if s, ok := empty.([]string); !ok || s == nil {
+		t.Fatalf("empty = %#v, want a non-nil empty []string", empty)
 	}
 }
 
@@ -1595,7 +1630,7 @@ func TestCrashArmedMixedWritersSingleEnd(t *testing.T) {
 	for round := range 10 {
 		rt, ts := testRT(t, nil)
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
-		op.ev.arm()
+		op.ev.arm(genOf(op.ev))
 
 		var wg sync.WaitGroup
 		stop := make(chan struct{})
@@ -1638,7 +1673,7 @@ func TestCrashArmedMixedWritersSingleEnd(t *testing.T) {
 				case <-stop:
 					return
 				default:
-					_ = op.ev.snapshotFields()
+					_, _ = op.ev.snapshotFields(genOf(op.ev))
 				}
 			}
 		})
@@ -1674,7 +1709,7 @@ func TestCrashArmRacingSeal(t *testing.T) {
 				case <-stop:
 					return
 				default:
-					op.ev.arm()
+					op.ev.arm(genOf(op.ev))
 				}
 			}
 		})
@@ -1696,7 +1731,7 @@ func TestCrashArmedErrorVsSeal(t *testing.T) {
 	for round := range 20 {
 		rt, ts := testRT(t, nil)
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
-		op.ev.arm()
+		op.ev.arm(genOf(op.ev))
 
 		var wg sync.WaitGroup
 		wg.Go(func() {
@@ -1734,7 +1769,7 @@ func TestCrashArmedErrorVsSeal(t *testing.T) {
 func TestCrashSnapshotVsPostSealAppends(t *testing.T) {
 	rt, ts := testRT(t, nil)
 	op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
-	op.ev.arm()
+	op.ev.arm(genOf(op.ev))
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
@@ -1744,7 +1779,7 @@ func TestCrashSnapshotVsPostSealAppends(t *testing.T) {
 			case <-stop:
 				return
 			default:
-				_ = op.ev.snapshotFields()
+				_, _ = op.ev.snapshotFields(genOf(op.ev))
 			}
 		}
 	})
@@ -1856,7 +1891,7 @@ func FuzzCrashArmedInterleavings(f *testing.F) {
 		rt, ts := testRT(t, nil)
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
 		if variant%2 == 0 {
-			op.ev.arm()
+			op.ev.arm(genOf(op.ev))
 		}
 		for i := range writes {
 			Add(op.Context(), key2(i), i)
@@ -1979,7 +2014,7 @@ func TestSynctestArmedWritersAllExit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rt, ts := testRT(t, nil)
 		op := Start(context.Background(), rt, OperationStart{Domain: DomainHTTP, Name: "request"})
-		op.ev.arm()
+		op.ev.arm(genOf(op.ev))
 		stop := make(chan struct{})
 		var wg sync.WaitGroup
 		for w := range 6 {
@@ -2000,7 +2035,7 @@ func TestSynctestArmedWritersAllExit(t *testing.T) {
 				case <-stop:
 					return
 				default:
-					_ = op.ev.snapshotFields()
+					_, _ = op.ev.snapshotFields(genOf(op.ev))
 				}
 			}
 		})
@@ -2031,9 +2066,12 @@ func TestSynctestWatchdogShape(t *testing.T) {
 		Add(op.Context(), "phase", "before-stall")
 
 		// The watchdog arms a stalled request and snapshots it.
-		op.ev.arm()
+		op.ev.arm(genOf(op.ev))
 		time.Sleep(500 * time.Millisecond) // virtual: instant, deterministic
-		snap := op.ev.snapshotFields()
+		snap, ok := op.ev.snapshotFields(genOf(op.ev))
+		if !ok {
+			t.Fatal("armed snapshot refused")
+		}
 
 		// The request wakes, REWRITES a snapshotted key, adds a new
 		// one, then commits. The rewrite is what makes the stability
