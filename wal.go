@@ -260,10 +260,14 @@ func (e *event) setLevel(ref *walRef, level Level) {
 }
 
 // snapshotFields returns a copy of the WAL tail for the watchdog. It
-// rejects a stale generation and a live (unarmed) event — a live
-// snapshot would race the lock-free fast path — and shares the append
-// mutex, so the copy is race-clean against guarded appends and the
-// owner's post-seal writes. ok is false when the snapshot is refused.
+// rejects a stale generation, a live (unarmed) event, and a plain
+// sealed event. Live snapshots would race the lock-free fast path;
+// plain-sealed snapshots would race the owner's lock-free post-seal
+// writes (annotatePostSeal writes under mu only for sealedArmed), and
+// a successfully armed event never reaches plain walSealed. The copy
+// shares the append mutex, so it is race-clean against guarded appends
+// and the armed owner's post-seal writes. ok is false when the
+// snapshot is refused.
 func (e *event) snapshotFields(gen uint64) (out []Field, ok bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -272,7 +276,7 @@ func (e *event) snapshotFields(gen uint64) (out []Field, ok bool) {
 		return nil, false
 	}
 	switch walState(s & walStateMask) {
-	case walArmed, walSealedArmed, walSealed:
+	case walArmed, walSealedArmed:
 		out = make([]Field, len(e.fields))
 		copy(out, e.fields)
 		return out, true

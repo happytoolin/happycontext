@@ -366,6 +366,25 @@ func TestSinkCustomizedRenderingFallsBackToTypedPath(t *testing.T) {
 		}
 	})
 
+	t.Run("level value", func(t *testing.T) {
+		// The default LevelFieldMarshalFunc calls Level.String, which
+		// reads the exported Level*Value vars: a customized value must
+		// not slip past the gate.
+		old := zerolog.LevelInfoValue
+		zerolog.LevelInfoValue = "informational"
+		t.Cleanup(func() { zerolog.LevelInfoValue = old })
+
+		rec := bridgeRecord(t, func(ctx context.Context) { hc.Add(ctx, "k", "v") })
+		var buf bytes.Buffer
+		logger := zerolog.New(&buf)
+		New(&logger).Write(context.Background(), rec)
+
+		payload := lastPayload(t, &buf)
+		if payload["level"] != "informational" {
+			t.Fatalf("level = %v, want the customized LevelInfoValue", payload["level"])
+		}
+	})
+
 	t.Run("duration unit", func(t *testing.T) {
 		oldUnit, oldInt := zerolog.DurationFieldUnit, zerolog.DurationFieldInteger
 		zerolog.DurationFieldUnit, zerolog.DurationFieldInteger = time.Second, true

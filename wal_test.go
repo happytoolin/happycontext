@@ -418,12 +418,23 @@ func TestArmRejectsStaleGeneration(t *testing.T) {
 		t.Fatalf("armed snapshot = %v (ok=%v), want one k field", snap, ok)
 	}
 
-	// A sealed event still snapshots its immutable tail.
+	// A sealedArmed event still snapshots its tail: the owner's
+	// post-seal writes serialize under the same mutex.
 	ev.seal()
 	if snap, ok := ev.snapshotFields(genOf(ev)); !ok || len(snap) != 1 {
-		t.Fatalf("sealed snapshot = %v (ok=%v), want one k field", snap, ok)
+		t.Fatalf("sealedArmed snapshot = %v (ok=%v), want one k field", snap, ok)
 	}
 	ev.release()
+
+	// A plain-sealed event (arm never won) refuses snapshots: the owner
+	// writes its post-seal fields lock-free, so the mutex-taking copy
+	// would race.
+	unarmed := newEvent()
+	unarmed.seal()
+	if snap, ok := unarmed.snapshotFields(genOf(unarmed)); ok {
+		t.Fatalf("plain-sealed snapshot accepted: %v", snap)
+	}
+	unarmed.release()
 }
 
 // TestStragglerStartLine stresses the straggler-vs-recycle window with
@@ -1341,9 +1352,9 @@ func snapshotSteps() []simStep {
 		name: "snap-lock",
 		// The watchdog snapshots armed events; once armed, a snapshot
 		// may be taken before or after the seal (sealedArmed) whenever
-		// the mutex is free — the real snapshotFields has no state
-		// check. Live-state snapshots are excluded by the usage
-		// contract (they would race the owner's lock-free fast path).
+		// the mutex is free. The real snapshotFields accepts exactly
+		// those two states: live and plain-sealed copies would race a
+		// lock-free owner write.
 		runnable: func(s *sim) bool {
 			return (s.ev.state == walArmed || s.ev.state == walSealedArmed) && !s.ev.muHeld
 		},

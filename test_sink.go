@@ -45,9 +45,12 @@ func NewTestSink() *TestSink {
 // scalars are immutable by construction. Pointer payloads are NOT
 // cloned (the pointed-to value stays shared with the caller), except
 // that error identity is deliberately preserved so errors.Is works
-// on captured fields. Mutate-through-a-pointer after End is visible
-// in the capture — copy it yourself before End if you need a frozen
-// snapshot of pointer-bearing data.
+// on captured fields. Struct payloads copy shallowly: a struct that
+// wraps a map or slice stays shared with the caller, because a
+// reflect field copy cannot set unexported fields (and would break
+// time.Time). Mutate-through-a-pointer after End is visible in the
+// capture — copy it yourself before End if you need a frozen snapshot
+// of pointer-bearing or struct-bearing data.
 func (t *TestSink) Write(_ context.Context, rec *Record) {
 	if t == nil || rec == nil {
 		return

@@ -121,16 +121,19 @@ func (v *loggerView) enabled(level hc.Level) bool {
 // canonicalSettings reports whether every zerolog global that shapes a
 // rendered line is at the value the canonical bytes assume: member
 // names, the time format, the duration unit and integer mode, the
-// level marshaller, and the timestamp function. When any global is
-// customized, the fast path would emit bytes the user's pipeline does
-// not expect — the typed path, which honors the customization through
-// zerolog's own constructors, takes over.
+// level name values, the level marshaller, and the timestamp function.
+// When any global is customized, the fast path would emit bytes the
+// user's pipeline does not expect — the typed path, which honors the
+// customization through zerolog's own constructors, takes over.
 //
 // zerolog's defaults: TimeFieldFormat is RFC3339 (the canonical line's
 // format), DurationFieldUnit is the millisecond, and DurationFieldInteger
-// is false. Function values cannot be compared with ==, so the two
-// function globals are identified by code pointer against the defaults
-// captured at package init (a nil or replaced function fails the check).
+// is false. The default LevelFieldMarshalFunc calls Level.String,
+// which reads the exported Level*Value vars — so those vars are checked
+// directly; a customized marshaller is caught by code pointer. Function
+// values cannot be compared with ==, so the two function globals are
+// identified by code pointer against the defaults captured at package
+// init (a nil or replaced function fails the check).
 func canonicalSettings() bool {
 	return zerolog.LevelFieldName == "level" &&
 		zerolog.TimestampFieldName == "time" &&
@@ -138,6 +141,10 @@ func canonicalSettings() bool {
 		zerolog.TimeFieldFormat == time.RFC3339 &&
 		zerolog.DurationFieldUnit == time.Millisecond &&
 		!zerolog.DurationFieldInteger &&
+		zerolog.LevelDebugValue == "debug" &&
+		zerolog.LevelInfoValue == "info" &&
+		zerolog.LevelWarnValue == "warn" &&
+		zerolog.LevelErrorValue == "error" &&
 		funcPointer(zerolog.LevelFieldMarshalFunc) == defaultLevelFieldMarshalFunc &&
 		funcPointer(zerolog.TimestampFunc) == defaultTimestampFunc
 }
