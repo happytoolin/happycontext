@@ -28,6 +28,10 @@ const (
 // fields override that, per outcome or per class. SamplingRate, when
 // set, replaces both the global rate and any LevelSamplingRates entry
 // for the domain.
+//
+// Because the zero Level is INFO, FailureLevel and PanicLevel cannot
+// select INFO explicitly; use OutcomeLevels for that (for example
+// OutcomeLevels[OutcomeFailure] = LevelInfo).
 type OperationPolicy struct {
 	SuccessLevel  Level
 	FailureLevel  Level

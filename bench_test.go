@@ -14,9 +14,12 @@ import (
 // These benches measure the gate segments that the external benches
 // cannot isolate (they run inside package hc with unexported access).
 
-// BenchmarkEndDropPath is the §4 end-drop gate segment: ≤ 100 ns / ≤ 2
-// allocs for sampler + release + pool, excluding Start and field
-// appends — operations are pre-built outside the timed loop.
+// BenchmarkEndDropPath times the complete field-less End on pre-built
+// operations — claim, recover, clock read, seal, scan, post-seal
+// annotations, commit, and release. The §4 100 ns gate names only the
+// sampler + release + pool segment of this path; that segment is
+// measured separately by the WAL micro-benchmarks (RateSampler ≈ 5 ns
+// plus EventReleaseRecycle ≈ 38 ns).
 func BenchmarkEndDropPath(b *testing.B) {
 	rt := MustCompile(Config{Sink: dropCountSink{}, SamplingRate: 0})
 	const pre = 4096

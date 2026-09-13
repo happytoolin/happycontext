@@ -82,6 +82,9 @@ func (panickingErr) Error() string { panic("Error() boom") }
 // render via fmt ("<nil>"), panicking Error() implementations are
 // contained to a fmt fallback, ordinary errors pass through.
 func TestErrorMessageFencesHostileErrors(t *testing.T) {
+	if got := ErrorMessage(nil); got != "" {
+		t.Fatalf("nil message = %q, want empty", got)
+	}
 	var nilErr *typedNilErr
 	if got := ErrorMessage(nilErr); got != "<nil>" {
 		t.Fatalf("typed-nil message = %q, want %q", got, "<nil>")

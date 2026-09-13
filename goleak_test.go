@@ -3,7 +3,7 @@ package hc
 // P8 goleak integration: every test in this package runs under
 // goleak.VerifyTestMain, failing the suite on any leaked goroutine —
 // the lifecycle and straggler suites exercise exactly the paths that
-// would leak (panicking sinks, armed events, future watchdog).
+// would leak (panicking sinks, guarded events, future watchdog).
 //
 // Why goleak AND testing/synctest (see the Agent N section of
 // crash_test.go) — deliberately both, not either:

@@ -231,6 +231,19 @@ func TestPolicyForDomain(t *testing.T) {
 	}
 }
 
+// TestPolicyOutcomeLevelsCanSelectInfo pins the documented workaround:
+// the three level fields cannot express an explicit INFO because the
+// zero Level is the "use the default" sentinel, but OutcomeLevels can.
+func TestPolicyOutcomeLevelsCanSelectInfo(t *testing.T) {
+	policy := OperationPolicy{OutcomeLevels: map[Outcome]Level{OutcomeFailure: LevelInfo}}
+	if got := levelFromPolicy(policy, OutcomeFailure); got != LevelInfo {
+		t.Fatalf("levelFromPolicy = %v, want INFO via OutcomeLevels", got)
+	}
+	if got := levelFromPolicy(OperationPolicy{FailureLevel: LevelInfo}, OutcomeFailure); got != LevelError {
+		t.Fatalf("zero FailureLevel = %v, want the ERROR default", got)
+	}
+}
+
 type wrappedTestError struct{ err error }
 
 func (w wrappedTestError) Error() string { return "wrapped: " + w.err.Error() }

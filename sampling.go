@@ -10,6 +10,11 @@ import (
 // SampleInput contains finalized operation data used for sampling
 // decisions: the resolved scalars plus read access to the request's
 // fields (Lookup and a zero-copy Fields view).
+//
+// The input is valid only for the duration of the sampler call — copy
+// anything you retain. The request's event returns to the pool after
+// End, so a Lookup or Fields call from a retained input can read a
+// recycled event (and race the next request's writes).
 type SampleInput struct {
 	// Domain is the operation's domain; Operation is the resolved
 	// operation name (an op.name field write overrides the start
