@@ -17,6 +17,12 @@ merged on `v2` and v0.6.0 released there.
 
 ## 2. v1.0.0 (target: v2, after `v2-record-core`)
 
+- [ ] Rename to unolog: merge `refactor/rename-to-unolog` (module path,
+      package names, scripts, docs, assets), rename the GitHub repository
+      to `happytoolin/unolog`, re-point the local remote, and refresh
+      description/topics/social preview. Warm the module proxy for every
+      pre-1.0 module+version first; merge after the v0.6.0 release PR if
+      that rehearsal still ships
 - [ ] Pre-flight: v2 green on full matrix + `-race`; §4 gates evidenced
       in the final PR; `MIGRATION.md` reviewed
 - [ ] Merge the final `v2-record-core` PRs carrying breaking markers;
@@ -24,8 +30,8 @@ merged on `v2` and v0.6.0 released there.
       else, stop and reconcile the manifest before merging
 - [ ] Verify lockstep: `RELEASE_TAG=v1.0.0`, nested module tags created,
       branch-local replaces stripped; smoke `go get
-      github.com/happytoolin/happycontext@v1.0.0` in a scratch module
-      against the README quick start
+      github.com/happytoolin/unolog@v1.0.0` plus `…/adapter/slog` and
+      `…/integration/std` in a scratch module against the README quick start
 
 ## 3. Post-1.0
 

@@ -14,8 +14,8 @@ package benches_test
 // Documented divergences kept OUT of the value-equality set (their
 // keys still participate in the ORDER assertion):
 //   - time: each sink stamps its own rendering (epoch millis on zap,
-//     RFC3339Nano on slog, RFC3339 on hc/zerolog)
-//   - duration: float milliseconds on the hc JSON path vs the native
+//     RFC3339Nano on slog, RFC3339 on unolog/zerolog)
+//   - duration: float milliseconds on the unolog JSON path vs the native
 //     encodings of the host loggers
 //   - float32: widened to float64 by slog (documented host limitation)
 //   - raw: base64 on slog/zap; any: adapter-specific rendering
@@ -97,7 +97,7 @@ type sinkBuilder func(*bytes.Buffer) unolog.Sink
 
 func sinkBuilders() map[string]sinkBuilder {
 	return map[string]sinkBuilder{
-		"hc-json": func(buf *bytes.Buffer) unolog.Sink { return unolog.NewJSONSink(buf) },
+		"unolog-json": func(buf *bytes.Buffer) unolog.Sink { return unolog.NewJSONSink(buf) },
 		"slog": func(buf *bytes.Buffer) unolog.Sink {
 			return uslog.New(slog.New(slog.NewJSONHandler(buf, nil)))
 		},

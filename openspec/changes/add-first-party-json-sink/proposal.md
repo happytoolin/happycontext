@@ -10,7 +10,7 @@ amendment 10.
 
 ## What Changes
 
-- Vendor zerolog v1.34.0's `internal/json` into `internal/hcjson` (MIT,
+- Vendor zerolog v1.34.0's `internal/json` into `internal/json` (MIT,
   attributed), trimmed to what we use, upgraded with a hybrid SWAR escape
   fast path (pure Go, `-11–18%` on clean ASCII, measured in `V2_PLAN.md` §3b).
 - Add `hc.NewJSONSink(io.Writer)` implementing the **current** Sink interface
@@ -30,7 +30,7 @@ amendment 10.
 ## Impact
 
 - Affected specs: `json-encoder` (new capability).
-- Affected code: new `internal/hcjson/`; root `sink` surface gains
+- Affected code: new `internal/json/`; root `sink` surface gains
   `NewJSONSink`; `benches` comparator; all `go.mod` files; CI workflow.
 - Risk: encoder correctness — mitigated by property tests vs the zerolog
   table, fuzzing, and golden equivalence with the current zerolog adapter.

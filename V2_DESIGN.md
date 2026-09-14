@@ -1,4 +1,4 @@
-# happycontext v2 — Final Design
+# unolog v2 — Final Design
 
 Status: **locked** (2026-08-30). This is the buildable specification.
 Rationale, measurements, and the research trail live in `V2_PLAN.md`;

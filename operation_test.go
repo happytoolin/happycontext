@@ -1091,7 +1091,7 @@ func TestTypedNilErrorsContained(t *testing.T) {
 }
 
 // TestPanicWireShapeParity pins the two hand-maintained copies of the
-// canonical panic shape against each other: integration/common's
+// canonical panic shape against each other: integration/flow's
 // public PanicField/FinalizeRequest path (middleware-recovered
 // panics) and the core's own End path. They live in different
 // packages by design; this test fails if either drifts.

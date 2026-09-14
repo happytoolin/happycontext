@@ -1,4 +1,4 @@
-// Package zapadapter bridges happycontext records into zap: a Sink that
+// Package zap bridges unolog records into zap: a Sink that
 // forwards each finalized record as typed zap fields through the
 // logger's CheckedEntry path.
 package zap
@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// Sink writes happycontext records to gozap.
+// Sink writes unolog records to the zap logger.
 type Sink struct {
 	logger *gozap.Logger
 }

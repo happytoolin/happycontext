@@ -56,7 +56,7 @@ func FuzzAppendInterface(f *testing.F) {
 
 // jsonDecodedEqual compares two stdjson.Unmarshal results (plain float64
 // numbers — the parser erases int/float distinctions) and compares
-// float64s bitwise. The hc package mirrors this in
+// float64s bitwise. The unolog package mirrors this in
 // property_test.go's jsonSemanticEqual, which additionally
 // accepts stdjson.Number from UseNumber decoders; the helpers cannot be
 // shared because test-only code is package-private.

@@ -1,4 +1,4 @@
-// Package fiberhappycontext provides the Fiber v2 happycontext
+// Package fiber provides the Fiber v2 unolog
 // middleware: one canonical event per request, with errors, panics,
 // status, and route resolved from the Fiber context.
 package fiber

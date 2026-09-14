@@ -1,4 +1,4 @@
-// Package slogadapter bridges happycontext records into log/slog: a
+// Package slog bridges unolog records into log/slog: a
 // Sink that forwards each finalized record as typed slog attributes on
 // the logger's own level threshold.
 package slog
@@ -33,7 +33,7 @@ func recycleAttrs(bufPtr *[]stdslog.Attr, buf []stdslog.Attr) {
 	slogAttrPool.Put(bufPtr)
 }
 
-// Sink writes happycontext records to stdslog.
+// Sink writes unolog records to the standard library slog logger.
 type Sink struct {
 	logger *stdslog.Logger
 }

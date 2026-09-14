@@ -175,7 +175,7 @@ func rtWireCheck(t *testing.T, kind FieldKind, val any, raw []byte) {
 	case KindString:
 		if s, ok := val.(string); ok && !utf8.ValidString(s) {
 			// invalid UTF-8: parseability only (mapping pinned by the
-			// hcjson suites)
+			// internal/json suites)
 			var decoded string
 			if err := json.Unmarshal(raw, &decoded); err != nil {
 				t.Fatalf("invalid-UTF-8 string did not parse: %v (%s)", err, raw)
@@ -1662,7 +1662,7 @@ func checkFieldWire(f Field, raw []byte) error {
 
 // jsonSemanticEqual compares two decoded JSON values, treating
 // json.Number and float64 as equal when the numeric value matches.
-// The hcjson package mirrors this as jsonDecodedEqual (plain
+// The internal json package mirrors this as jsonDecodedEqual (plain
 // json.Unmarshal domain, float64 only) in fuzz_interface_test.go; the
 // helpers cannot be shared because test-only code is package-private.
 func jsonSemanticEqual(a, b any) bool {

@@ -1,4 +1,4 @@
-// Package fiberv3happycontext provides the Fiber v3 happycontext
+// Package fiberv3 provides the Fiber v3 unolog
 // middleware: one canonical event per request, with errors, panics,
 // status, and route resolved from the Fiber context.
 package fiberv3

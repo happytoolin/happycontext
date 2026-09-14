@@ -12,7 +12,7 @@ import (
 )
 
 // These benches measure the gate segments that the external benches
-// cannot isolate (they run inside package hc with unexported access).
+// cannot isolate (they run inside package unolog with unexported access).
 
 // BenchmarkEndDropPath times the complete field-less End on pre-built
 // operations — claim, recover, clock read, seal, scan, post-seal

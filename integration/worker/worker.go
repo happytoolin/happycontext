@@ -1,4 +1,4 @@
-// Package workerhappycontext provides the background-job happycontext
+// Package worker provides the background-job unolog
 // lifecycle: Start opens a job operation from JobMeta and returns the
 // deferred-End handle.
 package worker

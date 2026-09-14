@@ -37,5 +37,5 @@ file only indexes the load-bearing decisions an implementer needs at hand.
 ## Mechanics on the branch
 - Nested modules use `replace … => ../` during development; the lockstep
   scripts restore published-requirement form at cutover.
-- The `happycontext.test` stray binary seen in the worktree is a local
+- The `unolog.test` stray binary seen in the worktree is a local
   artifact (gitignored) — never commit it.

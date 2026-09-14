@@ -101,7 +101,7 @@ func assertGoldenParity(t *testing.T, zerologLine, hcLine []byte) {
 	}
 
 	if len(z) != len(h) {
-		t.Fatalf("field count differs: zerolog %v vs hc %v", z, h)
+		t.Fatalf("field count differs: zerolog %v vs unolog %v", z, h)
 	}
 	for k, zv := range z {
 		hv, ok := h[k]
@@ -125,7 +125,7 @@ func assertGoldenParity(t *testing.T, zerologLine, hcLine []byte) {
 		zj, _ := json.Marshal(zv)
 		hj, _ := json.Marshal(hv)
 		if string(zj) != string(hj) {
-			t.Fatalf("field %q differs: zerolog %s vs hc %s", k, zj, hj)
+			t.Fatalf("field %q differs: zerolog %s vs unolog %s", k, zj, hj)
 		}
 	}
 }

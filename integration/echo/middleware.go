@@ -1,4 +1,4 @@
-// Package echohappycontext provides the Echo happycontext middleware:
+// Package echo provides the Echo unolog middleware:
 // one canonical event per request, with errors, panics, status, and
 // route resolved from the Echo context.
 package echo

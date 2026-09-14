@@ -96,7 +96,7 @@ jobs:
           check-latest: true
           cache: true
 
-      - name: Fuzz hcjson targets for 10 minutes each
+      - name: Fuzz JSON targets for 10 minutes each
         shell: bash
         run: |
           set +e

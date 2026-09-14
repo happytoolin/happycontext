@@ -1,6 +1,6 @@
-// Package hcjson is a minimal append-only JSON encoder, vendored from
+// Package json is a minimal append-only JSON encoder, vendored from
 // zerolog v1.34.0's internal/json package (MIT; see LICENSE and README.md
-// in this directory). The hot paths happycontext uses (string/bytes
+// in this directory). The hot paths the unolog core uses (string/bytes
 // escaping, scalars, time, interface fallback) were kept verbatim in
 // shape — including the unused-width scalar constructors — for easy
 // diffing against the upstream original.

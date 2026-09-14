@@ -1,4 +1,4 @@
-// Package zerologadapter bridges happycontext records into gozerolog. A
+// Package zerolog bridges unolog records into zerolog. A
 // Sink serves the record's pre-encoded canonical line directly to plain
 // loggers; context/hook/sampler-augmented loggers take the typed path.
 package zerolog
@@ -17,7 +17,7 @@ import (
 	gozerolog "github.com/rs/zerolog"
 )
 
-// Sink writes happycontext records to gozerolog.
+// Sink writes unolog records to the zerolog logger.
 type Sink struct {
 	logger *gozerolog.Logger
 }
@@ -170,7 +170,7 @@ func funcPointer(fn any) uintptr {
 // "zerolog bridge may serve rec.Encoded() directly"). It reports
 // whether the fast path handled the record.
 //
-// Deliberate trade-offs: the line is hc's canonical line, byte-
+// Deliberate trade-offs: the line is unolog's canonical line, byte-
 // identical to the first-party JSON sink, served via one WriteLevel
 // per record so level-aware writers keep working; errors route through
 // gozerolog.ErrorHandler; customized rendering globals and augmented
@@ -240,7 +240,7 @@ func (s *Sink) eventFor(level unolog.Level) *gozerolog.Event {
 	}
 }
 
-// zlvlFor maps an hc level to the zerolog level carrying the same
+// zlvlFor maps a unolog level to the zerolog level carrying the same
 // severity — used for WriteLevel routing and the threshold gate. The
 // mapping matches eventFor's switch (unknown levels are info).
 func zlvlFor(level unolog.Level) gozerolog.Level {

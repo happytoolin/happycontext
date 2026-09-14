@@ -1,4 +1,4 @@
-// Package stdhappycontext provides the net/http happycontext
+// Package std provides the net/http unolog
 // middleware: one canonical event per request with optional-interface
 // response-writer fidelity (Flusher/Hijacker/Pusher/ReaderFrom).
 package std
@@ -12,7 +12,7 @@ import (
 	"github.com/happytoolin/unolog/integration/flow"
 )
 
-// Middleware wraps an http.Handler with happycontext request lifecycle
+// Middleware wraps an http.Handler with unolog request lifecycle
 // logging. rt comes from unolog.Compile/MustCompile; a nil *unolog.Runtime is a
 // passthrough (the no-op runtime semantics).
 //

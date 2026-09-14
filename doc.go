@@ -1,4 +1,4 @@
-// Package hc emits one structured, canonical event per request: Start
+// Package unolog emits one structured, canonical event per request: Start
 // attaches a write-ahead log to the context, the Add helpers annotate
 // it anywhere the enriched context flows, and the deferred End commits
 // exactly one record through a Sink (slog/zap/zerolog bridges, the

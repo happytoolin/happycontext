@@ -766,7 +766,7 @@ func FuzzCompileConfig(f *testing.F) {
 				t.Fatalf("error %q wraps no sentinel", err)
 			}
 			if !strings.HasPrefix(err.Error(), "unolog: ") {
-				t.Fatalf("error %q lacks the hc: prefix", err)
+				t.Fatalf("error %q lacks the unolog: prefix", err)
 			}
 			return
 		}

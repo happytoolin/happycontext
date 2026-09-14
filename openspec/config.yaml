@@ -1,7 +1,7 @@
 schema: spec-driven
 
 context: |
-  happycontext is a Go library that emits one canonical structured event per
+  unolog (formerly happycontext) is a Go library that emits one canonical structured event per
   request. Multi-module repo: root module + adapter/{slog,zap,zerolog} +
   integration/{std,gin,echo,fiber,fiberv3,worker} + benches + cmd/examples,
   released in lockstep via release-please.

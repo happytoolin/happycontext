@@ -1,4 +1,4 @@
-// Package ginhappycontext provides the Gin happycontext middleware: one
+// Package gin provides the Gin unolog middleware: one
 // canonical event per request, with errors, panics, status, and route
 // resolved from the Gin context.
 package gin
