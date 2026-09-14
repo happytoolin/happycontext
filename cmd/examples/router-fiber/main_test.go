@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	fiberhc "github.com/happytoolin/happycontext/integration/fiber"
+	"github.com/happytoolin/unolog"
+	sloghc "github.com/happytoolin/unolog/adapter/slog"
+	fiberhc "github.com/happytoolin/unolog/integration/fiber"
 )
 
 func TestRouterFiberMiddleware(t *testing.T) {

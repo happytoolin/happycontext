@@ -6,9 +6,9 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	ginhc "github.com/happytoolin/happycontext/integration/gin"
+	"github.com/happytoolin/unolog"
+	sloghc "github.com/happytoolin/unolog/adapter/slog"
+	ginhc "github.com/happytoolin/unolog/integration/gin"
 )
 
 func main() {

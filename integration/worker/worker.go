@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
 // JobMeta describes background job execution metadata.

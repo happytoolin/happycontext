@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	hc "github.com/happytoolin/happycontext"
-	stdhc "github.com/happytoolin/happycontext/integration/std"
+	hc "github.com/happytoolin/unolog"
+	stdhc "github.com/happytoolin/unolog/integration/std"
 )
 
 // ExampleMiddleware shows the two-line adoption: compile once, wrap

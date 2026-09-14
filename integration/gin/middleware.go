@@ -5,8 +5,8 @@ package ginhappycontext
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/happytoolin/happycontext"
-	"github.com/happytoolin/happycontext/integration/common"
+	"github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog/integration/common"
 )
 
 // Middleware returns a Gin middleware that captures one event per

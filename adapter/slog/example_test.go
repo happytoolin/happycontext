@@ -7,8 +7,8 @@ import (
 	"io"
 	"log/slog"
 
-	hc "github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
+	hc "github.com/happytoolin/unolog"
+	sloghc "github.com/happytoolin/unolog/adapter/slog"
 )
 
 // ExampleNew shows the slog bridge: typed attributes in insertion

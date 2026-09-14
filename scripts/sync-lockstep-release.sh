@@ -29,11 +29,11 @@ source "$repo_root/scripts/lockstep-modules.sh"
 update_root_requirement() {
   local file="$1"
 
-  if ! grep -q 'github.com/happytoolin/happycontext v' "$file"; then
+  if ! grep -q 'github.com/happytoolin/unolog v' "$file"; then
     return
   fi
 
-  perl -0pi -e "s#github\\.com/happytoolin/happycontext v\\d+\\.\\d+\\.\\d+#github.com/happytoolin/happycontext v${version}#g" "$file"
+  perl -0pi -e "s#github\\.com/happytoolin/unolog v\\d+\\.\\d+\\.\\d+#github.com/happytoolin/unolog v${version}#g" "$file"
 }
 
 while IFS= read -r modfile; do

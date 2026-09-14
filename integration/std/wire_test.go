@@ -16,7 +16,7 @@ import (
 	"sync"
 	"testing"
 
-	hc "github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/unolog"
 )
 
 // mustWireLine parses one emitted JSON line and asserts the canonical

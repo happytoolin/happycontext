@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"

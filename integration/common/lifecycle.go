@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"net/http"
 
-	hc "github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/unolog"
 )
 
 // StartRequest opens the request lifecycle: it attaches the WAL to the

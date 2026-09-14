@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
 func TestStartAddsWorkerFields(t *testing.T) {

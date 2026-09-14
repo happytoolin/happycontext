@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
 func emit(t *testing.T, sink hc.Sink, level hc.Level, kv ...any) {

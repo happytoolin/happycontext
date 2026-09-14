@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
 func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/happytoolin/happycontext"
-	zaphc "github.com/happytoolin/happycontext/adapter/zap"
+	"github.com/happytoolin/unolog"
+	zaphc "github.com/happytoolin/unolog/adapter/zap"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

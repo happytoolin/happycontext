@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	hc "github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/unolog"
 )
 
 // captureRecords drives n kept lifecycles with fieldsFor(n) fields and

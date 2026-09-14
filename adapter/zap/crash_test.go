@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	hc "github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/unolog"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

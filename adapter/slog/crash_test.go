@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	hc "github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/unolog"
 )
 
 type recSink struct{ rec *hc.Record }

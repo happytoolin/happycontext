@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	workerhc "github.com/happytoolin/happycontext/integration/worker"
+	"github.com/happytoolin/unolog"
+	sloghc "github.com/happytoolin/unolog/adapter/slog"
+	workerhc "github.com/happytoolin/unolog/integration/worker"
 )
 
 func TestWorkerJobExecution(t *testing.T) {

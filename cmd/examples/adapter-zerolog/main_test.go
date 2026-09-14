@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/happytoolin/happycontext"
-	zerologhc "github.com/happytoolin/happycontext/adapter/zerolog"
+	"github.com/happytoolin/unolog"
+	zerologhc "github.com/happytoolin/unolog/adapter/zerolog"
 	"github.com/rs/zerolog"
 )
 

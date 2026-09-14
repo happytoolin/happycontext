@@ -26,7 +26,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	hc "github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/unolog"
 )
 
 // Interface-masked ResponseWriter

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	hc "github.com/happytoolin/happycontext"
-	zerologadapter "github.com/happytoolin/happycontext/adapter/zerolog"
+	hc "github.com/happytoolin/unolog"
+	zerologadapter "github.com/happytoolin/unolog/adapter/zerolog"
 	"github.com/rs/zerolog"
 )
 

@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/happytoolin/happycontext"
-	zerologhc "github.com/happytoolin/happycontext/adapter/zerolog"
-	stdhc "github.com/happytoolin/happycontext/integration/std"
+	"github.com/happytoolin/unolog"
+	zerologhc "github.com/happytoolin/unolog/adapter/zerolog"
+	stdhc "github.com/happytoolin/unolog/integration/std"
 	"github.com/rs/zerolog"
 )
 

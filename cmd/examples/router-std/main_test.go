@@ -8,9 +8,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	stdhc "github.com/happytoolin/happycontext/integration/std"
+	"github.com/happytoolin/unolog"
+	sloghc "github.com/happytoolin/unolog/adapter/slog"
+	stdhc "github.com/happytoolin/unolog/integration/std"
 )
 
 func TestRouterStdMiddleware(t *testing.T) {

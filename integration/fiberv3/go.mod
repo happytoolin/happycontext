@@ -1,10 +1,10 @@
-module github.com/happytoolin/happycontext/integration/fiberv3
+module github.com/happytoolin/unolog/integration/fiberv3
 
 go 1.25.0
 
 require (
 	github.com/gofiber/fiber/v3 v3.0.0-rc.3
-	github.com/happytoolin/happycontext v0.5.0 // x-release-please-version
+	github.com/happytoolin/unolog v0.5.0 // x-release-please-version
 )
 
 require (
@@ -25,4 +25,4 @@ require (
 	golang.org/x/text v0.31.0 // indirect
 )
 
-replace github.com/happytoolin/happycontext => ../..
+replace github.com/happytoolin/unolog => ../..

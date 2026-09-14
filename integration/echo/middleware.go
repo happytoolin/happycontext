@@ -7,8 +7,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/happytoolin/happycontext"
-	"github.com/happytoolin/happycontext/integration/common"
+	"github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog/integration/common"
 	"github.com/labstack/echo/v4"
 )
 

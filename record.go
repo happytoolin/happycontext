@@ -5,8 +5,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/happytoolin/happycontext/bridge"
-	"github.com/happytoolin/happycontext/internal/hcjson"
+	"github.com/happytoolin/unolog/bridge"
+	"github.com/happytoolin/unolog/internal/hcjson"
 )
 
 // Record is the read-only view of one finalized event, handed to sinks

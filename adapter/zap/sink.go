@@ -6,8 +6,8 @@ package zapadapter
 import (
 	"context"
 
-	"github.com/happytoolin/happycontext"
-	"github.com/happytoolin/happycontext/bridge"
+	"github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog/bridge"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

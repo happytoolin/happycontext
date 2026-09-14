@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	hc "github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/unolog"
 )
 
 // printSink renders records deterministically for the output-checked

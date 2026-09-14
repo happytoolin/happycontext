@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"testing"
 
-	hc "github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/unolog"
 )
 
 type discardSink struct{}

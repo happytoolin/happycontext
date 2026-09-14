@@ -1,4 +1,4 @@
-module github.com/happytoolin/happycontext
+module github.com/happytoolin/unolog
 
 go 1.25.0
 

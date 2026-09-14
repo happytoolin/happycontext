@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
 // TestWorkerRetryMetadata: attempt/max_attempts survive to the wire

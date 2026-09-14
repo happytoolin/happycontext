@@ -6,9 +6,9 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	fiberv3hc "github.com/happytoolin/happycontext/integration/fiberv3"
+	"github.com/happytoolin/unolog"
+	sloghc "github.com/happytoolin/unolog/adapter/slog"
+	fiberv3hc "github.com/happytoolin/unolog/integration/fiberv3"
 )
 
 func main() {

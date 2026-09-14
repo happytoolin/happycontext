@@ -8,8 +8,8 @@ import (
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/happytoolin/happycontext"
-	"github.com/happytoolin/happycontext/integration/common"
+	"github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog/integration/common"
 )
 
 // Middleware returns a Fiber v2 middleware that captures one event per request.

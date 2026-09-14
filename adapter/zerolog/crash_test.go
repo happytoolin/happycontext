@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	hc "github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/unolog"
 	"github.com/rs/zerolog"
 )
 

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 	"github.com/rs/zerolog"
 )
 

@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/happytoolin/happycontext"
-	"github.com/happytoolin/happycontext/integration/common"
+	"github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog/integration/common"
 )
 
 // Middleware wraps an http.Handler with happycontext request lifecycle

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
 type retainingHandler struct {

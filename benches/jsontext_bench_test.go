@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	hc "github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/unolog"
 )
 
 // jsontextEncode builds the same canonical line the first-party encoder

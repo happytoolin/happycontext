@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
 func TestMiddlewareCapturesRouteAndFields(t *testing.T) {

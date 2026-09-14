@@ -8,7 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	recovermw "github.com/gofiber/fiber/v3/middleware/recover"
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
 func TestMiddlewareCapturesRouteAndFields(t *testing.T) {

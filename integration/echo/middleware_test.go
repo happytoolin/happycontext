@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 	"github.com/labstack/echo/v4"
 )
 

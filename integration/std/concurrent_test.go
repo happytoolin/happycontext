@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	hc "github.com/happytoolin/happycontext"
+	hc "github.com/happytoolin/unolog"
 )
 
 // TestMiddlewareConcurrentStatusIntegrity pins the tracker-pool race

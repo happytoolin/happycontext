@@ -12,8 +12,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/happytoolin/happycontext"
-	"github.com/happytoolin/happycontext/bridge"
+	"github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog/bridge"
 	"github.com/rs/zerolog"
 )
 

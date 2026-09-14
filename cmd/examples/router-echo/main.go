@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	echohc "github.com/happytoolin/happycontext/integration/echo"
+	"github.com/happytoolin/unolog"
+	sloghc "github.com/happytoolin/unolog/adapter/slog"
+	echohc "github.com/happytoolin/unolog/integration/echo"
 	"github.com/labstack/echo/v4"
 )
 

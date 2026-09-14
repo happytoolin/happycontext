@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/happytoolin/happycontext"
-	"github.com/happytoolin/happycontext/bridge"
+	"github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog/bridge"
 )
 
 const (
