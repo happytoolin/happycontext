@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	hc "github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog"
 )
 
 // jsontextEncode builds the same canonical line the first-party encoder
 // produces, but with Go 1.27's encoding/json/jsontext appends — the
 // maintenance-free comparator backend kept in benches/ per amendment 10,
 // so the fork can be re-raced against the stdlib per Go release.
-func jsontextEncode(rec *hc.Record) []byte {
+func jsontextEncode(rec *unolog.Record) []byte {
 	dst := make([]byte, 0, 512)
 	dst = append(dst, `{"level":"`...)
 	dst = append(dst, jsonLevelText(rec.Level())...)
@@ -75,7 +75,7 @@ func jsontextEncode(rec *hc.Record) []byte {
 
 // appendJSONTextField covers the canonical field shapes (strings, ints,
 // bools, durations) — the bench corpus subset, not the full type set.
-func appendJSONTextField(dst []byte, f hc.Field) []byte {
+func appendJSONTextField(dst []byte, f unolog.Field) []byte {
 	if s, ok := f.Str(); ok {
 		dst, _ = jsontext.AppendQuote(dst, s)
 		return dst
@@ -97,13 +97,13 @@ func appendJSONTextField(dst []byte, f hc.Field) []byte {
 	return append(dst, blob...)
 }
 
-func jsonLevelText(level hc.Level) string {
+func jsonLevelText(level unolog.Level) string {
 	switch level {
-	case hc.LevelDebug:
+	case unolog.LevelDebug:
 		return "debug"
-	case hc.LevelWarn:
+	case unolog.LevelWarn:
 		return "warn"
-	case hc.LevelError:
+	case unolog.LevelError:
 		return "error"
 	default:
 		return "info"
@@ -112,26 +112,26 @@ func jsonLevelText(level hc.Level) string {
 
 type jsontextSink struct{ w io.Writer }
 
-func (s *jsontextSink) Write(_ context.Context, rec *hc.Record) {
+func (s *jsontextSink) Write(_ context.Context, rec *unolog.Record) {
 	_, _ = s.w.Write(jsontextEncode(rec))
 }
 
 // BenchmarkJSONSinkJsontextComparator races the jsontext backend against
 // the first-party encoder on the same event shape.
-var rtFork = hc.MustCompile(hc.Config{Sink: hc.NewJSONSink(io.Discard), SamplingRate: 1})
+var rtFork = unolog.MustCompile(unolog.Config{Sink: unolog.NewJSONSink(io.Discard), SamplingRate: 1})
 
 func BenchmarkJSONSinkJsontextComparator(b *testing.B) {
 	cap := &recordCapture{}
-	rt := hc.MustCompile(hc.Config{Sink: cap, SamplingRate: 1})
+	rt := unolog.MustCompile(unolog.Config{Sink: cap, SamplingRate: 1})
 	for range 64 {
-		op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainHTTP, Name: "GET /api/v1/orders/:id"})
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainHTTP, Name: "GET /api/v1/orders/:id"})
 		benchmarkFields(op.Context(), 12)
 		op.End(nil)
 	}
 	recs := cap.recs
 
 	js := &jsontextSink{w: io.Discard}
-	fork := hc.NewJSONSink(io.Discard)
+	fork := unolog.NewJSONSink(io.Discard)
 
 	b.Run("jsontext_12_fields", func(b *testing.B) {
 		b.ReportAllocs()
@@ -153,7 +153,7 @@ func BenchmarkJSONSinkJsontextComparator(b *testing.B) {
 		// fresh records each iteration: measures encode-once + write
 		b.ReportAllocs()
 		for b.Loop() {
-			op := hc.Start(context.Background(), rtFork, hc.OperationStart{Domain: hc.DomainHTTP, Name: "GET /api/v1/orders/:id"})
+			op := unolog.Start(context.Background(), rtFork, unolog.OperationStart{Domain: unolog.DomainHTTP, Name: "GET /api/v1/orders/:id"})
 			benchmarkFields(op.Context(), 12)
 			op.End(nil)
 		}

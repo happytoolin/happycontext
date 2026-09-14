@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	hc "github.com/happytoolin/unolog"
-	zerologadapter "github.com/happytoolin/unolog/adapter/zerolog"
+	"github.com/happytoolin/unolog"
+	uzerolog "github.com/happytoolin/unolog/adapter/zerolog"
 	"github.com/rs/zerolog"
 )
 
@@ -27,39 +27,39 @@ func TestGoldenZerologBridgeParity(t *testing.T) {
 	}{
 		{"plain", nil, nil},
 		{"scalars", func(ctx context.Context) {
-			hc.Add(ctx, "s", "v", "i", 7, "u8", uint8(9), "f", 2.5, "b", true)
+			unolog.Add(ctx, "s", "v", "i", 7, "u8", uint8(9), "f", 2.5, "b", true)
 		}, nil},
 		{"temporal", func(ctx context.Context) {
-			hc.Add(ctx, "t", time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC), "d", 1500*time.Millisecond)
+			unolog.Add(ctx, "t", time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC), "d", 1500*time.Millisecond)
 		}, nil},
 		{"escapes", func(ctx context.Context) {
-			hc.Add(ctx, "q", `she said "hi"`, "bs", `C:\path`, "ctl", "tab\ttab")
-			hc.Add(ctx, "uni", "héllo ☃ 🍜", "nul", "x\x00y", "del", "d\x7f")
+			unolog.Add(ctx, "q", `she said "hi"`, "bs", `C:\path`, "ctl", "tab\ttab")
+			unolog.Add(ctx, "uni", "héllo ☃ 🍜", "nul", "x\x00y", "del", "d\x7f")
 		}, nil},
 		{"raw_json", func(ctx context.Context) {
-			hc.Add(ctx, "meta", json.RawMessage(`{"nested":true,"n":1}`))
+			unolog.Add(ctx, "meta", json.RawMessage(`{"nested":true,"n":1}`))
 		}, nil},
 		{"any_fallback", func(ctx context.Context) {
-			hc.Add(ctx, "obj", map[string]any{"a": 1}, "sl", []any{1, "x"}, "nil", nil)
+			unolog.Add(ctx, "obj", map[string]any{"a": 1}, "sl", []any{1, "x"}, "nil", nil)
 		}, nil},
 		{"duplicates", func(ctx context.Context) {
-			hc.Add(ctx, "k", "first", "k", "second", "other", 1)
+			unolog.Add(ctx, "k", "first", "k", "second", "other", 1)
 		}, nil},
 		{"wide", func(ctx context.Context) {
 			for i := range 32 {
-				hc.Add(ctx, "k"+strings.Repeat("x", i+1), i)
+				unolog.Add(ctx, "k"+strings.Repeat("x", i+1), i)
 			}
 		}, nil},
 		{"error", nil, errors.New("boom")},
 		{"wide_duplicates", func(ctx context.Context) {
-			hc.Add(ctx, "dup", "first-write")
+			unolog.Add(ctx, "dup", "first-write")
 			for i := range 28 {
-				hc.Add(ctx, "k"+strings.Repeat("x", i+1), i)
+				unolog.Add(ctx, "k"+strings.Repeat("x", i+1), i)
 			}
-			hc.Add(ctx, "dup", "last-write")
+			unolog.Add(ctx, "dup", "last-write")
 		}, nil},
 		{"float32", func(ctx context.Context) {
-			hc.Add(ctx, "f", float32(0.1), "g", 0.1)
+			unolog.Add(ctx, "f", float32(0.1), "g", 0.1)
 		}, nil},
 	}
 
@@ -67,8 +67,8 @@ func TestGoldenZerologBridgeParity(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			// first-party JSON sink
 			var hbuf bytes.Buffer
-			hrt := hc.MustCompile(hc.Config{Sink: hc.NewJSONSink(&hbuf), SamplingRate: 1})
-			hop := hc.Start(context.Background(), hrt, hc.OperationStart{Domain: hc.DomainJob, Name: "golden"})
+			hrt := unolog.MustCompile(unolog.Config{Sink: unolog.NewJSONSink(&hbuf), SamplingRate: 1})
+			hop := unolog.Start(context.Background(), hrt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "golden"})
 			if c.mutate != nil {
 				c.mutate(hop.Context())
 			}
@@ -77,8 +77,8 @@ func TestGoldenZerologBridgeParity(t *testing.T) {
 			// zerolog bridge
 			var zbuf bytes.Buffer
 			zlogger := zerolog.New(&zbuf)
-			zrt := hc.MustCompile(hc.Config{Sink: zerologadapter.New(&zlogger), SamplingRate: 1})
-			zop := hc.Start(context.Background(), zrt, hc.OperationStart{Domain: hc.DomainJob, Name: "golden"})
+			zrt := unolog.MustCompile(unolog.Config{Sink: uzerolog.New(&zlogger), SamplingRate: 1})
+			zop := unolog.Start(context.Background(), zrt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "golden"})
 			if c.mutate != nil {
 				c.mutate(zop.Context())
 			}

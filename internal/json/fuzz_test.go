@@ -1,8 +1,8 @@
-package hcjson
+package json
 
 import (
 	"bytes"
-	"encoding/json"
+	stdjson "encoding/json"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -49,7 +49,7 @@ func FuzzAppendString(f *testing.F) {
 			t.Fatalf("SWAR %q != table %q (got %s want %s)", s, s, got, want)
 		}
 		var decoded string
-		if err := json.Unmarshal(got, &decoded); err != nil {
+		if err := stdjson.Unmarshal(got, &decoded); err != nil {
 			t.Fatalf("output is not a valid JSON string: %v (input %q)", err, s)
 		}
 		if utf8.ValidString(s) && decoded != s {
@@ -100,7 +100,7 @@ func FuzzAppendBytes(f *testing.F) {
 			t.Fatalf("SWAR %q != table %q (got %s want %s)", b, b, got, want)
 		}
 		var decoded string
-		if err := json.Unmarshal(got, &decoded); err != nil {
+		if err := stdjson.Unmarshal(got, &decoded); err != nil {
 			t.Fatalf("output is not a valid JSON string: %v (input %q)", err, b)
 		}
 		if utf8.Valid(b) && decoded != string(b) {

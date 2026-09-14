@@ -1,15 +1,15 @@
 // Package slogadapter bridges happycontext records into log/slog: a
 // Sink that forwards each finalized record as typed slog attributes on
 // the logger's own level threshold.
-package slogadapter
+package slog
 
 import (
 	"context"
-	"log/slog"
+	stdslog "log/slog"
 	"sync"
 
 	"github.com/happytoolin/unolog"
-	"github.com/happytoolin/unolog/bridge"
+	"github.com/happytoolin/unolog/wire"
 )
 
 const (
@@ -19,12 +19,12 @@ const (
 
 var slogAttrPool = sync.Pool{
 	New: func() any {
-		buf := make([]slog.Attr, 0, slogPoolCapacity)
+		buf := make([]stdslog.Attr, 0, slogPoolCapacity)
 		return &buf
 	},
 }
 
-func recycleAttrs(bufPtr *[]slog.Attr, buf []slog.Attr) {
+func recycleAttrs(bufPtr *[]stdslog.Attr, buf []stdslog.Attr) {
 	if cap(buf) > slogPoolMaxCapacity {
 		return
 	}
@@ -33,32 +33,32 @@ func recycleAttrs(bufPtr *[]slog.Attr, buf []slog.Attr) {
 	slogAttrPool.Put(bufPtr)
 }
 
-// Sink writes happycontext records to slog.
+// Sink writes happycontext records to stdslog.
 type Sink struct {
-	logger *slog.Logger
+	logger *stdslog.Logger
 }
 
 // New creates a slog-backed sink.
-func New(l *slog.Logger) *Sink {
+func New(l *stdslog.Logger) *Sink {
 	return &Sink{logger: l}
 }
 
-// Write implements hc.Sink: the record's fields are appended in
+// Write implements unolog.Sink: the record's fields are appended in
 // insertion order (last-write-wins duplicates resolved) as typed slog
 // attributes.
-func (s *Sink) Write(ctx context.Context, rec *hc.Record) {
+func (s *Sink) Write(ctx context.Context, rec *unolog.Record) {
 	if s == nil || s.logger == nil || rec == nil {
 		return
 	}
 
-	slogLevel := slog.LevelInfo
+	slogLevel := stdslog.LevelInfo
 	switch rec.Level() {
-	case hc.LevelDebug:
-		slogLevel = slog.LevelDebug
-	case hc.LevelWarn:
-		slogLevel = slog.LevelWarn
-	case hc.LevelError:
-		slogLevel = slog.LevelError
+	case unolog.LevelDebug:
+		slogLevel = stdslog.LevelDebug
+	case unolog.LevelWarn:
+		slogLevel = stdslog.LevelWarn
+	case unolog.LevelError:
+		slogLevel = stdslog.LevelError
 	}
 	if !s.logger.Enabled(ctx, slogLevel) {
 		return
@@ -70,10 +70,10 @@ func (s *Sink) Write(ctx context.Context, rec *hc.Record) {
 		return
 	}
 
-	bufPtr := slogAttrPool.Get().(*[]slog.Attr)
+	bufPtr := slogAttrPool.Get().(*[]stdslog.Attr)
 	attrs := (*bufPtr)[:0]
 	defer func() { recycleAttrs(bufPtr, attrs) }()
-	for _, i := range bridge.LastIndices(fields, hc.Field.Key) {
+	for _, i := range wire.LastIndices(fields, unolog.Field.Key) {
 		attrs = append(attrs, attrOf(fields[i]))
 	}
 	s.logger.LogAttrs(ctx, slogLevel, rec.Message(), attrs...)
@@ -81,36 +81,36 @@ func (s *Sink) Write(ctx context.Context, rec *hc.Record) {
 
 // attrOf maps a typed field to the matching slog constructor. Error
 // fields render the message string; everything without a typed slot
-// goes through slog.Any.
-func attrOf(f hc.Field) slog.Attr {
+// goes through stdslog.Any.
+func attrOf(f unolog.Field) stdslog.Attr {
 	if err, ok := f.Err(); ok {
-		return slog.String(f.Key(), bridge.ErrorMessage(err))
+		return stdslog.String(f.Key(), wire.ErrorMessage(err))
 	}
 	if str, ok := f.Str(); ok {
-		return slog.String(f.Key(), str)
+		return stdslog.String(f.Key(), str)
 	}
 	if i, ok := f.Int(); ok {
-		return slog.Int64(f.Key(), i)
+		return stdslog.Int64(f.Key(), i)
 	}
 	if u, ok := f.Uint(); ok {
-		return slog.Uint64(f.Key(), u)
+		return stdslog.Uint64(f.Key(), u)
 	}
 	if fl, ok := f.Float(); ok {
 		// slog widens float32 (no Float32 constructor) — the v0 adapter's
 		// shape; the JSON sink and zap/zerolog bridges keep 32-bit
 		// precision.
-		return slog.Float64(f.Key(), fl)
+		return stdslog.Float64(f.Key(), fl)
 	}
 	if b, ok := f.Bool(); ok {
-		return slog.Bool(f.Key(), b)
+		return stdslog.Bool(f.Key(), b)
 	}
 	if tm, ok := f.Time(); ok {
-		return slog.Time(f.Key(), tm)
+		return stdslog.Time(f.Key(), tm)
 	}
 	if d, ok := f.Duration(); ok {
-		return slog.Duration(f.Key(), d)
+		return stdslog.Duration(f.Key(), d)
 	}
-	return slog.Any(f.Key(), f.Any())
+	return stdslog.Any(f.Key(), f.Any())
 }
 
-var _ hc.Sink = (*Sink)(nil)
+var _ unolog.Sink = (*Sink)(nil)

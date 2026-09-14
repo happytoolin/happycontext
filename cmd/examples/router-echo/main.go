@@ -6,23 +6,23 @@ import (
 	"os"
 
 	"github.com/happytoolin/unolog"
-	sloghc "github.com/happytoolin/unolog/adapter/slog"
-	echohc "github.com/happytoolin/unolog/integration/echo"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	uecho "github.com/happytoolin/unolog/integration/echo"
 	"github.com/labstack/echo/v4"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := sloghc.New(logger)
+	sink := uslog.New(logger)
 
 	e := echo.New()
-	e.Use(echohc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
+	e.Use(uecho.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	e.GET("/users/:id", func(c echo.Context) error {
 		ctx := c.Request().Context()
 		id := c.Param("id")
 
-		hc.Add(ctx, "router", "echo")
-		hc.Add(
+		unolog.Add(ctx, "router", "echo")
+		unolog.Add(
 			ctx,
 			"user", map[string]any{
 				"id":   id,
@@ -33,14 +33,14 @@ func main() {
 				"tags":    []string{"examples", "router-echo"},
 			},
 		)
-		hc.SetRoute(ctx, "/users/:id")
+		unolog.SetRoute(ctx, "/users/:id")
 
 		if c.QueryParam("debug") == "1" {
-			hc.SetLevel(ctx, hc.LevelDebug)
-			hc.Add(ctx, "requested_level", hc.LevelDebug)
+			unolog.SetLevel(ctx, unolog.LevelDebug)
+			unolog.Add(ctx, "requested_level", unolog.LevelDebug)
 		}
 		if c.QueryParam("fail") == "1" {
-			hc.Error(ctx, errors.New("demo failure"))
+			unolog.Error(ctx, errors.New("demo failure"))
 			return c.NoContent(500)
 		}
 

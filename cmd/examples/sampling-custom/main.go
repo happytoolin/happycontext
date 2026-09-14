@@ -8,17 +8,17 @@ import (
 	"time"
 
 	"github.com/happytoolin/unolog"
-	sloghc "github.com/happytoolin/unolog/adapter/slog"
-	stdhc "github.com/happytoolin/unolog/integration/std"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	"github.com/happytoolin/unolog/integration/std"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := sloghc.New(logger)
+	sink := uslog.New(logger)
 
-	mw := stdhc.Middleware(hc.MustCompile(hc.Config{
+	mw := std.Middleware(unolog.MustCompile(unolog.Config{
 		Sink: sink,
-		Sampler: func(in hc.SampleInput) bool {
+		Sampler: func(in unolog.SampleInput) bool {
 			if in.HasError || in.StatusCode >= 500 {
 				return true
 			}
@@ -40,16 +40,16 @@ func main() {
 			tier = "free"
 		}
 
-		hc.Add(ctx, "router", "sampling-custom")
-		hc.Add(ctx, "user_id", id)
-		hc.Add(ctx, "user_tier", tier)
-		hc.SetRoute(ctx, r.Pattern)
+		unolog.Add(ctx, "router", "sampling-custom")
+		unolog.Add(ctx, "user_id", id)
+		unolog.Add(ctx, "user_tier", tier)
+		unolog.SetRoute(ctx, r.Pattern)
 
 		if r.URL.Query().Get("slow") == "1" {
 			time.Sleep(650 * time.Millisecond)
 		}
 		if r.URL.Query().Get("fail") == "1" {
-			hc.Error(ctx, errors.New("demo failure"))
+			unolog.Error(ctx, errors.New("demo failure"))
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}

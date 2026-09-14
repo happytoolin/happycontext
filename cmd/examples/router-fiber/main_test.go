@@ -11,22 +11,22 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/happytoolin/unolog"
-	sloghc "github.com/happytoolin/unolog/adapter/slog"
-	fiberhc "github.com/happytoolin/unolog/integration/fiber"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	ufiber "github.com/happytoolin/unolog/integration/fiber"
 )
 
 func TestRouterFiberMiddleware(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := sloghc.New(logger)
+	sink := uslog.New(logger)
 
 	app := fiber.New()
-	app.Use(fiberhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
+	app.Use(ufiber.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/users/:id", func(c *fiber.Ctx) error {
 		ctx := c.UserContext()
 		id := c.Params("id")
 
-		hc.Add(ctx, "router", "fiber")
-		hc.Add(
+		unolog.Add(ctx, "router", "fiber")
+		unolog.Add(
 			ctx,
 			"user", map[string]any{
 				"id":   id,
@@ -37,14 +37,14 @@ func TestRouterFiberMiddleware(t *testing.T) {
 				"tags":    []string{"examples", "router-fiber"},
 			},
 		)
-		hc.SetRoute(ctx, "/users/:id")
+		unolog.SetRoute(ctx, "/users/:id")
 
 		if c.Query("debug") == "1" {
-			hc.SetLevel(ctx, hc.LevelDebug)
-			hc.Add(ctx, "requested_level", hc.LevelDebug)
+			unolog.SetLevel(ctx, unolog.LevelDebug)
+			unolog.Add(ctx, "requested_level", unolog.LevelDebug)
 		}
 		if c.Query("fail") == "1" {
-			hc.Error(ctx, errors.New("demo failure"))
+			unolog.Error(ctx, errors.New("demo failure"))
 			return c.Status(fiber.StatusInternalServerError).SendString("error")
 		}
 

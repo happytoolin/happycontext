@@ -1,7 +1,7 @@
-// Package zerologadapter bridges happycontext records into zerolog. A
+// Package zerologadapter bridges happycontext records into gozerolog. A
 // Sink serves the record's pre-encoded canonical line directly to plain
 // loggers; context/hook/sampler-augmented loggers take the typed path.
-package zerologadapter
+package zerolog
 
 import (
 	"context"
@@ -13,24 +13,24 @@ import (
 	"unsafe"
 
 	"github.com/happytoolin/unolog"
-	"github.com/happytoolin/unolog/bridge"
-	"github.com/rs/zerolog"
+	"github.com/happytoolin/unolog/wire"
+	gozerolog "github.com/rs/zerolog"
 )
 
-// Sink writes happycontext records to zerolog.
+// Sink writes happycontext records to gozerolog.
 type Sink struct {
-	logger *zerolog.Logger
+	logger *gozerolog.Logger
 }
 
 // New creates a zerolog-backed sink.
-func New(l *zerolog.Logger) *Sink {
+func New(l *gozerolog.Logger) *Sink {
 	if l != nil {
 		checkLoggerLayout()
 	}
 	return &Sink{logger: l}
 }
 
-// loggerView mirrors zerolog.Logger's field layout, reached via unsafe
+// loggerView mirrors gozerolog.Logger's field layout, reached via unsafe
 // pointer conversion, so the fast path can serve rec.Encoded() straight
 // to the logger's writer, gated by its own level threshold. Guarded two
 // ways: checkLoggerLayout validates the struct size at every New, and
@@ -40,26 +40,26 @@ func New(l *zerolog.Logger) *Sink {
 // The layout is identical in zerolog v1.34.0 and v1.35.1 (both pinned
 // to v1.35.1 here and in benches); only the first six fields are read.
 type loggerView struct {
-	w       zerolog.LevelWriter
-	level   zerolog.Level
-	sampler zerolog.Sampler
+	w       gozerolog.LevelWriter
+	level   gozerolog.Level
+	sampler gozerolog.Sampler
 	context []byte
-	hooks   []zerolog.Hook
+	hooks   []gozerolog.Hook
 	stack   bool
 	ctx     context.Context
 }
 
-// checkLoggerLayout fails loudly if zerolog.Logger no longer has the
+// checkLoggerLayout fails loudly if gozerolog.Logger no longer has the
 // layout loggerView mirrors. A size match does not prove field offsets,
 // but a declaration-level change almost always moves the size, and the
 // pinned go.mod version closes the remaining gap.
 func checkLoggerLayout() {
-	if unsafe.Sizeof(zerolog.Logger{}) != unsafe.Sizeof(loggerView{}) {
-		panic("zerologadapter: zerolog.Logger layout changed; the direct-write fast path (loggerView) must be re-verified")
+	if unsafe.Sizeof(gozerolog.Logger{}) != unsafe.Sizeof(loggerView{}) {
+		panic("zerolog: gozerolog.Logger layout changed; the direct-write fast path (loggerView) must be re-verified")
 	}
 }
 
-// plain reports whether the logger is the zerolog.New(w) shape (at most
+// plain reports whether the logger is the gozerolog.New(w) shape (at most
 // a level filter): no contextual fields, non-timestamp hooks, sampler,
 // or caller-stack state. Such loggers add nothing around the record, so
 // rec.Encoded() is byte-for-byte the event they should emit; loggers
@@ -82,8 +82,8 @@ func (v *loggerView) plain() bool {
 // Interface comparison then detects it the way zerolog's own slog
 // bridge detects it internally (hasTimestampHook). A nil probe (layout
 // drift) conservatively disables both detection paths.
-var timestampHookSample = func() (hook zerolog.Hook) {
-	l := zerolog.New(nil).With().Timestamp().Logger()
+var timestampHookSample = func() (hook gozerolog.Hook) {
+	l := gozerolog.New(nil).With().Timestamp().Logger()
 	view := (*loggerView)(unsafe.Pointer(&l))
 	if len(view.hooks) > 0 {
 		hook = view.hooks[0]
@@ -93,7 +93,7 @@ var timestampHookSample = func() (hook zerolog.Hook) {
 
 // onlyTimestampHooks reports whether every hook is the Timestamp()
 // hook (or the slice is empty).
-func onlyTimestampHooks(hooks []zerolog.Hook) bool {
+func onlyTimestampHooks(hooks []gozerolog.Hook) bool {
 	for _, h := range hooks {
 		if timestampHookSample == nil || h != timestampHookSample {
 			return false
@@ -103,7 +103,7 @@ func onlyTimestampHooks(hooks []zerolog.Hook) bool {
 }
 
 // hasTimestampHook reports whether any hook is the Timestamp() hook.
-func hasTimestampHook(hooks []zerolog.Hook) bool {
+func hasTimestampHook(hooks []gozerolog.Hook) bool {
 	if timestampHookSample == nil {
 		return false
 	}
@@ -114,8 +114,8 @@ func hasTimestampHook(hooks []zerolog.Hook) bool {
 // logger: written when the level is at or above both the logger's
 // threshold and the package-global threshold. Logger-level samplers
 // take the typed path, where zerolog applies them natively.
-func (v *loggerView) enabled(level hc.Level) bool {
-	return zlvlFor(level) >= v.level && zlvlFor(level) >= zerolog.GlobalLevel()
+func (v *loggerView) enabled(level unolog.Level) bool {
+	return zlvlFor(level) >= v.level && zlvlFor(level) >= gozerolog.GlobalLevel()
 }
 
 // canonicalSettings reports whether every zerolog global that shapes a
@@ -135,23 +135,23 @@ func (v *loggerView) enabled(level hc.Level) bool {
 // identified by code pointer against the defaults captured at package
 // init (a nil or replaced function fails the check).
 func canonicalSettings() bool {
-	return zerolog.LevelFieldName == "level" &&
-		zerolog.TimestampFieldName == "time" &&
-		zerolog.MessageFieldName == "message" &&
-		zerolog.TimeFieldFormat == time.RFC3339 &&
-		zerolog.DurationFieldUnit == time.Millisecond &&
-		!zerolog.DurationFieldInteger &&
-		zerolog.LevelDebugValue == "debug" &&
-		zerolog.LevelInfoValue == "info" &&
-		zerolog.LevelWarnValue == "warn" &&
-		zerolog.LevelErrorValue == "error" &&
-		funcPointer(zerolog.LevelFieldMarshalFunc) == defaultLevelFieldMarshalFunc &&
-		funcPointer(zerolog.TimestampFunc) == defaultTimestampFunc
+	return gozerolog.LevelFieldName == "level" &&
+		gozerolog.TimestampFieldName == "time" &&
+		gozerolog.MessageFieldName == "message" &&
+		gozerolog.TimeFieldFormat == time.RFC3339 &&
+		gozerolog.DurationFieldUnit == time.Millisecond &&
+		!gozerolog.DurationFieldInteger &&
+		gozerolog.LevelDebugValue == "debug" &&
+		gozerolog.LevelInfoValue == "info" &&
+		gozerolog.LevelWarnValue == "warn" &&
+		gozerolog.LevelErrorValue == "error" &&
+		funcPointer(gozerolog.LevelFieldMarshalFunc) == defaultLevelFieldMarshalFunc &&
+		funcPointer(gozerolog.TimestampFunc) == defaultTimestampFunc
 }
 
 var (
-	defaultLevelFieldMarshalFunc = funcPointer(zerolog.LevelFieldMarshalFunc)
-	defaultTimestampFunc         = funcPointer(zerolog.TimestampFunc)
+	defaultLevelFieldMarshalFunc = funcPointer(gozerolog.LevelFieldMarshalFunc)
+	defaultTimestampFunc         = funcPointer(gozerolog.TimestampFunc)
 )
 
 // funcPointer identifies a function value by code pointer. It returns 0
@@ -173,16 +173,16 @@ func funcPointer(fn any) uintptr {
 // Deliberate trade-offs: the line is hc's canonical line, byte-
 // identical to the first-party JSON sink, served via one WriteLevel
 // per record so level-aware writers keep working; errors route through
-// zerolog.ErrorHandler; customized rendering globals and augmented
+// gozerolog.ErrorHandler; customized rendering globals and augmented
 // loggers are rejected (canonicalSettings, plain) and take the typed
 // path.
-func (s *Sink) writeEncoded(view *loggerView, rec *hc.Record) bool {
+func (s *Sink) writeEncoded(view *loggerView, rec *unolog.Record) bool {
 	if !view.plain() || !view.enabled(rec.Level()) || !canonicalSettings() {
 		return false
 	}
 	if _, err := view.w.WriteLevel(zlvlFor(rec.Level()), rec.Encoded()); err != nil {
-		if zerolog.ErrorHandler != nil {
-			zerolog.ErrorHandler(err)
+		if gozerolog.ErrorHandler != nil {
+			gozerolog.ErrorHandler(err)
 		} else {
 			fmt.Fprintf(os.Stderr, "zerolog: could not write event: %v\n", err)
 		}
@@ -190,12 +190,12 @@ func (s *Sink) writeEncoded(view *loggerView, rec *hc.Record) bool {
 	return true
 }
 
-// Write implements hc.Sink. Plain loggers receive the record's
+// Write implements unolog.Sink. Plain loggers receive the record's
 // pre-encoded canonical line directly (writeEncoded); loggers that
 // carry zerolog context/hooks/samplers fall back to the typed path:
 // the record's fields are appended in insertion order (last-write-wins
 // duplicates resolved) through zerolog's typed constructors.
-func (s *Sink) Write(ctx context.Context, rec *hc.Record) {
+func (s *Sink) Write(ctx context.Context, rec *unolog.Record) {
 	if s == nil || s.logger == nil || rec == nil {
 		return
 	}
@@ -210,7 +210,7 @@ func (s *Sink) Write(ctx context.Context, rec *hc.Record) {
 	}
 
 	fields := rec.Fields()
-	for _, i := range bridge.LastIndices(fields, hc.Field.WireKey) {
+	for _, i := range wire.LastIndices(fields, unolog.Field.WireKey) {
 		event = appendField(event, fields[i])
 	}
 	// Stamp the record's own completion time (rec.Time) rather than a
@@ -222,18 +222,18 @@ func (s *Sink) Write(ctx context.Context, rec *hc.Record) {
 	// the hook fires at Msg and would duplicate the member — the same
 	// guard zerolog's own slog bridge applies.
 	if !hasTimestampHook(view.hooks) {
-		event.Time(zerolog.TimestampFieldName, rec.Time())
+		event.Time(gozerolog.TimestampFieldName, rec.Time())
 	}
 	event.Msg(rec.Message())
 }
 
-func (s *Sink) eventFor(level hc.Level) *zerolog.Event {
+func (s *Sink) eventFor(level unolog.Level) *gozerolog.Event {
 	switch level {
-	case hc.LevelDebug:
+	case unolog.LevelDebug:
 		return s.logger.Debug()
-	case hc.LevelWarn:
+	case unolog.LevelWarn:
 		return s.logger.Warn()
-	case hc.LevelError:
+	case unolog.LevelError:
 		return s.logger.Error()
 	default:
 		return s.logger.Info()
@@ -243,23 +243,23 @@ func (s *Sink) eventFor(level hc.Level) *zerolog.Event {
 // zlvlFor maps an hc level to the zerolog level carrying the same
 // severity — used for WriteLevel routing and the threshold gate. The
 // mapping matches eventFor's switch (unknown levels are info).
-func zlvlFor(level hc.Level) zerolog.Level {
+func zlvlFor(level unolog.Level) gozerolog.Level {
 	switch level {
-	case hc.LevelDebug:
-		return zerolog.DebugLevel
-	case hc.LevelWarn:
-		return zerolog.WarnLevel
-	case hc.LevelError:
-		return zerolog.ErrorLevel
+	case unolog.LevelDebug:
+		return gozerolog.DebugLevel
+	case unolog.LevelWarn:
+		return gozerolog.WarnLevel
+	case unolog.LevelError:
+		return gozerolog.ErrorLevel
 	default:
-		return zerolog.InfoLevel
+		return gozerolog.InfoLevel
 	}
 }
 
 // appendField maps a typed record field to zerolog's constructor — the
 // mapping the v0 adapter used (error → message string, duration →
 // float milliseconds via zerolog defaults, time → RFC3339 string).
-func appendField(event *zerolog.Event, f hc.Field) *zerolog.Event {
+func appendField(event *gozerolog.Event, f unolog.Field) *gozerolog.Event {
 	// WireKey matches Encoded(): colliding envelope keys become fields.*.
 	key := f.WireKey()
 	if str, ok := f.Str(); ok {
@@ -272,7 +272,7 @@ func appendField(event *zerolog.Event, f hc.Field) *zerolog.Event {
 		return event.Uint64(key, u)
 	}
 	if fl, ok := f.Float(); ok {
-		if f.Kind() == hc.KindFloat32 {
+		if f.Kind() == unolog.KindFloat32 {
 			return event.Float32(key, float32(fl))
 		}
 		return event.Float64(key, fl)
@@ -287,9 +287,9 @@ func appendField(event *zerolog.Event, f hc.Field) *zerolog.Event {
 		return event.Dur(key, d)
 	}
 	if err, ok := f.Err(); ok {
-		return event.Str(key, bridge.ErrorMessage(err))
+		return event.Str(key, wire.ErrorMessage(err))
 	}
 	return event.Interface(key, f.Any())
 }
 
-var _ hc.Sink = (*Sink)(nil)
+var _ unolog.Sink = (*Sink)(nil)

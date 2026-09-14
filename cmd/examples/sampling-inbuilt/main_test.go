@@ -10,22 +10,22 @@ import (
 	"time"
 
 	"github.com/happytoolin/unolog"
-	sloghc "github.com/happytoolin/unolog/adapter/slog"
-	stdhc "github.com/happytoolin/unolog/integration/std"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	"github.com/happytoolin/unolog/integration/std"
 )
 
 func TestSamplingInbuiltMiddleware(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	sink := sloghc.New(logger)
+	sink := uslog.New(logger)
 
-	mw := stdhc.Middleware(hc.MustCompile(hc.Config{
+	mw := std.Middleware(unolog.MustCompile(unolog.Config{
 		Sink: sink,
-		Sampler: hc.ChainSampler(
-			hc.RateSampler(0.05),
-			hc.KeepErrors(),
-			hc.KeepPathPrefix("/users/vip"),
-			hc.KeepSlowerThan(250*time.Millisecond),
+		Sampler: unolog.ChainSampler(
+			unolog.RateSampler(0.05),
+			unolog.KeepErrors(),
+			unolog.KeepPathPrefix("/users/vip"),
+			unolog.KeepSlowerThan(250*time.Millisecond),
 		),
 	}))
 

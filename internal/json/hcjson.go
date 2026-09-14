@@ -15,7 +15,7 @@
 //
 // All operations append to dst and return the extended slice; nothing here
 // allocates on its own beyond what strconv/json.Marshal require.
-package hcjson
+package json
 
 // Encoder is a stateless value type; methods are safe for concurrent use.
 type Encoder struct{}

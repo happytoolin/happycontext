@@ -1,8 +1,8 @@
-package hcjson
+package json
 
 import (
 	"bytes"
-	"encoding/json"
+	stdjson "encoding/json"
 	"sync"
 	"testing"
 	"time"
@@ -161,7 +161,7 @@ func FuzzAppendTimeRFC3339(f *testing.F) {
 			other := inst.In(zones[int(zoneChoice)%len(zones)])
 			got := string(AppendTimeRFC3339(nil, other))
 			var s string
-			if err := json.Unmarshal([]byte(got), &s); err != nil {
+			if err := stdjson.Unmarshal([]byte(got), &s); err != nil {
 				t.Fatalf("not a valid JSON string: %v (%q)", err, got)
 			}
 			parsed, err := time.Parse(time.RFC3339, s)

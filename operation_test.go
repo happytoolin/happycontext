@@ -1,4 +1,4 @@
-package hc
+package unolog
 
 // Operation lifecycle, concurrent-End, and panic tests
 
@@ -1066,7 +1066,7 @@ func TestTypedNilErrorsContained(t *testing.T) {
 
 	rt, ts := testRT(t, nil)
 	op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
-	Error(op.Context(), pe) // hc.Error path
+	Error(op.Context(), pe) // unolog.Error path
 	_ = op.End(nil)
 	ev := ts.Events()[0]
 	errField, ok := ev.Lookup("error")

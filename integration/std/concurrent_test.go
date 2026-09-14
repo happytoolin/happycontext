@@ -1,4 +1,4 @@
-package stdhappycontext
+package std
 
 import (
 	"context"
@@ -7,15 +7,15 @@ import (
 	"sync"
 	"testing"
 
-	hc "github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog"
 )
 
 // TestMiddlewareConcurrentStatusIntegrity pins the tracker-pool race
 // fix: under concurrent requests, every event must carry its own
 // request's status (a released-then-reset tracker would log 0→200).
 func TestMiddlewareConcurrentStatusIntegrity(t *testing.T) {
-	sink := hc.NewTestSink()
-	rt := hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})
+	sink := unolog.NewTestSink()
+	rt := unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})
 	mw := Middleware(rt)
 
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

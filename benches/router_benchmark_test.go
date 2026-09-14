@@ -11,12 +11,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gofiber/fiber/v2"
 	fiberv3 "github.com/gofiber/fiber/v3"
-	hc "github.com/happytoolin/unolog"
-	echohc "github.com/happytoolin/unolog/integration/echo"
-	fiberhc "github.com/happytoolin/unolog/integration/fiber"
-	fiberv3hc "github.com/happytoolin/unolog/integration/fiberv3"
-	ginhc "github.com/happytoolin/unolog/integration/gin"
-	stdhc "github.com/happytoolin/unolog/integration/std"
+	"github.com/happytoolin/unolog"
+	uecho "github.com/happytoolin/unolog/integration/echo"
+	ufiber "github.com/happytoolin/unolog/integration/fiber"
+	ufiberv3 "github.com/happytoolin/unolog/integration/fiberv3"
+	ugin "github.com/happytoolin/unolog/integration/gin"
+	"github.com/happytoolin/unolog/integration/std"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
@@ -42,12 +42,12 @@ var benchHeader = http.Header{}
 func BenchmarkRouterStd(b *testing.B) {
 	req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
 	handlerHappycontextAPI := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hc.Add(r.Context(), "user_id", "u_1")
+		unolog.Add(r.Context(), "user_id", "u_1")
 		w.WriteHeader(http.StatusNoContent)
 	})
 
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
-		mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: discardSink{}, SamplingRate: 1}))
+		mw := std.Middleware(unolog.MustCompile(unolog.Config{Sink: discardSink{}, SamplingRate: 1}))
 		wrapped := mw(handlerHappycontextAPI)
 		bww := &benchResponseWriter{}
 		b.ReportAllocs()
@@ -142,9 +142,9 @@ func BenchmarkRouterGin(b *testing.B) {
 
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
 		r := gin.New()
-		r.Use(ginhc.Middleware(hc.MustCompile(hc.Config{Sink: discardSink{}, SamplingRate: 1})))
+		r.Use(ugin.Middleware(unolog.MustCompile(unolog.Config{Sink: discardSink{}, SamplingRate: 1})))
 		r.GET("/orders/:id", func(c *gin.Context) {
-			hc.Add(c.Request.Context(), "user_id", "u_1")
+			unolog.Add(c.Request.Context(), "user_id", "u_1")
 			c.Status(http.StatusNoContent)
 		})
 		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
@@ -242,9 +242,9 @@ func BenchmarkRouterGin(b *testing.B) {
 func BenchmarkRouterEcho(b *testing.B) {
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
 		e := echo.New()
-		e.Use(echohc.Middleware(hc.MustCompile(hc.Config{Sink: discardSink{}, SamplingRate: 1})))
+		e.Use(uecho.Middleware(unolog.MustCompile(unolog.Config{Sink: discardSink{}, SamplingRate: 1})))
 		e.GET("/orders/:id", func(c echo.Context) error {
-			hc.Add(c.Request().Context(), "user_id", "u_1")
+			unolog.Add(c.Request().Context(), "user_id", "u_1")
 			return c.NoContent(http.StatusNoContent)
 		})
 		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
@@ -342,9 +342,9 @@ func BenchmarkRouterEcho(b *testing.B) {
 func BenchmarkRouterFiber(b *testing.B) {
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
 		app := fiber.New()
-		app.Use(fiberhc.Middleware(hc.MustCompile(hc.Config{Sink: discardSink{}, SamplingRate: 1})))
+		app.Use(ufiber.Middleware(unolog.MustCompile(unolog.Config{Sink: discardSink{}, SamplingRate: 1})))
 		app.Get("/orders/:id", func(c *fiber.Ctx) error {
-			hc.Add(c.UserContext(), "user_id", "u_1")
+			unolog.Add(c.UserContext(), "user_id", "u_1")
 			return c.SendStatus(http.StatusNoContent)
 		})
 		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)
@@ -437,9 +437,9 @@ func BenchmarkRouterFiber(b *testing.B) {
 func BenchmarkRouterFiberV3(b *testing.B) {
 	b.Run("middleware_on_sink_noop", func(b *testing.B) {
 		app := fiberv3.New()
-		app.Use(fiberv3hc.Middleware(hc.MustCompile(hc.Config{Sink: discardSink{}, SamplingRate: 1})))
+		app.Use(ufiberv3.Middleware(unolog.MustCompile(unolog.Config{Sink: discardSink{}, SamplingRate: 1})))
 		app.Get("/orders/:id", func(c fiberv3.Ctx) error {
-			hc.Add(c.Context(), "user_id", "u_1")
+			unolog.Add(c.Context(), "user_id", "u_1")
 			return c.SendStatus(http.StatusNoContent)
 		})
 		req := httptest.NewRequest(http.MethodGet, "/orders/123", nil)

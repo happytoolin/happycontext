@@ -1,4 +1,4 @@
-package hc
+package unolog
 
 // crash_test.go — the adversarial crash-test suites for the v2 core,
 // consolidated from the two crash-testing rounds. Each section is one

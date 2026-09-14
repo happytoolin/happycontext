@@ -1,7 +1,7 @@
 // Package workerhappycontext provides the background-job happycontext
 // lifecycle: Start opens a job operation from JobMeta and returns the
 // deferred-End handle.
-package workerhappycontext
+package worker
 
 import (
 	"context"
@@ -21,21 +21,21 @@ type JobMeta struct {
 }
 
 // Start initializes a worker operation handle. rt comes from
-// hc.Compile/MustCompile; a nil *hc.Runtime runs the operation with no
+// unolog.Compile/MustCompile; a nil *unolog.Runtime runs the operation with no
 // emission. End the operation with the deferred-error idiom — and
-// switch to the operation context, or every hc.Add below is a silent
+// switch to the operation context, or every unolog.Add below is a silent
 // no-op (the original ctx carries no WAL):
 //
-//	func run(ctx context.Context, rt *hc.Runtime) (err error) {
-//		op := workerhappycontext.Start(ctx, rt, meta)
+//	func run(ctx context.Context, rt *unolog.Runtime) (err error) {
+//		op := worker.Start(ctx, rt, meta)
 //		ctx = op.Context()
 //		defer op.End(&err)
-//		hc.Add(ctx, "rows", 42)
+//		unolog.Add(ctx, "rows", 42)
 //		...
 //	}
-func Start(ctx context.Context, rt *hc.Runtime, meta JobMeta) *hc.Operation {
-	op := hc.Start(ctx, rt, hc.OperationStart{
-		Domain:      hc.DomainJob,
+func Start(ctx context.Context, rt *unolog.Runtime, meta JobMeta) *unolog.Operation {
+	op := unolog.Start(ctx, rt, unolog.OperationStart{
+		Domain:      unolog.DomainJob,
 		Name:        meta.Name,
 		ID:          meta.ID,
 		Source:      meta.Queue,
@@ -51,6 +51,6 @@ func Start(ctx context.Context, rt *hc.Runtime, meta JobMeta) *hc.Operation {
 // canonical-field pass; scheduled_at has no op.* equivalent.
 func addJobFields(ctx context.Context, meta JobMeta) {
 	if !meta.ScheduledAt.IsZero() {
-		hc.Add(ctx, hc.KeyJobScheduledAt, meta.ScheduledAt.UTC())
+		unolog.Add(ctx, unolog.KeyJobScheduledAt, meta.ScheduledAt.UTC())
 	}
 }

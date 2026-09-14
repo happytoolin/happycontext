@@ -1,4 +1,4 @@
-package stdhappycontext
+package std
 
 // Wire-level reality tests: no test doubles at all — the sink is the
 // first-party JSONSink emitting the canonical line, the traffic is
@@ -16,7 +16,7 @@ import (
 	"sync"
 	"testing"
 
-	hc "github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog"
 )
 
 // mustWireLine parses one emitted JSON line and asserts the canonical
@@ -70,25 +70,25 @@ func TestWireMixedTrafficRealLogger(t *testing.T) {
 	var buf bytes.Buffer
 	// One JSONSink, mutex-serialized by the sink itself: the shared
 	// bytes.Buffer is safe exactly as it would be in production.
-	rt := hc.MustCompile(hc.Config{Sink: hc.NewJSONSink(&buf), SamplingRate: 1})
+	rt := unolog.MustCompile(unolog.Config{Sink: unolog.NewJSONSink(&buf), SamplingRate: 1})
 	mw := Middleware(rt)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /ok/{id}", func(w http.ResponseWriter, r *http.Request) {
-		hc.Add(r.Context(), "id", r.PathValue("id"))
+		unolog.Add(r.Context(), "id", r.PathValue("id"))
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("GET /err/{id}", func(w http.ResponseWriter, r *http.Request) {
-		hc.Add(r.Context(), "id", r.PathValue("id"))
-		hc.Error(r.Context(), fmt.Errorf("wire failure %s", r.PathValue("id")))
+		unolog.Add(r.Context(), "id", r.PathValue("id"))
+		unolog.Error(r.Context(), fmt.Errorf("wire failure %s", r.PathValue("id")))
 		http.Error(w, "boom", http.StatusInternalServerError)
 	})
 	mux.HandleFunc("GET /panic/{id}", func(w http.ResponseWriter, r *http.Request) {
-		hc.Add(r.Context(), "id", r.PathValue("id"))
+		unolog.Add(r.Context(), "id", r.PathValue("id"))
 		panic("wire panic " + r.PathValue("id"))
 	})
 	mux.HandleFunc("GET /stream/{id}", func(w http.ResponseWriter, r *http.Request) {
-		hc.Add(r.Context(), "id", r.PathValue("id"))
+		unolog.Add(r.Context(), "id", r.PathValue("id"))
 		f := w.(http.Flusher)
 		for i := range 3 {
 			fmt.Fprintf(w, "chunk %d\n", i)
@@ -96,7 +96,7 @@ func TestWireMixedTrafficRealLogger(t *testing.T) {
 		}
 	})
 	mux.HandleFunc("GET /kitchen/{id}", func(w http.ResponseWriter, r *http.Request) {
-		hc.Add(r.Context(),
+		unolog.Add(r.Context(),
 			"id", r.PathValue("id"),
 			"utf8", "\xff\xfe garbage",
 			"deep", map[string]any{"a": []any{1, "two", nil}},
@@ -168,10 +168,10 @@ func nonEmptyLines(s string) []string {
 func TestWireRouteAndOperationShareTheTemplate(t *testing.T) {
 	var sampled string
 	var buf bytes.Buffer
-	rt := hc.MustCompile(hc.Config{
-		Sink:         hc.NewJSONSink(&buf),
+	rt := unolog.MustCompile(unolog.Config{
+		Sink:         unolog.NewJSONSink(&buf),
 		SamplingRate: 1,
-		Sampler: func(in hc.SampleInput) bool {
+		Sampler: func(in unolog.SampleInput) bool {
 			sampled = in.Operation
 			return true
 		},

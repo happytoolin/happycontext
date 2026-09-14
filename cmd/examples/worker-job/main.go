@@ -6,20 +6,20 @@ import (
 	"os"
 	"time"
 
-	hc "github.com/happytoolin/unolog"
-	sloghc "github.com/happytoolin/unolog/adapter/slog"
-	workerhc "github.com/happytoolin/unolog/integration/worker"
+	"github.com/happytoolin/unolog"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	"github.com/happytoolin/unolog/integration/worker"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := sloghc.New(logger)
-	rt := hc.MustCompile(hc.Config{
+	sink := uslog.New(logger)
+	rt := unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})
 
-	meta := workerhc.JobMeta{
+	meta := worker.JobMeta{
 		Name:        "billing.reconcile",
 		ID:          "job_8472",
 		Queue:       "nightly",
@@ -33,10 +33,10 @@ func main() {
 	}
 }
 
-func runJob(ctx context.Context, rt *hc.Runtime, meta workerhc.JobMeta) (err error) {
-	op := workerhc.Start(ctx, rt, meta)
+func runJob(ctx context.Context, rt *unolog.Runtime, meta worker.JobMeta) (err error) {
+	op := worker.Start(ctx, rt, meta)
 	defer op.End(&err)
 
-	hc.Add(op.Context(), "tenant", "enterprise", "worker", "billing")
+	unolog.Add(op.Context(), "tenant", "enterprise", "worker", "billing")
 	return nil
 }

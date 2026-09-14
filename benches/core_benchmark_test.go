@@ -5,17 +5,17 @@ import (
 	"strconv"
 	"testing"
 
-	hc "github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog"
 )
 
 type discardSink struct{}
 
-func (discardSink) Write(context.Context, *hc.Record) {}
+func (discardSink) Write(context.Context, *unolog.Record) {}
 
 // runtimeFor returns a compiled runtime with the given sink and full
 // sampling (kept events), as the gates measure the kept path.
-func runtimeFor(sink hc.Sink) *hc.Runtime {
-	return hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})
+func runtimeFor(sink unolog.Sink) *unolog.Runtime {
+	return unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})
 }
 
 // BenchmarkWALAddStableKeys measures the single-pair Add gate by
@@ -28,14 +28,14 @@ func BenchmarkWALAddStableKeys(b *testing.B) {
 	b.Run("start_only", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			_ = hc.Start(ctx, rt, hc.OperationStart{Domain: hc.DomainJob, Name: "bench"})
+			_ = unolog.Start(ctx, rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "bench"})
 		}
 	})
 	b.Run("start_add_pair", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			op := hc.Start(ctx, rt, hc.OperationStart{Domain: hc.DomainJob, Name: "bench"})
-			hc.Add(op.Context(), "user_id", "u_8472")
+			op := unolog.Start(ctx, rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "bench"})
+			unolog.Add(op.Context(), "user_id", "u_8472")
 		}
 	})
 }
@@ -43,12 +43,12 @@ func BenchmarkWALAddStableKeys(b *testing.B) {
 // BenchmarkWALAddMany measures the variadic multi-pair Add shape.
 func BenchmarkWALAddMany(b *testing.B) {
 	rt := runtimeFor(discardSink{})
-	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "bench"})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "bench"})
 	ctx := op.Context()
 	b.ReportAllocs()
 	i := 0
 	for b.Loop() {
-		hc.Add(ctx, "a", i, "b", i, "c", i, "d", i, "e", i, "f", i)
+		unolog.Add(ctx, "a", i, "b", i, "c", i, "d", i, "e", i, "f", i)
 		i++
 	}
 	op.End(nil)
@@ -56,20 +56,20 @@ func BenchmarkWALAddMany(b *testing.B) {
 
 // benchmarkFields appends n typed fields to the operation context.
 func benchmarkFields(ctx context.Context, n int) {
-	hc.Add(ctx, "http.method", "GET")
-	hc.Add(ctx, "http.path", "/api/v1/orders/12345")
-	hc.Add(ctx, "http.route", "/api/v1/orders/:id")
-	hc.Add(ctx, "http.status", 200)
-	hc.Add(ctx, "op.domain", "http")
-	hc.Add(ctx, "op.name", "GET /api/v1/orders/:id")
-	hc.Add(ctx, "op.outcome", "success")
-	hc.Add(ctx, "op.code", 200)
-	hc.Add(ctx, "duration_ms", 12)
-	hc.Add(ctx, "request_id", "req_01HZX4T7W8Y3N2M1K0J9Z8X7V6")
-	hc.Add(ctx, "user_id", "usr_77451")
-	hc.Add(ctx, "cache.hit", true)
+	unolog.Add(ctx, "http.method", "GET")
+	unolog.Add(ctx, "http.path", "/api/v1/orders/12345")
+	unolog.Add(ctx, "http.route", "/api/v1/orders/:id")
+	unolog.Add(ctx, "http.status", 200)
+	unolog.Add(ctx, "op.domain", "http")
+	unolog.Add(ctx, "op.name", "GET /api/v1/orders/:id")
+	unolog.Add(ctx, "op.outcome", "success")
+	unolog.Add(ctx, "op.code", 200)
+	unolog.Add(ctx, "duration_ms", 12)
+	unolog.Add(ctx, "request_id", "req_01HZX4T7W8Y3N2M1K0J9Z8X7V6")
+	unolog.Add(ctx, "user_id", "usr_77451")
+	unolog.Add(ctx, "cache.hit", true)
 	for i := 12; i < n; i++ {
-		hc.Add(ctx, "k"+strconv.Itoa(i), i)
+		unolog.Add(ctx, "k"+strconv.Itoa(i), i)
 	}
 }
 
@@ -81,15 +81,15 @@ func BenchmarkOperationLifecycle(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		var err error
-		op := hc.Start(context.Background(), rt, hc.OperationStart{
-			Domain:      hc.DomainJob,
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{
+			Domain:      unolog.DomainJob,
 			Name:        "cleanup",
 			ID:          "job_8472",
 			Source:      "nightly",
 			Attempt:     1,
 			MaxAttempts: 3,
 		})
-		hc.Add(op.Context(), "worker", "payments", "tenant", "enterprise")
+		unolog.Add(op.Context(), "worker", "payments", "tenant", "enterprise")
 		op.End(&err)
 	}
 }
@@ -100,7 +100,7 @@ func BenchmarkOperationLifecycle12Fields(b *testing.B) {
 	rt := runtimeFor(discardSink{})
 	b.ReportAllocs()
 	for b.Loop() {
-		op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainHTTP, Name: "GET /api/v1/orders/:id"})
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainHTTP, Name: "GET /api/v1/orders/:id"})
 		benchmarkFields(op.Context(), 12)
 		op.End(nil)
 	}
@@ -112,7 +112,7 @@ func BenchmarkOperationLifecycleSparse(b *testing.B) {
 	rt := runtimeFor(discardSink{})
 	b.ReportAllocs()
 	for b.Loop() {
-		op := hc.Start(context.Background(), rt, hc.OperationStart{})
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{})
 		op.End(nil)
 	}
 }
@@ -121,7 +121,7 @@ func BenchmarkOperationLifecycleSparse(b *testing.B) {
 // gate (≤ 300 ns), on the v0-parity corpus: N fields then a sampled-out
 // End. "End-drop path ≤ 100 ns / ≤ 2 al" is the no-fields variant below.
 func BenchmarkOperationLifecycleDropped(b *testing.B) {
-	rt := hc.MustCompile(hc.Config{Sink: discardSink{}, SamplingRate: 0})
+	rt := unolog.MustCompile(unolog.Config{Sink: discardSink{}, SamplingRate: 0})
 	for _, count := range []int{8, 32} {
 		b.Run(strconv.Itoa(count)+"_fields", func(b *testing.B) {
 			keys := make([]string, count)
@@ -130,9 +130,9 @@ func BenchmarkOperationLifecycleDropped(b *testing.B) {
 			}
 			b.ReportAllocs()
 			for b.Loop() {
-				op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "cleanup"})
+				op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "cleanup"})
 				for _, k := range keys {
-					hc.Add(op.Context(), k, 7)
+					unolog.Add(op.Context(), k, 7)
 				}
 				op.End(nil)
 			}
@@ -143,10 +143,10 @@ func BenchmarkOperationLifecycleDropped(b *testing.B) {
 // BenchmarkOperationLifecycleDroppedNoFields approaches the end-drop
 // floor (≤ 100 ns): sampler + release + pool with no field appends.
 func BenchmarkOperationLifecycleDroppedNoFields(b *testing.B) {
-	rt := hc.MustCompile(hc.Config{Sink: discardSink{}, Sampler: func(hc.SampleInput) bool { return false }})
+	rt := unolog.MustCompile(unolog.Config{Sink: discardSink{}, Sampler: func(unolog.SampleInput) bool { return false }})
 	b.ReportAllocs()
 	for b.Loop() {
-		op := hc.Start(context.Background(), rt, hc.OperationStart{})
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{})
 		op.End(nil)
 	}
 }
@@ -154,14 +154,14 @@ func BenchmarkOperationLifecycleDroppedNoFields(b *testing.B) {
 // BenchmarkOperationLifecycleWithPolicies runs the kept lifecycle under
 // a policy table, as the v0 bench did.
 func BenchmarkOperationLifecycleWithPolicies(b *testing.B) {
-	policies := map[hc.Domain]hc.OperationPolicy{
-		hc.DomainHTTP: {SuccessLevel: hc.LevelInfo, FailureLevel: hc.LevelError},
-		hc.DomainJob:  {SuccessLevel: hc.LevelDebug, FailureLevel: hc.LevelWarn},
+	policies := map[unolog.Domain]unolog.OperationPolicy{
+		unolog.DomainHTTP: {SuccessLevel: unolog.LevelInfo, FailureLevel: unolog.LevelError},
+		unolog.DomainJob:  {SuccessLevel: unolog.LevelDebug, FailureLevel: unolog.LevelWarn},
 	}
-	rt := hc.MustCompile(hc.Config{Sink: discardSink{}, SamplingRate: 1, OperationPolicies: policies})
+	rt := unolog.MustCompile(unolog.Config{Sink: discardSink{}, SamplingRate: 1, OperationPolicies: policies})
 	b.ReportAllocs()
 	for b.Loop() {
-		op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "job"})
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "job"})
 		benchmarkFields(op.Context(), 12)
 		op.End(nil)
 	}
@@ -170,14 +170,14 @@ func BenchmarkOperationLifecycleWithPolicies(b *testing.B) {
 // BenchmarkOperationPolicyScale runs the kept lifecycle with a wide
 // policy table (the scale axis of the v0 quality matrix).
 func BenchmarkOperationPolicyScale(b *testing.B) {
-	policies := make(map[hc.Domain]hc.OperationPolicy, 128)
+	policies := make(map[unolog.Domain]unolog.OperationPolicy, 128)
 	for i := range 128 {
-		policies[hc.Domain("svc"+strconv.Itoa(i))] = hc.OperationPolicy{SuccessLevel: hc.LevelInfo}
+		policies[unolog.Domain("svc"+strconv.Itoa(i))] = unolog.OperationPolicy{SuccessLevel: unolog.LevelInfo}
 	}
-	rt := hc.MustCompile(hc.Config{Sink: discardSink{}, SamplingRate: 1, OperationPolicies: policies})
+	rt := unolog.MustCompile(unolog.Config{Sink: discardSink{}, SamplingRate: 1, OperationPolicies: policies})
 	b.ReportAllocs()
 	for b.Loop() {
-		op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainHTTP, Name: "GET /x"})
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainHTTP, Name: "GET /x"})
 		op.End(nil)
 	}
 }
@@ -189,8 +189,8 @@ func BenchmarkNonHTTPManualLifecycle(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		var err error = errBench
-		op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "import", ID: "j-1", Attempt: 1})
-		hc.Add(op.Context(), "rows", 42)
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "import", ID: "j-1", Attempt: 1})
+		unolog.Add(op.Context(), "rows", 42)
 		op.End(&err)
 	}
 }
@@ -206,16 +206,16 @@ func BenchmarkNonHTTPBackgroundJob(b *testing.B) {
 	rt := runtimeFor(discardSink{})
 	b.ReportAllocs()
 	for b.Loop() {
-		op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "digest", ID: "d-9"})
-		hc.Add(op.Context(), "batch", 100, "source", "queue")
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "digest", ID: "d-9"})
+		unolog.Add(op.Context(), "batch", 100, "source", "queue")
 		op.End(nil)
 	}
 }
 
 // BenchmarkRateSampler measures the built-in probabilistic sampler.
 func BenchmarkRateSampler(b *testing.B) {
-	in := hc.SampleInput{Domain: hc.DomainHTTP, Operation: "GET /x", Outcome: hc.OutcomeSuccess, StatusCode: 200, Level: hc.LevelInfo}
-	sampler := hc.RateSampler(0.5)
+	in := unolog.SampleInput{Domain: unolog.DomainHTTP, Operation: "GET /x", Outcome: unolog.OutcomeSuccess, StatusCode: 200, Level: unolog.LevelInfo}
+	sampler := unolog.RateSampler(0.5)
 	b.ReportAllocs()
 	for b.Loop() {
 		_ = sampler(in)
@@ -225,11 +225,11 @@ func BenchmarkRateSampler(b *testing.B) {
 // BenchmarkDisabledLevelWrite measures the level-sampling drop for
 // always-sampled-out debug traffic (no regression axis).
 func BenchmarkDisabledLevelWrite(b *testing.B) {
-	rt := hc.MustCompile(hc.Config{Sink: discardSink{}, SamplingRate: 0})
+	rt := unolog.MustCompile(unolog.Config{Sink: discardSink{}, SamplingRate: 0})
 	b.ReportAllocs()
 	for b.Loop() {
-		op := hc.Start(context.Background(), rt, hc.OperationStart{})
-		hc.SetLevel(op.Context(), hc.LevelDebug)
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{})
+		unolog.SetLevel(op.Context(), unolog.LevelDebug)
 		op.End(nil)
 	}
 }

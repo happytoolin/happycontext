@@ -1,4 +1,4 @@
-package hc
+package unolog
 
 // Runtime/Compile tests: construction-time validation, policy
 // resolution, and the config fuzz target.
@@ -111,13 +111,13 @@ func TestCompileSentinels(t *testing.T) {
 			name:  "rate above one",
 			cfg:   Config{SamplingRate: 1.5},
 			sent:  ErrInvalidRate,
-			inMsg: "hc: sampling rate 1.5",
+			inMsg: "unolog: sampling rate 1.5",
 		},
 		{
 			name:  "rate negative",
 			cfg:   Config{SamplingRate: -0.1},
 			sent:  ErrInvalidRate,
-			inMsg: "hc: sampling rate -0.1",
+			inMsg: "unolog: sampling rate -0.1",
 		},
 		{
 			name: "rate NaN",
@@ -582,12 +582,12 @@ func TestFanoutSinkOrder(t *testing.T) {
 	}
 }
 
-// FuzzCompileConfig fuzzes hc.Compile with extreme configurations; the
+// FuzzCompileConfig fuzzes unolog.Compile with extreme configurations; the
 // oracle checks the documented contract:
 //
 //  1. Compile never panics.
 //  2. err != nil ⇒ the error wraps one of the three sentinels
-//     (errors.Is works) with the "hc: " prefix.
+//     (errors.Is works) with the "unolog: " prefix.
 //  3. err == nil ⇒ the runtime is usable end-to-end (a full request
 //     runs against a TestSink) and immutable: mutating every field of
 //     the caller's Config after Compile changes nothing the runtime
@@ -755,7 +755,7 @@ func FuzzCompileConfig(f *testing.F) {
 				t.Fatalf("Compile rejected a valid config: %v", err)
 			}
 			// Sentinel contract: errors.Is works against the wrapped
-			// sentinel, with the "hc: " prefix.
+			// sentinel, with the "unolog: " prefix.
 			sentinel := false
 			for _, s := range []error{ErrInvalidRate, ErrInvalidLevel, ErrInvalidOutcome} {
 				if errors.Is(err, s) {
@@ -765,7 +765,7 @@ func FuzzCompileConfig(f *testing.F) {
 			if !sentinel {
 				t.Fatalf("error %q wraps no sentinel", err)
 			}
-			if !strings.HasPrefix(err.Error(), "hc: ") {
+			if !strings.HasPrefix(err.Error(), "unolog: ") {
 				t.Fatalf("error %q lacks the hc: prefix", err)
 			}
 			return

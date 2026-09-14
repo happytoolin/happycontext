@@ -7,22 +7,22 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/happytoolin/unolog"
-	sloghc "github.com/happytoolin/unolog/adapter/slog"
-	ginhc "github.com/happytoolin/unolog/integration/gin"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	ugin "github.com/happytoolin/unolog/integration/gin"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := sloghc.New(logger)
+	sink := uslog.New(logger)
 
 	r := gin.New()
-	r.Use(ginhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
+	r.Use(ugin.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	r.GET("/users/:id", func(c *gin.Context) {
 		ctx := c.Request.Context()
 		id := c.Param("id")
 
-		hc.Add(ctx, "router", "gin")
-		hc.Add(
+		unolog.Add(ctx, "router", "gin")
+		unolog.Add(
 			ctx,
 			"user", map[string]any{
 				"id":   id,
@@ -33,14 +33,14 @@ func main() {
 				"tags":    []string{"examples", "router-gin"},
 			},
 		)
-		hc.SetRoute(ctx, "/users/:id")
+		unolog.SetRoute(ctx, "/users/:id")
 
 		if c.Query("debug") == "1" {
-			hc.SetLevel(ctx, hc.LevelDebug)
-			hc.Add(ctx, "requested_level", hc.LevelDebug)
+			unolog.SetLevel(ctx, unolog.LevelDebug)
+			unolog.Add(ctx, "requested_level", unolog.LevelDebug)
 		}
 		if c.Query("fail") == "1" {
-			hc.Error(ctx, errors.New("demo failure"))
+			unolog.Error(ctx, errors.New("demo failure"))
 			c.Status(500)
 			return
 		}

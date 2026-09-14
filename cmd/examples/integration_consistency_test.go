@@ -13,21 +13,21 @@ import (
 	fiberv3 "github.com/gofiber/fiber/v3"
 	recoverv3 "github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/happytoolin/unolog"
-	echohc "github.com/happytoolin/unolog/integration/echo"
-	fiberhc "github.com/happytoolin/unolog/integration/fiber"
-	fiberv3hc "github.com/happytoolin/unolog/integration/fiberv3"
-	ginhc "github.com/happytoolin/unolog/integration/gin"
-	stdhc "github.com/happytoolin/unolog/integration/std"
+	uecho "github.com/happytoolin/unolog/integration/echo"
+	ufiber "github.com/happytoolin/unolog/integration/fiber"
+	ufiberv3 "github.com/happytoolin/unolog/integration/fiberv3"
+	ugin "github.com/happytoolin/unolog/integration/gin"
+	"github.com/happytoolin/unolog/integration/std"
 	"github.com/labstack/echo/v4"
 )
 
 type runResult struct {
-	event         hc.CapturedEvent
+	event         unolog.CapturedEvent
 	panicObserved bool
 }
 
 type comparableResult struct {
-	level        hc.Level
+	level        unolog.Level
 	status       int
 	message      string
 	method       string
@@ -93,14 +93,14 @@ func assertConsistency(t *testing.T, mode string, out runResult) {
 
 	switch mode {
 	case "success":
-		if out.event.Level() != hc.LevelInfo {
+		if out.event.Level() != unolog.LevelInfo {
 			t.Fatalf("level = %s, want INFO", out.event.Level())
 		}
 		if statusFromField(t, status) != http.StatusOK {
 			t.Fatalf("status = %v, want %d", status, http.StatusOK)
 		}
 	case "error":
-		if out.event.Level() != hc.LevelError {
+		if out.event.Level() != unolog.LevelError {
 			t.Fatalf("level = %s, want ERROR", out.event.Level())
 		}
 		if statusFromField(t, status) != http.StatusInternalServerError {
@@ -117,7 +117,7 @@ func assertConsistency(t *testing.T, mode string, out runResult) {
 		if !out.panicObserved {
 			t.Fatal("expected panic propagation/observation")
 		}
-		if out.event.Level() != hc.LevelError {
+		if out.event.Level() != unolog.LevelError {
 			t.Fatalf("level = %s, want ERROR", out.event.Level())
 		}
 		if statusFromField(t, status) != http.StatusInternalServerError {
@@ -152,7 +152,7 @@ func TestIntegrationImplicitErrorStatusConsistency(t *testing.T) {
 			if status != http.StatusInternalServerError {
 				t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 			}
-			if out.event.Level() != hc.LevelError {
+			if out.event.Level() != unolog.LevelError {
 				t.Fatalf("level = %s, want ERROR", out.event.Level())
 			}
 			errField, _ := out.event.Lookup("error")
@@ -165,13 +165,13 @@ func TestIntegrationImplicitErrorStatusConsistency(t *testing.T) {
 
 func runStd(t *testing.T, mode string) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
-	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
+	sink := unolog.NewTestSink()
+	mw := std.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1}))
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /orders/{id}", func(w http.ResponseWriter, r *http.Request) {
 		switch mode {
 		case "error":
-			hc.Error(r.Context(), errors.New("boom"))
+			unolog.Error(r.Context(), errors.New("boom"))
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		case "panic":
@@ -193,9 +193,9 @@ func runStd(t *testing.T, mode string) runResult {
 
 func runGin(t *testing.T, mode string) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	r := gin.New()
-	r.Use(ginhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
+	r.Use(ugin.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	r.GET("/orders/:id", func(c *gin.Context) {
 		switch mode {
 		case "error":
@@ -221,9 +221,9 @@ func runGin(t *testing.T, mode string) runResult {
 
 func runEcho(t *testing.T, mode string) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	e := echo.New()
-	e.Use(echohc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
+	e.Use(uecho.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	e.GET("/orders/:id", func(c echo.Context) error {
 		switch mode {
 		case "error":
@@ -247,10 +247,10 @@ func runEcho(t *testing.T, mode string) runResult {
 
 func runFiber(t *testing.T, mode string) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	app := fiber.New()
 	app.Use(recoverv2.New())
-	app.Use(fiberhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
+	app.Use(ufiber.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/orders/:id", func(c *fiber.Ctx) error {
 		switch mode {
 		case "error":
@@ -269,10 +269,10 @@ func runFiber(t *testing.T, mode string) runResult {
 
 func runFiberV3(t *testing.T, mode string) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	app := fiberv3.New()
 	app.Use(recoverv3.New())
-	app.Use(fiberv3hc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
+	app.Use(ufiberv3.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/orders/:id", func(c fiberv3.Ctx) error {
 		switch mode {
 		case "error":
@@ -291,9 +291,9 @@ func runFiberV3(t *testing.T, mode string) runResult {
 
 func runGinImplicitError(t *testing.T) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	r := gin.New()
-	r.Use(ginhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
+	r.Use(ugin.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	r.GET("/orders/:id", func(c *gin.Context) {
 		_ = c.Error(errors.New("boom"))
 	})
@@ -303,9 +303,9 @@ func runGinImplicitError(t *testing.T) runResult {
 
 func runEchoImplicitError(t *testing.T) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	e := echo.New()
-	e.Use(echohc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
+	e.Use(uecho.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	e.GET("/orders/:id", func(c echo.Context) error {
 		return errors.New("boom")
 	})
@@ -315,9 +315,9 @@ func runEchoImplicitError(t *testing.T) runResult {
 
 func runFiberImplicitError(t *testing.T) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	app := fiber.New()
-	app.Use(fiberhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
+	app.Use(ufiber.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/orders/:id", func(c *fiber.Ctx) error {
 		return errors.New("boom")
 	})
@@ -327,9 +327,9 @@ func runFiberImplicitError(t *testing.T) runResult {
 
 func runFiberV3ImplicitError(t *testing.T) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	app := fiberv3.New()
-	app.Use(fiberv3hc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})))
+	app.Use(ufiberv3.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/orders/:id", func(c fiberv3.Ctx) error {
 		return errors.New("boom")
 	})
@@ -337,7 +337,7 @@ func runFiberV3ImplicitError(t *testing.T) runResult {
 	return runResult{event: onlyEvent(t, sink)}
 }
 
-func onlyEvent(t *testing.T, sink *hc.TestSink) hc.CapturedEvent {
+func onlyEvent(t *testing.T, sink *unolog.TestSink) unolog.CapturedEvent {
 	t.Helper()
 	events := sink.Events()
 	if len(events) != 1 {
@@ -372,7 +372,7 @@ func normalizeResult(t *testing.T, out runResult) comparableResult {
 	}
 }
 
-func lookupString(ev hc.CapturedEvent, key string) (string, bool) {
+func lookupString(ev unolog.CapturedEvent, key string) (string, bool) {
 	v, ok := ev.Lookup(key)
 	if !ok {
 		return "", false

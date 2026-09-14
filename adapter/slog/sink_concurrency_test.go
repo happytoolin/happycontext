@@ -1,8 +1,8 @@
-package slogadapter
+package slog
 
 import (
 	"context"
-	"log/slog"
+	stdslog "log/slog"
 	"strconv"
 	"sync"
 	"testing"
@@ -12,31 +12,31 @@ import (
 
 type retainingHandler struct {
 	mu      sync.Mutex
-	records []slog.Record
+	records []stdslog.Record
 }
 
-func (h *retainingHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h *retainingHandler) Enabled(context.Context, stdslog.Level) bool { return true }
 
-func (h *retainingHandler) Handle(_ context.Context, r slog.Record) error {
+func (h *retainingHandler) Handle(_ context.Context, r stdslog.Record) error {
 	h.mu.Lock()
 	h.records = append(h.records, r)
 	h.mu.Unlock()
 	return nil
 }
 
-func (h *retainingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *retainingHandler) WithGroup(string) slog.Handler      { return h }
+func (h *retainingHandler) WithAttrs([]stdslog.Attr) stdslog.Handler { return h }
+func (h *retainingHandler) WithGroup(string) stdslog.Handler         { return h }
 
 // TestSinkRecordsSurviveRetainingHandler drives many lifecycles
 // through the adapter; a handler that retains records must never see
 // corrupted or cross-request data.
 func TestSinkRecordsSurviveRetainingHandler(t *testing.T) {
 	h := &retainingHandler{}
-	rt := hc.MustCompile(hc.Config{Sink: New(slog.New(h)), SamplingRate: 1})
+	rt := unolog.MustCompile(unolog.Config{Sink: New(stdslog.New(h)), SamplingRate: 1})
 
 	for range 100 {
-		op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
-		hc.Add(op.Context(), "a", 1, "b", "two", "c", true)
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "t"})
+		unolog.Add(op.Context(), "a", 1, "b", "two", "c", true)
 		op.End(nil)
 	}
 
@@ -45,7 +45,7 @@ func TestSinkRecordsSurviveRetainingHandler(t *testing.T) {
 	}
 	for i, r := range h.records {
 		count := 0
-		r.Attrs(func(a slog.Attr) bool {
+		r.Attrs(func(a stdslog.Attr) bool {
 			count++
 			switch a.Key {
 			case "a":
@@ -73,7 +73,7 @@ func TestSinkRecordsSurviveRetainingHandler(t *testing.T) {
 // field payloads through one adapter instance.
 func TestSinkConcurrentWrites(t *testing.T) {
 	h := &retainingHandler{}
-	rt := hc.MustCompile(hc.Config{Sink: New(slog.New(h)), SamplingRate: 1})
+	rt := unolog.MustCompile(unolog.Config{Sink: New(stdslog.New(h)), SamplingRate: 1})
 
 	const writers = 8
 	const writes = 50
@@ -85,10 +85,10 @@ func TestSinkConcurrentWrites(t *testing.T) {
 			defer wg.Done()
 			tag := "w" + strconv.Itoa(w)
 			for range writes {
-				op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: tag})
+				op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: tag})
 				ctx := op.Context()
 				for i := range 10 {
-					hc.Add(ctx, "k"+strconv.Itoa(i), tag+":"+strconv.Itoa(i))
+					unolog.Add(ctx, "k"+strconv.Itoa(i), tag+":"+strconv.Itoa(i))
 				}
 				op.End(nil)
 			}
@@ -106,7 +106,7 @@ func TestSinkConcurrentWrites(t *testing.T) {
 // sustained concurrent traffic; every record must stay intact.
 func TestStressSlogSustainedCorrectness(t *testing.T) {
 	h := &retainingHandler{}
-	rt := hc.MustCompile(hc.Config{Sink: New(slog.New(h)), SamplingRate: 1})
+	rt := unolog.MustCompile(unolog.Config{Sink: New(stdslog.New(h)), SamplingRate: 1})
 
 	const goroutines = 8
 	const writes = 2_000
@@ -115,8 +115,8 @@ func TestStressSlogSustainedCorrectness(t *testing.T) {
 	for range goroutines {
 		wg.Go(func() {
 			for range writes {
-				op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "stress"})
-				hc.Add(op.Context(), "a", 1, "b", "two", "c", true)
+				op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "stress"})
+				unolog.Add(op.Context(), "a", 1, "b", "two", "c", true)
 				op.End(nil)
 			}
 		})

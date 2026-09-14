@@ -1,4 +1,4 @@
-package hc
+package unolog
 
 // Level is the event severity, int-backed with slog-compatible ranks.
 // The wire format is unchanged: lowercase on the JSON wire, uppercase

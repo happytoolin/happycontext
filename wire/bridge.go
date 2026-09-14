@@ -4,7 +4,7 @@
 // error fields with the same panic fencing. The bridges live in separate
 // modules that require this one, so the shared code is exported here
 // rather than under internal/.
-package bridge
+package wire
 
 import (
 	"fmt"

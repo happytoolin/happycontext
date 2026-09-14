@@ -1,8 +1,8 @@
-package hcjson
+package json
 
 import (
 	"bytes"
-	"encoding/json"
+	stdjson "encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -25,7 +25,7 @@ var jsonMarshal = func(v any) (b []byte, err error) {
 		}
 	}()
 	var buf bytes.Buffer
-	encoder := json.NewEncoder(&buf)
+	encoder := stdjson.NewEncoder(&buf)
 	encoder.SetEscapeHTML(false)
 	if err = encoder.Encode(v); err != nil {
 		return nil, err

@@ -98,17 +98,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          go test ./internal/hcjson -run '^$' -fuzz '^FuzzAppendString$' -fuzztime 60s
-          go test ./internal/hcjson -run '^$' -fuzz '^FuzzAppendBytes$' -fuzztime 60s
+          go test ./internal/json -run '^$' -fuzz '^FuzzAppendString$' -fuzztime 60s
+          go test ./internal/json -run '^$' -fuzz '^FuzzAppendBytes$' -fuzztime 60s
 
       - name: Fuzz hcjson numeric, time and interface paths
         shell: bash
         run: |
           set -euo pipefail
-          go test ./internal/hcjson -run '^$' -fuzz '^FuzzAppendFloat64$' -fuzztime 60s
-          go test ./internal/hcjson -run '^$' -fuzz '^FuzzAppendFloat32$' -fuzztime 60s
-          go test ./internal/hcjson -run '^$' -fuzz '^FuzzAppendTimeRFC3339$' -fuzztime 60s
-          go test ./internal/hcjson -run '^$' -fuzz '^FuzzAppendInterface$' -fuzztime 60s
+          go test ./internal/json -run '^$' -fuzz '^FuzzAppendFloat64$' -fuzztime 60s
+          go test ./internal/json -run '^$' -fuzz '^FuzzAppendFloat32$' -fuzztime 60s
+          go test ./internal/json -run '^$' -fuzz '^FuzzAppendTimeRFC3339$' -fuzztime 60s
+          go test ./internal/json -run '^$' -fuzz '^FuzzAppendInterface$' -fuzztime 60s
 
       - name: Fuzz record encode (dedupe LWW + canonical collisions)
         shell: bash

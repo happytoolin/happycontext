@@ -6,23 +6,23 @@ import (
 	"os"
 
 	"github.com/happytoolin/unolog"
-	zerologhc "github.com/happytoolin/unolog/adapter/zerolog"
-	stdhc "github.com/happytoolin/unolog/integration/std"
+	uzerolog "github.com/happytoolin/unolog/adapter/zerolog"
+	"github.com/happytoolin/unolog/integration/std"
 	"github.com/rs/zerolog"
 )
 
 func main() {
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
-	sink := zerologhc.New(&logger)
-	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
+	sink := uzerolog.New(&logger)
+	mw := std.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		id := r.PathValue("id")
 
-		hc.Add(ctx, "example", "adapter-zerolog")
-		hc.Add(
+		unolog.Add(ctx, "example", "adapter-zerolog")
+		unolog.Add(
 			ctx,
 			"user", map[string]any{
 				"id":   id,
@@ -33,14 +33,14 @@ func main() {
 				"tags":    []string{"examples", "zerolog"},
 			},
 		)
-		hc.SetRoute(ctx, "/users/{id}")
+		unolog.SetRoute(ctx, "/users/{id}")
 
 		if r.URL.Query().Get("debug") == "1" {
-			hc.SetLevel(ctx, hc.LevelDebug)
-			hc.Add(ctx, "requested_level", hc.LevelDebug)
+			unolog.SetLevel(ctx, unolog.LevelDebug)
+			unolog.Add(ctx, "requested_level", unolog.LevelDebug)
 		}
 		if r.URL.Query().Get("fail") == "1" {
-			hc.Error(ctx, errors.New("demo failure"))
+			unolog.Error(ctx, errors.New("demo failure"))
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}

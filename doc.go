@@ -8,4 +8,4 @@
 // Compile (bad configuration is a construction-time error) and shared
 // by all requests. Sampling drops healthy traffic by rate or custom
 // Sampler; error and panic events always bypass it.
-package hc
+package unolog

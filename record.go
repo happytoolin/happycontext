@@ -1,12 +1,12 @@
-package hc
+package unolog
 
 import (
 	"slices"
 	"sync/atomic"
 	"time"
 
-	"github.com/happytoolin/unolog/bridge"
-	"github.com/happytoolin/unolog/internal/hcjson"
+	"github.com/happytoolin/unolog/internal/json"
+	"github.com/happytoolin/unolog/wire"
 )
 
 // Record is the read-only view of one finalized event, handed to sinks
@@ -89,7 +89,7 @@ func (r *Record) encode() []byte {
 	}
 	b = appendDedupedFields(b, fields)
 	b = jsonEnc.AppendKey(b, "time")
-	b = hcjson.AppendTimeRFC3339(b, r.completedAt)
+	b = json.AppendTimeRFC3339(b, r.completedAt)
 	b = jsonEnc.AppendKey(b, "message")
 	b = jsonEnc.AppendString(b, r.msg)
 	b = append(b, '}', '\n')
@@ -143,10 +143,10 @@ func aliasFields(fields []Field) []Field {
 
 // dedupeScanLimit sets the crossover between the allocation-free
 // last-occurrence scan and the seen-set path for wide events. It is the
-// same constant the sink bridges use (bridge.NarrowLimit), so the
+// same constant the sink bridges use (wire.NarrowLimit), so the
 // canonical line and every bridge resolve duplicates identically
 // (pinned by the golden parity tests).
-const dedupeScanLimit = bridge.NarrowLimit
+const dedupeScanLimit = wire.NarrowLimit
 
 // appendDedupedFields emits each key once — its last value, at its last
 // position (amendment 3). Narrow events use the allocation-free scan;
@@ -240,7 +240,7 @@ func appendFieldJSON(dst []byte, f Field) []byte {
 	}
 }
 
-var jsonEnc = hcjson.Encoder{}
+var jsonEnc = json.Encoder{}
 
 // Precomputed level prefixes: no key encoding, one append.
 var (

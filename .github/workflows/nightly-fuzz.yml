@@ -105,7 +105,7 @@ jobs:
           for target in FuzzAppendString FuzzAppendBytes FuzzAppendFloat32 \
                         FuzzAppendFloat64 FuzzAppendTimeRFC3339 FuzzAppendInterface; do
             echo "=== $target ==="
-            if go test ./internal/hcjson -run '^$' -fuzz "^$target$" -fuzztime 10m; then
+            if go test ./internal/json -run '^$' -fuzz "^$target$" -fuzztime 10m; then
               echo "PASS $target"
             else
               echo "FAIL $target"
@@ -118,7 +118,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: encoder-crash-artifacts
-          path: internal/hcjson/testdata/fuzz/
+          path: internal/json/testdata/fuzz/
           if-no-files-found: ignore
 
       - name: Decide whether encoder failed

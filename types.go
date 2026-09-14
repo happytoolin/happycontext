@@ -1,4 +1,4 @@
-package hc
+package unolog
 
 // Domain identifies the operation category.
 type Domain string

@@ -1,4 +1,4 @@
-package hcjson
+package json
 
 import (
 	"math"

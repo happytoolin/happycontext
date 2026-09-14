@@ -9,20 +9,20 @@ import (
 	"time"
 
 	"github.com/happytoolin/unolog"
-	sloghc "github.com/happytoolin/unolog/adapter/slog"
-	workerhc "github.com/happytoolin/unolog/integration/worker"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	"github.com/happytoolin/unolog/integration/worker"
 )
 
 func TestWorkerJobExecution(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	sink := sloghc.New(logger)
-	rt := hc.MustCompile(hc.Config{
+	sink := uslog.New(logger)
+	rt := unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})
 
-	meta := workerhc.JobMeta{
+	meta := worker.JobMeta{
 		Name:        "billing.reconcile",
 		ID:          "job_8472",
 		Queue:       "nightly",
@@ -52,7 +52,7 @@ func TestWorkerJobExecution(t *testing.T) {
 
 	t.Run("job with different metadata", func(t *testing.T) {
 		buf.Reset()
-		customMeta := workerhc.JobMeta{
+		customMeta := worker.JobMeta{
 			Name:        "email.send",
 			ID:          "job_9999",
 			Queue:       "high-priority",
@@ -76,18 +76,18 @@ func TestWorkerJobExecution(t *testing.T) {
 func TestWorkerJobMetaValidation(t *testing.T) {
 	tests := []struct {
 		name string
-		meta workerhc.JobMeta
+		meta worker.JobMeta
 	}{
 		{
 			name: "minimal metadata",
-			meta: workerhc.JobMeta{
+			meta: worker.JobMeta{
 				Name: "minimal.job",
 				ID:   "job_min",
 			},
 		},
 		{
 			name: "full metadata",
-			meta: workerhc.JobMeta{
+			meta: worker.JobMeta{
 				Name:        "full.job",
 				ID:          "job_full",
 				Queue:       "default",
@@ -100,8 +100,8 @@ func TestWorkerJobMetaValidation(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	sink := sloghc.New(logger)
-	rt := hc.MustCompile(hc.Config{
+	sink := uslog.New(logger)
+	rt := unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})

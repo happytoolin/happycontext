@@ -1,4 +1,4 @@
-package stdhappycontext_test
+package std_test
 
 import (
 	"context"
@@ -6,21 +6,21 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	hc "github.com/happytoolin/unolog"
-	stdhc "github.com/happytoolin/unolog/integration/std"
+	"github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog/integration/std"
 )
 
 // ExampleMiddleware shows the two-line adoption: compile once, wrap
 // the handler. One canonical event per request.
 func ExampleMiddleware() {
-	rt := hc.MustCompile(hc.Config{
+	rt := unolog.MustCompile(unolog.Config{
 		Sink:         demoSink{},
 		SamplingRate: 1,
 	})
-	mw := stdhc.Middleware(rt)
+	mw := std.Middleware(rt)
 
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hc.Add(r.Context(), "user_id", "u_8472")
+		unolog.Add(r.Context(), "user_id", "u_8472")
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
@@ -34,7 +34,7 @@ func ExampleMiddleware() {
 
 type demoSink struct{}
 
-func (demoSink) Write(_ context.Context, rec *hc.Record) {
+func (demoSink) Write(_ context.Context, rec *unolog.Record) {
 	fmt.Printf("%s %s", rec.Level(), rec.Message())
 	for _, f := range rec.Fields() {
 		if v, ok := rec.Lookup(f.Key()); ok {

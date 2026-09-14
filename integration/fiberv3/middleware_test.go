@@ -1,4 +1,4 @@
-package fiberv3happycontext
+package fiberv3
 
 import (
 	"errors"
@@ -13,13 +13,13 @@ import (
 
 func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 	app := fiber.New()
-	sink := hc.NewTestSink()
-	app.Use(Middleware(hc.MustCompile(hc.Config{
+	sink := unolog.NewTestSink()
+	app.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})))
 	app.Get("/orders/:id", func(c fiber.Ctx) error {
-		hc.Add(c.Context(), "user_id", "u_1")
+		unolog.Add(c.Context(), "user_id", "u_1")
 		return c.SendStatus(http.StatusNoContent)
 	})
 
@@ -49,7 +49,7 @@ func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 
 func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
 	app := fiber.New()
-	app.Use(Middleware(hc.MustCompile(hc.Config{})))
+	app.Use(Middleware(unolog.MustCompile(unolog.Config{})))
 	app.Get("/ok", func(c fiber.Ctx) error {
 		return c.SendStatus(http.StatusAccepted)
 	})
@@ -65,8 +65,8 @@ func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
 
 func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 	app := fiber.New()
-	sink := hc.NewTestSink()
-	app.Use(Middleware(hc.MustCompile(hc.Config{
+	sink := unolog.NewTestSink()
+	app.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 0,
 	})))
@@ -89,7 +89,7 @@ func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level() != hc.LevelError {
+	if events[0].Level() != unolog.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level())
 	}
 	if statusField(events[0], "http.status") != http.StatusInternalServerError {
@@ -103,8 +103,8 @@ func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 	app := fiber.New()
 	app.Use(recovermw.New())
-	sink := hc.NewTestSink()
-	app.Use(Middleware(hc.MustCompile(hc.Config{
+	sink := unolog.NewTestSink()
+	app.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})))
@@ -132,8 +132,8 @@ func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 
 func TestMiddlewareFiberErrorKeepsHTTPStatus(t *testing.T) {
 	app := fiber.New()
-	sink := hc.NewTestSink()
-	app.Use(Middleware(hc.MustCompile(hc.Config{
+	sink := unolog.NewTestSink()
+	app.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})))
@@ -151,15 +151,15 @@ func TestMiddlewareFiberErrorKeepsHTTPStatus(t *testing.T) {
 	if statusField(events[0], "http.status") != http.StatusTooManyRequests {
 		t.Fatalf("status = %v, want %d", statusField(events[0], "http.status"), http.StatusTooManyRequests)
 	}
-	if events[0].Level() != hc.LevelError {
+	if events[0].Level() != unolog.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level())
 	}
 }
 
 func TestMiddlewareCustomMessagePropagates(t *testing.T) {
 	app := fiber.New()
-	sink := hc.NewTestSink()
-	app.Use(Middleware(hc.MustCompile(hc.Config{
+	sink := unolog.NewTestSink()
+	app.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 		Message:      "done",
@@ -186,8 +186,8 @@ func TestMiddlewareLogsStatusFromCustomFiberErrorHandler(t *testing.T) {
 			return c.Status(http.StatusTeapot).SendString("handled")
 		},
 	})
-	sink := hc.NewTestSink()
-	app.Use(Middleware(hc.MustCompile(hc.Config{
+	sink := unolog.NewTestSink()
+	app.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})))
@@ -210,7 +210,7 @@ func TestMiddlewareLogsStatusFromCustomFiberErrorHandler(t *testing.T) {
 	if statusField(events[0], "http.status") != http.StatusTeapot {
 		t.Fatalf("status = %v, want %d", statusField(events[0], "http.status"), http.StatusTeapot)
 	}
-	if events[0].Level() != hc.LevelError {
+	if events[0].Level() != unolog.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level())
 	}
 }
@@ -222,13 +222,13 @@ func TestMiddlewareReturnsCustomFiberErrorHandlerFailure(t *testing.T) {
 			return handlerErr
 		},
 	})
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	var upstreamErr error
 	app.Use(func(c fiber.Ctx) error {
 		upstreamErr = c.Next()
 		return upstreamErr
 	})
-	app.Use(Middleware(hc.MustCompile(hc.Config{
+	app.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})))
@@ -262,12 +262,12 @@ func TestMiddlewareReturnsCustomFiberErrorHandlerFailure(t *testing.T) {
 // Typed field reads on captured events: fieldValue for any value,
 // statusField for the int64 http.status these tests compare against
 // int constants.
-func fieldValue(ev hc.CapturedEvent, key string) any {
+func fieldValue(ev unolog.CapturedEvent, key string) any {
 	v, _ := ev.Lookup(key)
 	return v
 }
 
-func statusField(ev hc.CapturedEvent, key string) int64 {
+func statusField(ev unolog.CapturedEvent, key string) int64 {
 	v, _ := ev.Lookup(key)
 	n, _ := v.(int64)
 	return n

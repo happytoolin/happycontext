@@ -1,4 +1,4 @@
-package hc
+package unolog
 
 // Benchmarks for the sampling gate and the record encode/write path —
 // the repo-wide root-module benchmark file (the cross-adapter and host

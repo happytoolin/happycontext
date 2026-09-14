@@ -1,4 +1,4 @@
-package hc
+package unolog
 
 // The canonical field keys the library writes: start metadata, HTTP
 // request fields, completion annotations, and the error/panic fields.

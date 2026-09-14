@@ -1,48 +1,48 @@
-package slogadapter_test
+package slog_test
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
+	stdslog "log/slog"
 
-	hc "github.com/happytoolin/unolog"
-	sloghc "github.com/happytoolin/unolog/adapter/slog"
+	"github.com/happytoolin/unolog"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
 )
 
 // ExampleNew shows the slog bridge: typed attributes in insertion
 // order, errors as message strings.
 func ExampleNew() {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	ts := hc.NewTestSink()
+	logger := stdslog.New(stdslog.NewTextHandler(io.Discard, nil))
+	ts := unolog.NewTestSink()
 	_ = logger
-	rt := hc.MustCompile(hc.Config{Sink: sloghc.New(demoLogger()), SamplingRate: 1})
-	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "j"})
-	hc.Add(op.Context(), "k", 1, "rows", 42)
+	rt := unolog.MustCompile(unolog.Config{Sink: uslog.New(demoLogger()), SamplingRate: 1})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "j"})
+	unolog.Add(op.Context(), "k", 1, "rows", 42)
 	op.End(nil)
 	_ = ts
 	// Output:
 	// level=INFO msg=operation_completed k=1 rows=42 op.domain=job op.name=j duration_ms=0 op.outcome=success
 }
 
-func demoLogger() *slog.Logger {
-	return slog.New(demoHandler{})
+func demoLogger() *stdslog.Logger {
+	return stdslog.New(demoHandler{})
 }
 
 type demoHandler struct{}
 
-func (demoHandler) Enabled(context.Context, slog.Level) bool { return true }
-func (demoHandler) Handle(_ context.Context, r slog.Record) error {
+func (demoHandler) Enabled(context.Context, stdslog.Level) bool { return true }
+func (demoHandler) Handle(_ context.Context, r stdslog.Record) error {
 	fmt.Printf("level=%s msg=%s", r.Level, r.Message)
-	r.Attrs(func(a slog.Attr) bool {
+	r.Attrs(func(a stdslog.Attr) bool {
 		fmt.Printf(" %s=%v", a.Key, a.Value)
 		return true
 	})
 	fmt.Println()
 	return nil
 }
-func (h demoHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h demoHandler) WithGroup(string) slog.Handler      { return h }
+func (h demoHandler) WithAttrs([]stdslog.Attr) stdslog.Handler { return h }
+func (h demoHandler) WithGroup(string) stdslog.Handler         { return h }
 
 var _ = errors.New

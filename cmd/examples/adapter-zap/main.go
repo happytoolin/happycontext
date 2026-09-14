@@ -5,23 +5,23 @@ import (
 	"net/http"
 
 	"github.com/happytoolin/unolog"
-	zaphc "github.com/happytoolin/unolog/adapter/zap"
-	stdhc "github.com/happytoolin/unolog/integration/std"
+	uzap "github.com/happytoolin/unolog/adapter/zap"
+	"github.com/happytoolin/unolog/integration/std"
 	"go.uber.org/zap"
 )
 
 func main() {
 	logger := zap.NewExample()
-	sink := zaphc.New(logger)
-	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
+	sink := uzap.New(logger)
+	mw := std.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		id := r.PathValue("id")
 
-		hc.Add(ctx, "example", "adapter-zap")
-		hc.Add(
+		unolog.Add(ctx, "example", "adapter-zap")
+		unolog.Add(
 			ctx,
 			"user", map[string]any{
 				"id":   id,
@@ -32,14 +32,14 @@ func main() {
 				"tags":    []string{"examples", "zap"},
 			},
 		)
-		hc.SetRoute(ctx, "/users/{id}")
+		unolog.SetRoute(ctx, "/users/{id}")
 
 		if r.URL.Query().Get("debug") == "1" {
-			hc.SetLevel(ctx, hc.LevelDebug)
-			hc.Add(ctx, "requested_level", hc.LevelDebug)
+			unolog.SetLevel(ctx, unolog.LevelDebug)
+			unolog.Add(ctx, "requested_level", unolog.LevelDebug)
 		}
 		if r.URL.Query().Get("fail") == "1" {
-			hc.Error(ctx, errors.New("demo failure"))
+			unolog.Error(ctx, errors.New("demo failure"))
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}

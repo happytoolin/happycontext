@@ -1,4 +1,4 @@
-package hc
+package unolog
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 )
 
 // Compile-time error contract: Compile returns errors wrapping these
-// sentinels with an "hc: " prefix; errors.Is works.
+// sentinels with an "unolog: " prefix; errors.Is works.
 var (
 	// ErrInvalidRate wraps out-of-range sampling rates.
 	ErrInvalidRate = errors.New("invalid rate")
@@ -70,7 +70,7 @@ type Runtime struct {
 
 // Compile validates cfg and returns an immutable *Runtime. Errors wrap
 // the sentinel values (ErrInvalidRate, ErrInvalidLevel, ErrInvalidOutcome)
-// with %w and an "hc: " prefix; errors.Is works.
+// with %w and an "unolog: " prefix; errors.Is works.
 func Compile(cfg Config) (*Runtime, error) {
 	rt := &Runtime{
 		sink:    cfg.Sink,
@@ -80,7 +80,7 @@ func Compile(cfg Config) (*Runtime, error) {
 	}
 
 	if !(rt.rate >= 0 && rt.rate <= 1) {
-		return nil, fmt.Errorf("hc: sampling rate %g: %w", rt.rate, ErrInvalidRate)
+		return nil, fmt.Errorf("unolog: sampling rate %g: %w", rt.rate, ErrInvalidRate)
 	}
 
 	if len(cfg.LevelSamplingRates) > 0 {
@@ -90,10 +90,10 @@ func Compile(cfg Config) (*Runtime, error) {
 		for _, level := range slices.Sorted(maps.Keys(cfg.LevelSamplingRates)) {
 			rate := cfg.LevelSamplingRates[level]
 			if !IsValidLevel(level) {
-				return nil, fmt.Errorf("hc: level sampling rate for level %d: %w", int(level), ErrInvalidLevel)
+				return nil, fmt.Errorf("unolog: level sampling rate for level %d: %w", int(level), ErrInvalidLevel)
 			}
 			if !(rate >= 0 && rate <= 1) {
-				return nil, fmt.Errorf("hc: sampling rate %g for %s: %w", rate, level, ErrInvalidRate)
+				return nil, fmt.Errorf("unolog: sampling rate %g for %s: %w", rate, level, ErrInvalidRate)
 			}
 			rt.levelRates[level] = rate
 		}
@@ -115,7 +115,7 @@ func Compile(cfg Config) (*Runtime, error) {
 				continue // unreachable under sorted iteration; kept as a guard
 			}
 			if err := validatePolicy(policy); err != nil {
-				return nil, fmt.Errorf("hc: policy for domain %q: %w", domain, err)
+				return nil, fmt.Errorf("unolog: policy for domain %q: %w", domain, err)
 			}
 			rt.policies[domain] = copyPolicy(policy)
 		}

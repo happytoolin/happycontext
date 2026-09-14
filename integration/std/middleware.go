@@ -1,7 +1,7 @@
 // Package stdhappycontext provides the net/http happycontext
 // middleware: one canonical event per request with optional-interface
 // response-writer fidelity (Flusher/Hijacker/Pusher/ReaderFrom).
-package stdhappycontext
+package std
 
 import (
 	"io"
@@ -9,18 +9,18 @@ import (
 	"sync"
 
 	"github.com/happytoolin/unolog"
-	"github.com/happytoolin/unolog/integration/common"
+	"github.com/happytoolin/unolog/integration/flow"
 )
 
 // Middleware wraps an http.Handler with happycontext request lifecycle
-// logging. rt comes from hc.Compile/MustCompile; a nil *hc.Runtime is a
+// logging. rt comes from unolog.Compile/MustCompile; a nil *unolog.Runtime is a
 // passthrough (the no-op runtime semantics).
 //
 // The handler must finish all response writes before it returns, as
 // net/http requires. The middleware returns the pooled response writer
 // to the pool when the handler returns; a write after that point can
 // touch the writer of a different request.
-func Middleware(rt *hc.Runtime) func(http.Handler) http.Handler {
+func Middleware(rt *unolog.Runtime) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if rt == nil {
@@ -28,7 +28,7 @@ func Middleware(rt *hc.Runtime) func(http.Handler) http.Handler {
 				return
 			}
 
-			op := common.StartRequest(r.Context(), rt, r.Method, r.URL.Path)
+			op := flow.StartRequest(r.Context(), rt, r.Method, r.URL.Path)
 
 			req := r.WithContext(op.Context())
 			core := getTracker(w)
@@ -41,12 +41,12 @@ func Middleware(rt *hc.Runtime) func(http.Handler) http.Handler {
 				statusCode, wroteHeader := core.statusCode, core.wroteHeader
 				core.release()
 				recovered := recover()
-				status := common.ResolveStatus(common.StatusInput{
+				status := flow.ResolveStatus(flow.StatusInput{
 					Committed:       statusCode,
 					Recovered:       recovered,
 					ResponseStarted: wroteHeader,
 				})
-				common.FinalizeRequest(op, req.Pattern, status, nil, recovered)
+				flow.FinalizeRequest(op, req.Pattern, status, nil, recovered)
 
 				if recovered != nil {
 					panic(recovered)
