@@ -2,11 +2,12 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
-	"github.com/happytoolin/happycontext"
-	zaphc "github.com/happytoolin/happycontext/adapter/zap"
+	"github.com/happytoolin/unolog"
+	uzap "github.com/happytoolin/unolog/adapter/zap"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -17,17 +18,15 @@ func TestZapAdapterWritesStructuredLogs(t *testing.T) {
 	core := zapcore.NewCore(encoder, zapcore.AddSync(&buf), zapcore.InfoLevel)
 	logger := zap.New(core)
 
-	sink := zaphc.New(logger)
+	sink := uzap.New(logger)
 	if sink == nil {
 		t.Fatal("expected sink to be created")
 	}
 
-	fields := map[string]any{
-		"example": "adapter-zap",
-		"test":    true,
-	}
-
-	sink.Write(hc.LevelInfo, "zap test message", fields)
+	rt := unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1, Message: "zap test message"})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "t"})
+	unolog.Add(op.Context(), "example", "adapter-zap", "test", true)
+	op.End(nil)
 
 	output := buf.String()
 	if !strings.Contains(output, "zap test message") {
@@ -39,29 +38,28 @@ func TestZapAdapterWritesStructuredLogs(t *testing.T) {
 }
 
 func TestZapAdapterWithNilLogger(t *testing.T) {
-	sink := zaphc.New(nil)
+	sink := uzap.New(nil)
 	if sink == nil {
 		t.Fatal("expected sink to be created even with nil logger")
 	}
-
-	// Should not panic when writing with nil logger
-	sink.Write(hc.LevelInfo, "test", map[string]any{"key": "value"})
+	sink.Write(context.Background(), nil)
 }
 
 func TestZapAdapterAllLevels(t *testing.T) {
-	levels := []hc.Level{hc.LevelDebug, hc.LevelInfo, hc.LevelWarn, hc.LevelError}
+	levels := []unolog.Level{unolog.LevelDebug, unolog.LevelInfo, unolog.LevelWarn, unolog.LevelError}
 
 	for _, level := range levels {
 		var buf bytes.Buffer
 		encoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
 		core := zapcore.NewCore(encoder, zapcore.AddSync(&buf), zapcore.DebugLevel)
 		logger := zap.New(core)
-		sink := zaphc.New(logger)
+		sink := uzap.New(logger)
+		rt := unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1, Message: "level test"})
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "t"})
+		unolog.SetLevel(op.Context(), level)
+		op.End(nil)
 
-		sink.Write(level, "level test", map[string]any{"level": string(level)})
-
-		output := buf.String()
-		if output == "" {
+		if buf.Len() == 0 {
 			t.Errorf("expected output for level %s", level)
 		}
 	}

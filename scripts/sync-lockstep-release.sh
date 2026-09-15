@@ -23,30 +23,19 @@ version="${version#v}"
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
+# shellcheck source=scripts/lockstep-modules.sh
+source "$repo_root/scripts/lockstep-modules.sh"
 
 update_root_requirement() {
   local file="$1"
 
-  if ! grep -q 'github.com/happytoolin/happycontext v' "$file"; then
+  if ! grep -q 'github.com/happytoolin/unolog v' "$file"; then
     return
   fi
 
-  perl -0pi -e "s#github\\.com/happytoolin/happycontext v\\d+\\.\\d+\\.\\d+#github.com/happytoolin/happycontext v${version}#g" "$file"
+  perl -0pi -e "s#github\\.com/happytoolin/unolog v\\d+\\.\\d+\\.\\d+#github.com/happytoolin/unolog v${version}#g" "$file"
 }
 
 while IFS= read -r modfile; do
   update_root_requirement "$modfile"
-done < <(
-  printf '%s\n' \
-    adapter/slog/go.mod \
-    adapter/zap/go.mod \
-    adapter/zerolog/go.mod \
-    integration/echo/go.mod \
-    integration/fiber/go.mod \
-    integration/fiberv3/go.mod \
-    integration/gin/go.mod \
-    integration/std/go.mod \
-    integration/worker/go.mod \
-    benches/go.mod \
-    cmd/examples/go.mod
-)
+done < <(lockstep_require_modfiles)

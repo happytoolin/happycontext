@@ -22,10 +22,8 @@ jobs:
           set -euo pipefail
           TAG="${RELEASE_TAG##*/}"
 
-          publishable_modfiles() {
-            printf '%s\n' go.mod
-            git ls-files 'adapter/*/go.mod' 'integration/*/go.mod'
-          }
+          # Same discovery list as scripts/lockstep-modules.sh
+          source "$(git rev-parse --show-toplevel)/scripts/lockstep-modules.sh"
 
           while IFS= read -r modfile; do
             module_path="$(sed -n 's/^module //p' "$modfile" | head -n1)"
@@ -47,4 +45,4 @@ jobs:
               curl -fsSIL --retry 3 --retry-delay 2 "$url" >/dev/null || \
                 echo "non-fatal: could not refresh $url"
             done
-          done < <(publishable_modfiles | sort -u)
+          done < <(published_modfiles | sort -u)

@@ -1,4 +1,4 @@
-module github.com/happytoolin/happycontext/cmd/examples
+module github.com/happytoolin/unolog/cmd/examples
 
 go 1.25.0
 
@@ -6,27 +6,46 @@ require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/gofiber/fiber/v2 v2.52.11
 	github.com/gofiber/fiber/v3 v3.0.0-rc.3
-	github.com/happytoolin/happycontext v0.5.0
-	github.com/happytoolin/happycontext/adapter/slog v0.0.0
-	github.com/happytoolin/happycontext/adapter/zap v0.0.0
-	github.com/happytoolin/happycontext/adapter/zerolog v0.0.0
-	github.com/happytoolin/happycontext/integration/echo v0.0.0
-	github.com/happytoolin/happycontext/integration/fiber v0.0.0
-	github.com/happytoolin/happycontext/integration/fiberv3 v0.0.0
-	github.com/happytoolin/happycontext/integration/gin v0.0.0
-	github.com/happytoolin/happycontext/integration/std v0.0.0
-	github.com/happytoolin/happycontext/integration/worker v0.0.0
+	github.com/happytoolin/unolog v1.0.0
+	github.com/happytoolin/unolog/adapter/slog v0.5.0
+	github.com/happytoolin/unolog/adapter/zap v0.5.0
+	github.com/happytoolin/unolog/adapter/zerolog v0.5.0
+	github.com/happytoolin/unolog/integration/echo v0.5.0
+	github.com/happytoolin/unolog/integration/fiber v0.5.0
+	github.com/happytoolin/unolog/integration/fiberv3 v0.5.0
+	github.com/happytoolin/unolog/integration/gin v0.5.0
+	github.com/happytoolin/unolog/integration/std v0.5.0
+	github.com/happytoolin/unolog/integration/worker v0.5.0
 	github.com/labstack/echo/v4 v4.15.0
-	github.com/rs/zerolog v1.34.0
+	github.com/rs/zerolog v1.35.1
 	go.uber.org/zap v1.27.1
 )
+
+replace github.com/happytoolin/unolog => ../..
+
+replace github.com/happytoolin/unolog/adapter/slog => ../../adapter/slog
+
+replace github.com/happytoolin/unolog/adapter/zap => ../../adapter/zap
+
+replace github.com/happytoolin/unolog/adapter/zerolog => ../../adapter/zerolog
+
+replace github.com/happytoolin/unolog/integration/echo => ../../integration/echo
+
+replace github.com/happytoolin/unolog/integration/fiber => ../../integration/fiber
+
+replace github.com/happytoolin/unolog/integration/fiberv3 => ../../integration/fiberv3
+
+replace github.com/happytoolin/unolog/integration/gin => ../../integration/gin
+
+replace github.com/happytoolin/unolog/integration/std => ../../integration/std
+
+replace github.com/happytoolin/unolog/integration/worker => ../../integration/worker
 
 require (
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
-	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
@@ -70,23 +89,3 @@ require (
 	golang.org/x/tools v0.39.0 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
 )
-
-replace github.com/happytoolin/happycontext => ../..
-
-replace github.com/happytoolin/happycontext/adapter/slog => ../../adapter/slog
-
-replace github.com/happytoolin/happycontext/adapter/zap => ../../adapter/zap
-
-replace github.com/happytoolin/happycontext/adapter/zerolog => ../../adapter/zerolog
-
-replace github.com/happytoolin/happycontext/integration/gin => ../../integration/gin
-
-replace github.com/happytoolin/happycontext/integration/echo => ../../integration/echo
-
-replace github.com/happytoolin/happycontext/integration/fiber => ../../integration/fiber
-
-replace github.com/happytoolin/happycontext/integration/fiberv3 => ../../integration/fiberv3
-
-replace github.com/happytoolin/happycontext/integration/std => ../../integration/std
-
-replace github.com/happytoolin/happycontext/integration/worker => ../../integration/worker

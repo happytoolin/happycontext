@@ -1,26 +1,24 @@
-package echohappycontext
+package echo
 
 import (
 	"errors"
-	"maps"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 
-	"github.com/happytoolin/happycontext"
-	"github.com/labstack/echo/v4"
+	"github.com/happytoolin/unolog"
+	goecho "github.com/labstack/echo/v4"
 )
 
 func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
-	e := echo.New()
-	sink := &memorySink{}
-	e.Use(Middleware(hc.Config{
+	e := goecho.New()
+	sink := unolog.NewTestSink()
+	e.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}))
-	e.GET("/orders/:id", func(c echo.Context) error {
-		hc.Add(c.Request().Context(), "user_id", "u_1")
+	})))
+	e.GET("/orders/:id", func(c goecho.Context) error {
+		unolog.Add(c.Request().Context(), "user_id", "u_1")
 		return c.NoContent(http.StatusAccepted)
 	})
 
@@ -32,21 +30,21 @@ func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Fields["http.status"] != http.StatusAccepted {
-		t.Fatalf("expected status %d, got %v", http.StatusAccepted, events[0].Fields["http.status"])
+	if statusField(events[0], "http.status") != http.StatusAccepted {
+		t.Fatalf("expected status %d, got %v", http.StatusAccepted, statusField(events[0], "http.status"))
 	}
-	if events[0].Fields["http.route"] != "/orders/:id" {
-		t.Fatalf("expected route template, got %v", events[0].Fields["http.route"])
+	if fieldValue(events[0], "http.route") != "/orders/:id" {
+		t.Fatalf("expected route template, got %v", fieldValue(events[0], "http.route"))
 	}
-	if events[0].Fields["user_id"] != "u_1" {
-		t.Fatalf("expected user_id field, got %v", events[0].Fields["user_id"])
+	if fieldValue(events[0], "user_id") != "u_1" {
+		t.Fatalf("expected user_id field, got %v", fieldValue(events[0], "user_id"))
 	}
 }
 
 func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
-	e := echo.New()
-	e.Use(Middleware(hc.Config{}))
-	e.GET("/ok", func(c echo.Context) error {
+	e := goecho.New()
+	e.Use(Middleware(unolog.MustCompile(unolog.Config{})))
+	e.GET("/ok", func(c goecho.Context) error {
 		return c.NoContent(http.StatusAccepted)
 	})
 
@@ -58,16 +56,16 @@ func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
 }
 
 func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
-	e := echo.New()
-	sink := &memorySink{}
-	e.Use(Middleware(hc.Config{
+	e := goecho.New()
+	sink := unolog.NewTestSink()
+	e.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 0,
-	}))
-	e.GET("/drop", func(c echo.Context) error {
+	})))
+	e.GET("/drop", func(c goecho.Context) error {
 		return c.NoContent(http.StatusOK)
 	})
-	e.GET("/err", func(c echo.Context) error {
+	e.GET("/err", func(c goecho.Context) error {
 		return errors.New("boom")
 	})
 
@@ -81,25 +79,25 @@ func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level != hc.LevelError {
-		t.Fatalf("level = %s, want ERROR", events[0].Level)
+	if events[0].Level() != unolog.LevelError {
+		t.Fatalf("level = %s, want ERROR", events[0].Level())
 	}
-	if events[0].Fields["http.status"] != http.StatusInternalServerError {
-		t.Fatalf("status = %v, want %d", events[0].Fields["http.status"], http.StatusInternalServerError)
+	if statusField(events[0], "http.status") != http.StatusInternalServerError {
+		t.Fatalf("status = %v, want %d", statusField(events[0], "http.status"), http.StatusInternalServerError)
 	}
-	if _, ok := events[0].Fields["error"].(map[string]any); !ok {
+	if _, ok := fieldValue(events[0], "error").(map[string]any); !ok {
 		t.Fatalf("expected structured error field")
 	}
 }
 
 func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
-	e := echo.New()
-	sink := &memorySink{}
-	e.Use(Middleware(hc.Config{
+	e := goecho.New()
+	sink := unolog.NewTestSink()
+	e.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}))
-	e.GET("/panic/:id", func(c echo.Context) error {
+	})))
+	e.GET("/panic/:id", func(c goecho.Context) error {
 		panic("bad")
 	})
 
@@ -119,26 +117,26 @@ func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Fields["http.route"] != "/panic/:id" {
-		t.Fatalf("route = %v", events[0].Fields["http.route"])
+	if fieldValue(events[0], "http.route") != "/panic/:id" {
+		t.Fatalf("route = %v", fieldValue(events[0], "http.route"))
 	}
-	if events[0].Fields["http.status"] != http.StatusInternalServerError {
-		t.Fatalf("status = %v, want %d", events[0].Fields["http.status"], http.StatusInternalServerError)
+	if statusField(events[0], "http.status") != http.StatusInternalServerError {
+		t.Fatalf("status = %v, want %d", statusField(events[0], "http.status"), http.StatusInternalServerError)
 	}
-	if _, ok := events[0].Fields["panic"].(map[string]any); !ok {
+	if _, ok := fieldValue(events[0], "panic").(map[string]any); !ok {
 		t.Fatalf("expected panic metadata")
 	}
 }
 
 func TestMiddlewareEchoHTTPErrorKeepsHTTPStatus(t *testing.T) {
-	e := echo.New()
-	sink := &memorySink{}
-	e.Use(Middleware(hc.Config{
+	e := goecho.New()
+	sink := unolog.NewTestSink()
+	e.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}))
-	e.GET("/forbidden", func(c echo.Context) error {
-		return echo.NewHTTPError(http.StatusForbidden, "nope")
+	})))
+	e.GET("/forbidden", func(c goecho.Context) error {
+		return goecho.NewHTTPError(http.StatusForbidden, "nope")
 	})
 
 	e.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/forbidden", nil))
@@ -146,23 +144,23 @@ func TestMiddlewareEchoHTTPErrorKeepsHTTPStatus(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Fields["http.status"] != http.StatusForbidden {
-		t.Fatalf("status = %v, want %d", events[0].Fields["http.status"], http.StatusForbidden)
+	if statusField(events[0], "http.status") != http.StatusForbidden {
+		t.Fatalf("status = %v, want %d", statusField(events[0], "http.status"), http.StatusForbidden)
 	}
-	if events[0].Level != hc.LevelError {
-		t.Fatalf("level = %s, want ERROR", events[0].Level)
+	if events[0].Level() != unolog.LevelError {
+		t.Fatalf("level = %s, want ERROR", events[0].Level())
 	}
 }
 
 func TestMiddlewareCustomMessagePropagates(t *testing.T) {
-	e := echo.New()
-	sink := &memorySink{}
-	e.Use(Middleware(hc.Config{
+	e := goecho.New()
+	sink := unolog.NewTestSink()
+	e.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 		Message:      "done",
-	}))
-	e.GET("/ok", func(c echo.Context) error {
+	})))
+	e.GET("/ok", func(c goecho.Context) error {
 		return c.NoContent(http.StatusOK)
 	})
 
@@ -171,23 +169,23 @@ func TestMiddlewareCustomMessagePropagates(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Message != "done" {
-		t.Fatalf("message = %q, want %q", events[0].Message, "done")
+	if events[0].Message() != "done" {
+		t.Fatalf("message = %q, want %q", events[0].Message(), "done")
 	}
 }
 
 func TestMiddlewareLogsStatusFromCustomEchoErrorHandler(t *testing.T) {
-	e := echo.New()
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
+	e := goecho.New()
+	e.HTTPErrorHandler = func(err error, c goecho.Context) {
 		_ = c.String(http.StatusTeapot, "handled")
 	}
 
-	sink := &memorySink{}
-	e.Use(Middleware(hc.Config{
+	sink := unolog.NewTestSink()
+	e.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}))
-	e.GET("/custom-err", func(c echo.Context) error {
+	})))
+	e.GET("/custom-err", func(c goecho.Context) error {
 		return errors.New("boom")
 	})
 
@@ -201,41 +199,27 @@ func TestMiddlewareLogsStatusFromCustomEchoErrorHandler(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Fields["http.status"] != http.StatusTeapot {
-		t.Fatalf("status = %v, want %d", events[0].Fields["http.status"], http.StatusTeapot)
+	if statusField(events[0], "http.status") != http.StatusTeapot {
+		t.Fatalf("status = %v, want %d", statusField(events[0], "http.status"), http.StatusTeapot)
 	}
-	if events[0].Level != hc.LevelError {
-		t.Fatalf("level = %s, want ERROR", events[0].Level)
+	if events[0].Level() != unolog.LevelError {
+		t.Fatalf("level = %s, want ERROR", events[0].Level())
 	}
 }
 
-type memoryEvent struct {
-	Level   hc.Level
-	Message string
-	Fields  map[string]any
+// capturedEvent mirrors the v0 test-facing shape (map fields, int
+// numerics) over the v2 TestSink capture, keeping the assertions below
+// unchanged from the v0 suite.
+// Typed field reads on captured events: fieldValue for any value,
+// statusField for the int64 http.status these tests compare against
+// int constants.
+func fieldValue(ev unolog.CapturedEvent, key string) any {
+	v, _ := ev.Lookup(key)
+	return v
 }
 
-type memorySink struct {
-	mu     sync.Mutex
-	events []memoryEvent
-}
-
-func (s *memorySink) Write(level hc.Level, message string, fields map[string]any) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cp := make(map[string]any, len(fields))
-	maps.Copy(cp, fields)
-	s.events = append(s.events, memoryEvent{
-		Level:   level,
-		Message: message,
-		Fields:  cp,
-	})
-}
-
-func (s *memorySink) Events() []memoryEvent {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cp := make([]memoryEvent, len(s.events))
-	copy(cp, s.events)
-	return cp
+func statusField(ev unolog.CapturedEvent, key string) int64 {
+	v, _ := ev.Lookup(key)
+	n, _ := v.(int64)
+	return n
 }

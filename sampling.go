@@ -1,4 +1,4 @@
-package hc
+package unolog
 
 import (
 	"math/rand/v2"
@@ -7,21 +7,60 @@ import (
 	"time"
 )
 
-// SampleInput contains finalized operation data used for sampling decisions.
+// SampleInput contains finalized operation data used for sampling
+// decisions: the resolved scalars plus read access to the request's
+// fields (Lookup and a zero-copy Fields view).
+//
+// The input is valid only for the duration of the sampler call — copy
+// anything you retain. The request's event returns to the pool after
+// End, so a Lookup or Fields call from a retained input can read a
+// recycled event (and race the next request's writes).
 type SampleInput struct {
+	// Domain is the operation's domain; Operation is the resolved
+	// operation name (an op.name field write overrides the start
+	// metadata); Outcome is the resolved outcome.
 	Domain    Domain
 	Operation string
 	Outcome   Outcome
-	Code      int
 
-	// HTTP compatibility fields. For non-HTTP operations, these may be empty/zero.
+	// Code is the canonical status scalar: http.status for HTTP
+	// operations, the explicit op.code for everything else.
+	Code int
+
+	// Method, Path, and StatusCode are the HTTP compatibility view.
+	// For non-HTTP operations they may be empty or zero; StatusCode is
+	// always the http.status field, even when Code carries op.code.
 	Method     string
 	Path       string
 	StatusCode int
-	Duration   time.Duration
-	Level      Level
-	HasError   bool
-	Event      *Event
+
+	// Duration, Level, and HasError are domain-independent: the
+	// resolved wall time, the final severity, and whether the request
+	// ended in an error or panic. HasError events always bypass
+	// sampling.
+	Duration time.Duration
+	Level    Level
+	HasError bool
+
+	// ev backs Lookup/Fields; nil when the input was built synthetically.
+	ev *event
+}
+
+// Lookup returns the last value written under key on the request's WAL.
+func (in SampleInput) Lookup(key string) (any, bool) {
+	if in.ev == nil {
+		return nil, false
+	}
+	return in.ev.lookup(key)
+}
+
+// Fields returns a read-only view of the request's fields in insertion
+// order.
+func (in SampleInput) Fields() []Field {
+	if in.ev == nil {
+		return nil
+	}
+	return in.ev.fields
 }
 
 // Sampler returns true when an event should be written.
@@ -71,9 +110,7 @@ func KeepErrors() SamplerMiddleware {
 //
 // Negative durations are treated as zero.
 func KeepSlowerThan(minDuration time.Duration) SamplerMiddleware {
-	if minDuration < 0 {
-		minDuration = 0
-	}
+	minDuration = max(minDuration, 0)
 	return func(next Sampler) Sampler {
 		return func(in SampleInput) bool {
 			return in.Duration >= minDuration || next(in)
@@ -114,8 +151,8 @@ func RateSampler(rate float64) Sampler {
 	case rate >= 1:
 		return AlwaysSampler()
 	default:
-		return func(in SampleInput) bool {
-			return rand.Float64() < rate
+		return func(SampleInput) bool {
+			return shouldSample(rate)
 		}
 	}
 }

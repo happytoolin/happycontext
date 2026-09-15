@@ -1,26 +1,28 @@
-package fiberhappycontext
+// Package fiber provides the Fiber v2 unolog
+// middleware: one canonical event per request, with errors, panics,
+// status, and route resolved from the Fiber context.
+package fiber
 
 import (
 	"errors"
 	"net/http"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/happytoolin/happycontext"
-	"github.com/happytoolin/happycontext/integration/common"
+	gofiber "github.com/gofiber/fiber/v2"
+	"github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog/integration/flow"
 )
 
 // Middleware returns a Fiber v2 middleware that captures one event per request.
-func Middleware(cfg hc.Config) fiber.Handler {
-	cfg = common.NormalizeConfig(cfg)
-	if cfg.Sink == nil {
-		return func(c *fiber.Ctx) error {
+func Middleware(rt *unolog.Runtime) gofiber.Handler {
+	if rt == nil {
+		return func(c *gofiber.Ctx) error {
 			return c.Next()
 		}
 	}
 
-	return func(c *fiber.Ctx) (err error) {
-		ctx, event := common.StartRequest(c.UserContext(), c.Method(), c.Path())
-		c.SetUserContext(ctx)
+	return func(c *gofiber.Ctx) (err error) {
+		op := flow.StartRequest(c.UserContext(), rt, c.Method(), c.Path())
+		c.SetUserContext(op.Context())
 		var finalizeErr error
 
 		defer func() {
@@ -30,16 +32,23 @@ func Middleware(cfg hc.Config) fiber.Handler {
 				routePath = route.Path
 			}
 			status := c.Response().StatusCode()
+			// Fiber's response struct defaults its status to 200 and does
+			// not track whether the handler committed anything, so "the
+			// response started" must be inferred: any status other than
+			// the 200 default, or a non-empty body under 200, means bytes
+			// or a status actually went out. A bare 200 with no body is
+			// treated as not started so a pre-response panic still
+			// resolves to 500. Do not "simplify" this — it is the
+			// panic-vs-committed-status contract.
 			responseStarted := status != 0 && (status != http.StatusOK || len(c.Response().Body()) > 0)
-			status = common.ResolveStatus(status, finalizeErr, recovered, responseStarted, statusFromFiberError(finalizeErr))
-			common.FinalizeRequest(cfg, common.FinalizeInput{
-				Ctx:        ctx,
-				Event:      event,
-				Route:      routePath,
-				StatusCode: status,
-				Err:        finalizeErr,
-				Recovered:  recovered,
+			status = flow.ResolveStatus(flow.StatusInput{
+				Committed:       status,
+				Err:             finalizeErr,
+				Recovered:       recovered,
+				ResponseStarted: responseStarted,
+				ErrorStatus:     statusFromFiberError(finalizeErr),
 			})
+			flow.FinalizeRequest(op, routePath, status, finalizeErr, recovered)
 
 			if recovered != nil {
 				panic(recovered)
@@ -64,14 +73,13 @@ func Middleware(cfg hc.Config) fiber.Handler {
 }
 
 // statusFromFiberError extracts the HTTP status code from a Fiber error.
-// This function is duplicated in the fiberv3 middleware because the
-// context types are incompatible between fiber v2 (*fiber.Ctx) and v3 (fiber.Ctx).
-// The Error type is compatible, but the middleware signatures differ.
+// Duplicated in the fiberv3 middleware: the Error type is compatible,
+// but the context types are not.
 func statusFromFiberError(err error) int {
 	if err == nil {
 		return 0
 	}
-	var fiberErr *fiber.Error
+	var fiberErr *gofiber.Error
 	if errors.As(err, &fiberErr) {
 		return fiberErr.Code
 	}

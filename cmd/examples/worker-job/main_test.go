@@ -8,21 +8,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	workerhc "github.com/happytoolin/happycontext/integration/worker"
+	"github.com/happytoolin/unolog"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	"github.com/happytoolin/unolog/integration/worker"
 )
 
 func TestWorkerJobExecution(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	sink := sloghc.New(logger)
-	cfg := hc.Config{
+	sink := uslog.New(logger)
+	rt := unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}
+	})
 
-	meta := workerhc.JobMeta{
+	meta := worker.JobMeta{
 		Name:        "billing.reconcile",
 		ID:          "job_8472",
 		Queue:       "nightly",
@@ -33,7 +33,7 @@ func TestWorkerJobExecution(t *testing.T) {
 
 	t.Run("successful job execution", func(t *testing.T) {
 		buf.Reset()
-		err := runJob(context.Background(), cfg, meta)
+		err := runJob(context.Background(), rt, meta)
 		if err != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
@@ -52,7 +52,7 @@ func TestWorkerJobExecution(t *testing.T) {
 
 	t.Run("job with different metadata", func(t *testing.T) {
 		buf.Reset()
-		customMeta := workerhc.JobMeta{
+		customMeta := worker.JobMeta{
 			Name:        "email.send",
 			ID:          "job_9999",
 			Queue:       "high-priority",
@@ -61,7 +61,7 @@ func TestWorkerJobExecution(t *testing.T) {
 			ScheduledAt: time.Now().UTC(),
 		}
 
-		err := runJob(context.Background(), cfg, customMeta)
+		err := runJob(context.Background(), rt, customMeta)
 		if err != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
@@ -76,18 +76,18 @@ func TestWorkerJobExecution(t *testing.T) {
 func TestWorkerJobMetaValidation(t *testing.T) {
 	tests := []struct {
 		name string
-		meta workerhc.JobMeta
+		meta worker.JobMeta
 	}{
 		{
 			name: "minimal metadata",
-			meta: workerhc.JobMeta{
+			meta: worker.JobMeta{
 				Name: "minimal.job",
 				ID:   "job_min",
 			},
 		},
 		{
 			name: "full metadata",
-			meta: workerhc.JobMeta{
+			meta: worker.JobMeta{
 				Name:        "full.job",
 				ID:          "job_full",
 				Queue:       "default",
@@ -100,16 +100,16 @@ func TestWorkerJobMetaValidation(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	sink := sloghc.New(logger)
-	cfg := hc.Config{
+	sink := uslog.New(logger)
+	rt := unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	}
+	})
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf.Reset()
-			err := runJob(context.Background(), cfg, tt.meta)
+			err := runJob(context.Background(), rt, tt.meta)
 			if err != nil {
 				t.Errorf("expected no error, got %v", err)
 			}

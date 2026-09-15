@@ -1,23 +1,26 @@
-package ginhappycontext
+// Package gin provides the Gin unolog middleware: one
+// canonical event per request, with errors, panics, status, and route
+// resolved from the Gin context.
+package gin
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/happytoolin/happycontext"
-	"github.com/happytoolin/happycontext/integration/common"
+	gogin "github.com/gin-gonic/gin"
+	"github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog/integration/flow"
 )
 
-// Middleware returns a Gin middleware that captures one event per request.
-func Middleware(cfg hc.Config) gin.HandlerFunc {
-	cfg = common.NormalizeConfig(cfg)
-	if cfg.Sink == nil {
-		return func(c *gin.Context) {
+// Middleware returns a Gin middleware that captures one event per
+// request. rt comes from unolog.Compile/MustCompile; nil is a passthrough.
+func Middleware(rt *unolog.Runtime) gogin.HandlerFunc {
+	if rt == nil {
+		return func(c *gogin.Context) {
 			c.Next()
 		}
 	}
 
-	return func(c *gin.Context) {
-		ctx, event := common.StartRequest(c.Request.Context(), c.Request.Method, c.Request.URL.Path)
-		c.Request = c.Request.WithContext(ctx)
+	return func(c *gogin.Context) {
+		op := flow.StartRequest(c.Request.Context(), rt, c.Request.Method, c.Request.URL.Path)
+		c.Request = c.Request.WithContext(op.Context())
 
 		defer func() {
 			recovered := recover()
@@ -27,15 +30,13 @@ func Middleware(cfg hc.Config) gin.HandlerFunc {
 					err = last.Err
 				}
 			}
-			status := common.ResolveStatus(c.Writer.Status(), err, recovered, c.Writer.Written(), 0)
-			common.FinalizeRequest(cfg, common.FinalizeInput{
-				Ctx:        ctx,
-				Event:      event,
-				Route:      c.FullPath(),
-				StatusCode: status,
-				Err:        err,
-				Recovered:  recovered,
+			status := flow.ResolveStatus(flow.StatusInput{
+				Committed:       c.Writer.Status(),
+				Err:             err,
+				Recovered:       recovered,
+				ResponseStarted: c.Writer.Written(),
 			})
+			flow.FinalizeRequest(op, c.FullPath(), status, err, recovered)
 
 			if recovered != nil {
 				panic(recovered)

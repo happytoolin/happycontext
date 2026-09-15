@@ -1,20 +1,13 @@
-package hc
+package unolog
 
-// Level represents event severity.
-type Level string
+import "context"
 
-const (
-	// LevelDebug represents debug-level severity.
-	LevelDebug Level = "DEBUG"
-	// LevelInfo represents info-level severity.
-	LevelInfo Level = "INFO"
-	// LevelWarn represents warn-level severity.
-	LevelWarn Level = "WARN"
-	// LevelError represents error-level severity.
-	LevelError Level = "ERROR"
-)
-
-// Sink receives finalized request events.
+// Sink receives finalized request events as read-only records, following
+// the slog.Handler.Handle shape. Implementations must be safe for
+// concurrent use and must not retain the record or its bytes past the
+// call (copy anything you keep). The ctx is the request's context at
+// End time: valid for cancellation observation, but background work
+// started with it inherits the request's cancellation.
 type Sink interface {
-	Write(level Level, message string, fields map[string]any)
+	Write(ctx context.Context, rec *Record)
 }

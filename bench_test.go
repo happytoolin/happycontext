@@ -1,0 +1,88 @@
+package unolog
+
+// Benchmarks for the sampling gate and the record encode/write path —
+// the repo-wide root-module benchmark file (the cross-adapter and host
+// comparisons live in the benches module).
+
+import (
+	"context"
+	"io"
+	"testing"
+	"time"
+)
+
+// These benches measure the gate segments that the external benches
+// cannot isolate (they run inside package unolog with unexported access).
+
+// BenchmarkEndDropPath times the complete field-less End on pre-built
+// operations — claim, recover, clock read, seal, scan, post-seal
+// annotations, commit, and release. The §4 100 ns gate names only the
+// sampler + release + pool segment of this path; that segment is
+// measured separately by the WAL micro-benchmarks (RateSampler ≈ 5 ns
+// plus EventReleaseRecycle ≈ 38 ns).
+func BenchmarkEndDropPath(b *testing.B) {
+	rt := MustCompile(Config{Sink: dropCountSink{}, SamplingRate: 0})
+	const pre = 4096
+	ops := make([]*Operation, pre)
+	rebuild := func() {
+		for i := range ops {
+			ops[i] = Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "cleanup"})
+		}
+	}
+	rebuild()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		if n&(pre-1) == 0 && n > 0 {
+			b.StopTimer()
+			rebuild()
+			b.StartTimer()
+		}
+		ops[n&(pre-1)].End(nil)
+	}
+}
+
+// BenchmarkEndDropPathCustomSampler is the same segment with a custom
+// sampler (the amendment-4 path: one closure call before the drop).
+func BenchmarkEndDropPathCustomSampler(b *testing.B) {
+	rt := MustCompile(Config{Sink: dropCountSink{}, Sampler: func(SampleInput) bool { return false }})
+	const pre = 4096
+	ops := make([]*Operation, pre)
+	rebuild := func() {
+		for i := range ops {
+			ops[i] = Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "cleanup"})
+		}
+	}
+	rebuild()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		if n&(pre-1) == 0 && n > 0 {
+			b.StopTimer()
+			rebuild()
+			b.StartTimer()
+		}
+		ops[n&(pre-1)].End(nil)
+	}
+}
+
+type dropCountSink struct{}
+
+func (dropCountSink) Write(context.Context, *Record) {}
+
+// BenchmarkRecordEncodeWrite12 is the fresh-record sink gate shape:
+// encode a 12-field record once and write it (the lifecycle itself is
+// benched separately in benches).
+func BenchmarkRecordEncodeWrite12(b *testing.B) {
+	fields := make([]Field, 12)
+	keys := []string{"http.method", "http.path", "http.route", "http.status", "op.domain", "op.name", "op.outcome", "op.code", "duration_ms", "request_id", "user_id", "cache.hit"}
+	for i, k := range keys {
+		fields[i] = fieldStr(k, "v")
+	}
+	completedAt := time.Now()
+	b.ReportAllocs()
+	for b.Loop() {
+		rec := &Record{level: LevelInfo, msg: DefaultMessage, fields: fields, completedAt: completedAt}
+		_, _ = io.Discard.Write(rec.Encoded())
+	}
+}

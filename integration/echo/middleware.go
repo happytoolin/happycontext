@@ -1,49 +1,45 @@
-package echohappycontext
+// Package echo provides the Echo unolog middleware:
+// one canonical event per request, with errors, panics, status, and
+// route resolved from the Echo context.
+package echo
 
 import (
 	"errors"
 	"net/http"
 
-	"github.com/happytoolin/happycontext"
-	"github.com/happytoolin/happycontext/integration/common"
-	"github.com/labstack/echo/v4"
+	"github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog/integration/flow"
+	goecho "github.com/labstack/echo/v4"
 )
 
-// Middleware returns an Echo middleware that captures one event per request.
-func Middleware(cfg hc.Config) echo.MiddlewareFunc {
-	cfg = common.NormalizeConfig(cfg)
-	if cfg.Sink == nil {
-		return func(next echo.HandlerFunc) echo.HandlerFunc {
-			return func(c echo.Context) error {
+// Middleware returns an Echo middleware that captures one event per
+// request. rt comes from unolog.Compile/MustCompile; nil is a passthrough.
+func Middleware(rt *unolog.Runtime) goecho.MiddlewareFunc {
+	if rt == nil {
+		return func(next goecho.HandlerFunc) goecho.HandlerFunc {
+			return func(c goecho.Context) error {
 				return next(c)
 			}
 		}
 	}
 
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) (err error) {
-			ctx, event := common.StartRequest(c.Request().Context(), c.Request().Method, c.Request().URL.Path)
-			c.SetRequest(c.Request().WithContext(ctx))
+	return func(next goecho.HandlerFunc) goecho.HandlerFunc {
+		return func(c goecho.Context) (err error) {
+			op := flow.StartRequest(c.Request().Context(), rt, c.Request().Method, c.Request().URL.Path)
+			c.SetRequest(c.Request().WithContext(op.Context()))
 			var finalizeErr error
 
 			defer func() {
 				recovered := recover()
 				route := c.Path()
-				status := common.ResolveStatus(
-					c.Response().Status,
-					finalizeErr,
-					recovered,
-					c.Response().Committed,
-					statusFromEchoError(finalizeErr),
-				)
-				common.FinalizeRequest(cfg, common.FinalizeInput{
-					Ctx:        ctx,
-					Event:      event,
-					Route:      route,
-					StatusCode: status,
-					Err:        finalizeErr,
-					Recovered:  recovered,
+				status := flow.ResolveStatus(flow.StatusInput{
+					Committed:       c.Response().Status,
+					Err:             finalizeErr,
+					Recovered:       recovered,
+					ResponseStarted: c.Response().Committed,
+					ErrorStatus:     statusFromEchoError(finalizeErr),
 				})
+				flow.FinalizeRequest(op, route, status, finalizeErr, recovered)
 
 				if recovered != nil {
 					panic(recovered)
@@ -65,7 +61,7 @@ func statusFromEchoError(err error) int {
 	if err == nil {
 		return 0
 	}
-	var httpErr *echo.HTTPError
+	var httpErr *goecho.HTTPError
 	if errors.As(err, &httpErr) {
 		return httpErr.Code
 	}

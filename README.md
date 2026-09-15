@@ -1,25 +1,26 @@
-# happycontext
+# unolog
 
-> **Development and releases have moved to the [`v2` branch`](https://github.com/happytoolin/happycontext/tree/v2).**
-> This branch is frozen at v0.5.0 and kept only as the home of the 0.x
-> tags; the 0.x line remains installable via
-> `go get github.com/happytoolin/happycontext@v0.5.0`. New work —
-> starting with v0.6.0 — ships from `v2`.
+> **This branch is a snapshot at v1.0.0.** Development and future
+> releases continue on [`v2`](https://github.com/happytoolin/unolog/tree/v2).
 
-![happycontext banner](./assets/og-image.svg)
+![unolog banner](./assets/og-image.svg)
 
-[![CI](https://github.com/happytoolin/happycontext/actions/workflows/ci.yml/badge.svg)](https://github.com/happytoolin/happycontext/actions/workflows/ci.yml)
-[![Release](https://github.com/happytoolin/happycontext/actions/workflows/release.yml/badge.svg)](https://github.com/happytoolin/happycontext/actions/workflows/release.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/happytoolin/happycontext.svg)](https://pkg.go.dev/github.com/happytoolin/happycontext)
-[![Go Version](https://img.shields.io/badge/go-1.24%2B-00ADD8?logo=go)](https://go.dev/)
+[![CI](https://github.com/happytoolin/unolog/actions/workflows/ci.yml/badge.svg)](https://github.com/happytoolin/unolog/actions/workflows/ci.yml)
+[![Release](https://github.com/happytoolin/unolog/actions/workflows/release.yml/badge.svg)](https://github.com/happytoolin/unolog/actions/workflows/release.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/happytoolin/unolog.svg)](https://pkg.go.dev/github.com/happytoolin/unolog)
+[![Go Version](https://img.shields.io/badge/go-1.25%2B-00ADD8?logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 Most application logs are high-volume but low-context.
-`happycontext` helps Go services emit one structured, canonical event per request, so debugging and analysis start from a complete record instead of scattered lines.
+`unolog` helps Go services emit one structured, canonical event per request, so debugging and analysis start from a complete record instead of scattered lines.
 
-![happycontext log stream demo](./assets/demo-log-stream.svg)
+> Formerly **happycontext**. Pre-1.0 releases remain available under the old
+> `github.com/happytoolin/happycontext` module path; this repository is their
+> renamed continuation. See [`MIGRATION.md`](./MIGRATION.md).
 
-## Why happycontext?
+![unolog log stream demo](./assets/demo-log-stream.svg)
+
+## Why unolog?
 
 - Cleaner logs with one canonical event per request
 - Consistent fields across handlers, middleware, and frameworks
@@ -31,19 +32,21 @@ Most application logs are high-volume but low-context.
 Design principle:
 
 - Prefer one context-rich request event over many fragmented log lines.
-  ![happycontext before and after](./assets/demo-before-after.svg)
+  ![unolog before and after](./assets/demo-before-after.svg)
 
 ## Install
 
 ```bash
-go get github.com/happytoolin/happycontext
-go get github.com/happytoolin/happycontext/adapter/slog
-go get github.com/happytoolin/happycontext/integration/std
+go get github.com/happytoolin/unolog
+go get github.com/happytoolin/unolog/adapter/slog
+go get github.com/happytoolin/unolog/integration/std
 ```
 
 Install only the adapter and integration packages you use.
 
 ## Quick Start (`net/http` + `slog`)
+
+Compile the runtime once, wrap the handler, annotate with `unolog.Add`:
 
 ```go
 package main
@@ -54,31 +57,31 @@ import (
 	"net/http"
 	"os"
 
-	hc "github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	stdhc "github.com/happytoolin/happycontext/integration/std"
+	"github.com/happytoolin/unolog"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	"github.com/happytoolin/unolog/integration/std"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := sloghc.New(logger)
+	sink := uslog.New(logger)
 
-	mw := stdhc.Middleware(hc.Config{
+	rt := unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1.0,
-		Message:      hc.DefaultMessage,
 	})
+	mw := std.Middleware(rt)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /orders/{id}", func(w http.ResponseWriter, r *http.Request) {
-		hc.Add(r.Context(), "user_id", "u_8472", "feature", "checkout")
+		unolog.Add(r.Context(), "user_id", "u_8472", "feature", "checkout")
 		if r.URL.Query().Get("fail") == "1" {
-			hc.SetMessage(r.Context(), "checkout_failed")
-			hc.Error(r.Context(), errors.New("checkout failed"))
+			unolog.SetMessage(r.Context(), "checkout_failed")
+			unolog.Error(r.Context(), errors.New("checkout failed"))
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		hc.SetMessage(r.Context(), "checkout_succeeded")
+		unolog.SetMessage(r.Context(), "checkout_succeeded")
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -91,106 +94,68 @@ Other quick starts:
 - `net/http + zap` and `net/http + zerolog` are in `## More Examples`
 - `gin`, `echo`, `fiber v2`, and `fiber v3` (with `slog`) are in `## More Examples`
 - Runnable reference apps are in `cmd/examples`
+- Zero-dependency output: `unolog.NewJSONSink(os.Stdout)` needs no logger at all
 
-## Quick Start (Background Job + `slog`)
+## Quick Start (Background Job)
 
 ```go
-package main
-
-import (
-	"context"
-	"log/slog"
-	"os"
-
-	hc "github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	workerhc "github.com/happytoolin/happycontext/integration/worker"
-)
-
-func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := sloghc.New(logger)
-	cfg := hc.Config{
-		Sink:         sink,
-		SamplingRate: 1,
-	}
-
-	meta := workerhc.JobMeta{
-		Name:        "billing.reconcile",
+func runImport(ctx context.Context, rt *unolog.Runtime) (err error) {
+	op := unolog.Start(ctx, rt, unolog.OperationStart{
+		Domain:      unolog.DomainJob,
+		Name:        "import",
 		ID:          "job_8472",
-		Queue:       "nightly",
-		Attempt:     1,
+		Attempt:     2,
 		MaxAttempts: 3,
-	}
+	})
+	defer op.End(&err) // captures errors AND panics; re-panics
 
-	_ = runJob(context.Background(), cfg, meta)
-}
-
-func runJob(ctx context.Context, cfg hc.Config, meta workerhc.JobMeta) (err error) {
-	op := workerhc.Start(ctx, meta)
-	defer op.End(cfg, &err)
-
-	hc.Add(op.Context(), "tenant", "enterprise")
-	return nil
+	unolog.Add(op.Context(), "rows", 42, "source", "queue")
+	return doImport(ctx)
 }
 ```
 
-Example output:
-
-```json
-{
-  "time": "2026-02-09T14:03:12.451Z",
-  "level": "INFO",
-  "msg": "operation_completed",
-  "duration_ms": 3,
-  "job.attempt": 1,
-  "job.id": "job_8472",
-  "job.max_attempts": 3,
-  "job.name": "billing.reconcile",
-  "job.queue": "nightly",
-  "op.attempt": 1,
-  "op.domain": "job",
-  "op.id": "job_8472",
-  "op.max_attempts": 3,
-  "op.name": "billing.reconcile",
-  "op.outcome": "success",
-  "op.source": "nightly",
-  "tenant": "enterprise"
-}
-```
+One event, always: header fields, handler fields in attach order, and
+completion fields — deterministic by construction. Failures are never
+sampled away.
 
 ## Configuration
 
-`hc.Config` gives you the core controls:
+Compile once at startup; `*unolog.Runtime` is immutable and shared by all
+requests. Invalid configuration is a construction-time error
+(`unolog.ErrInvalidRate`, `unolog.ErrInvalidLevel`, `unolog.ErrInvalidOutcome`) —
+use `unolog.Compile` for config from files, `unolog.MustCompile` for literals.
+
+`unolog.Config` gives you the core controls:
 
 - `Sink`: destination logger adapter (required to emit events)
 - `SamplingRate`: `0` drops healthy events, `1` keeps all healthy events
 - `LevelSamplingRates`: optional level-specific sampling overrides
 - `Sampler`: optional custom sampling function (full control)
 - `OperationPolicies`: optional per-domain level/sampling policy for all lifecycle domains, including HTTP and background operations; domain sampling overrides generic level/default sampling
-- `Message`: final log message (defaults to `hc.DefaultMessage` for HTTP and `hc.DefaultOperationMessage` for non-HTTP)
+- Precedence when both are set: a domain policy's `SamplingRate` overrides `LevelSamplingRates` for that domain (v0 behavior); `LevelSamplingRates` overrides the global `SamplingRate`
+- `Message`: final log message (defaults to `unolog.DefaultMessage` for HTTP and `unolog.DefaultOperationMessage` for non-HTTP)
 
 Notes:
 
 - Sampling is automatically bypassed for errors and server failures.
 - If no sink is configured, requests still run; logging is skipped.
 - Sampling behavior is consistent across all integrations (`net/http`, `gin`, `echo`, `fiber`, and `fiber v3`).
-- `hc.SetMessage(ctx, "...")` overrides `Config.Message` for a single event.
+- `unolog.SetMessage(ctx, "...")` overrides `Config.Message` for a single event.
 
 ### Per-request Message Override
 
-Use `hc.SetMessage` when a route or handler should emit a more specific final message than the integration-wide default:
+Use `unolog.SetMessage` when a route or handler should emit a more specific final message than the integration-wide default:
 
 ```go
 func checkoutHandler(w http.ResponseWriter, r *http.Request) {
 	if err := processCheckout(r.Context()); err != nil {
-		hc.SetMessage(r.Context(), "checkout_failed")
-		hc.Error(r.Context(), err)
+		unolog.SetMessage(r.Context(), "checkout_failed")
+		unolog.Error(r.Context(), err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	hc.SetMessage(r.Context(), "checkout_succeeded")
+	unolog.SetMessage(r.Context(), "checkout_succeeded")
 	w.WriteHeader(http.StatusOK)
 }
 ```
@@ -213,22 +178,22 @@ Errors are recorded as structured metadata:
 Per-level sampling:
 
 ```go
-mw := stdhc.Middleware(hc.Config{
+mw := std.Middleware(unolog.MustCompile(unolog.Config{
 	Sink:         sink,
 	SamplingRate: 0.05, // default for healthy traffic
-	LevelSamplingRates: map[hc.Level]float64{
-		hc.LevelWarn:  1.0, // keep all warns
-		hc.LevelDebug: 0.01,
+	LevelSamplingRates: map[unolog.Level]float64{
+		unolog.LevelWarn:  1.0, // keep all warns
+		unolog.LevelDebug: 0.01,
 	},
-})
+}))
 ```
 
 Custom sampler (route/user/latency rules):
 
 ```go
-mw := stdhc.Middleware(hc.Config{
+mw := std.Middleware(unolog.MustCompile(unolog.Config{
 	Sink: sink,
-	Sampler: func(in hc.SampleInput) bool {
+	Sampler: func(in unolog.SampleInput) bool {
 		// Always keep failures and slow requests.
 		if in.HasError || in.StatusCode >= 500 {
 			return true
@@ -241,66 +206,64 @@ mw := stdhc.Middleware(hc.Config{
 			return true
 		}
 		// Keep enterprise requests based on event fields.
-		fields := hc.EventFields(in.Event)
-		tier, _ := fields["user_tier"].(string)
+		tier, _ := in.Lookup("user_tier")
 		return tier == "enterprise"
 	},
-})
+}))
 ```
 
-`hc.EventFields` returns a shallow copy of top-level fields. Nested maps/slices are shared references.
+`unolog.Add` accepts one or more key/value pairs:
+`unolog.Add(ctx, "k1", v1, "k2", v2, "k3", v3)`.
 
-`hc.Add` accepts one or more key/value pairs:
-`hc.Add(ctx, "k1", v1, "k2", v2, "k3", v3)`.
-
-`hc.SampleInput.Method`, `Path`, and `StatusCode` are HTTP compatibility fields.
+`unolog.SampleInput.Method`, `Path`, and `StatusCode` are HTTP compatibility fields.
 For non-HTTP operations use `Domain`, `Operation`, `Outcome`, and `Code`.
 
 Built-in sampler chain:
 
 ```go
-mw := stdhc.Middleware(hc.Config{
+mw := std.Middleware(unolog.MustCompile(unolog.Config{
 	Sink: sink,
-	Sampler: hc.ChainSampler(
-		hc.RateSampler(0.05),        // base sampler
-		hc.KeepErrors(),             // always keep errors
-		hc.KeepPathPrefix("/admin"), // always keep admin paths
-		hc.KeepSlowerThan(500*time.Millisecond),
+	Sampler: unolog.ChainSampler(
+		unolog.RateSampler(0.05),        // base sampler
+		unolog.KeepErrors(),             // always keep errors
+		unolog.KeepPathPrefix("/admin"), // always keep admin paths
+		unolog.KeepSlowerThan(500*time.Millisecond),
 	),
-})
+}))
 ```
 
 Sampler building blocks:
 
-- `hc.ChainSampler(base, middlewares...)`: composes one final `Sampler` from middleware rules.
-- `hc.AlwaysSampler()`: base sampler that keeps every event.
-- `hc.NeverSampler()`: base sampler that drops every event.
-- `hc.RateSampler(rate)`: base probabilistic sampler (`0` drops all, `1` keeps all).
-- `hc.KeepErrors()`: middleware that keeps errored requests (`HasError` or `5xx`).
-- `hc.KeepPathPrefix("/checkout", "/admin")`: middleware that keeps matching path prefixes.
-- `hc.KeepSlowerThan(minDuration)`: middleware that keeps requests at/above a duration threshold.
+- `unolog.ChainSampler(base, middlewares...)`: composes one final `Sampler` from middleware rules.
+- `unolog.AlwaysSampler()`: base sampler that keeps every event.
+- `unolog.NeverSampler()`: base sampler that drops every event.
+- `unolog.RateSampler(rate)`: base probabilistic sampler (`0` drops all, `1` keeps all).
+- `unolog.KeepErrors()`: middleware that keeps errored requests (`HasError` or `5xx`).
+- `unolog.KeepPathPrefix("/checkout", "/admin")`: middleware that keeps matching path prefixes.
+- `unolog.KeepSlowerThan(minDuration)`: middleware that keeps requests at/above a duration threshold.
 
 ### Generic Operation Lifecycle API
 
-For non-HTTP flows, use `hc.StartOperation` for the ergonomic stateful handle:
+For non-HTTP flows, use `unolog.Start` with the compiled runtime:
 
 ```go
-func runJob(cfg hc.Config) (err error) {
-	op := hc.StartOperation(context.Background(), hc.OperationStart{
-		Domain: hc.DomainJob,
+func runJob(ctx context.Context, rt *unolog.Runtime) (err error) {
+	op := unolog.Start(ctx, rt, unolog.OperationStart{
+		Domain: unolog.DomainJob,
 		Name:   "invoice.reconcile",
 		ID:     "job_1001",
 		Source: "nightly",
 	})
-	defer op.End(cfg, &err)
+	defer op.End(&err) // direct defer: captures errors and panics
 
-	hc.Add(op.Context(), "job.queue", "nightly")
-	hc.Add(op.Context(), "account_id", "acct_42")
+	unolog.Add(op.Context(), "account_id", "acct_42")
 	return nil
 }
 ```
 
-`op.End(cfg, &err)` is the supported non-HTTP completion path in this API.
+`op.End(&err)` is the only completion path: one-shot, returning whether
+the event was emitted. The `worker` integration wraps this idiom for
+queue consumers.
 
 ## Integrations
 
@@ -317,7 +280,27 @@ func runJob(cfg hc.Config) (err error) {
 - `adapter/zap`
 - `adapter/zerolog`
 
-All adapters expose `NewWithOptions` plus a `SinkOptions` value reserved for future options. Adapters do not sort fields: field order follows Go's map iteration and is unspecified. Deterministic, insertion-ordered output arrives structurally with the upcoming record-based core.
+Adapters expose `New` only (the `SinkOptions`/`NewWithOptions` shapes
+were removed at 1.0: nothing to configure until proven otherwise).
+Fields arrive in insertion order, deterministically, as typed
+constructors.
+
+### First-party JSON sink (no logger dependency)
+
+`unolog.NewJSONSink(w io.Writer)` emits the same canonical event shape as the
+zerolog adapter — lowercase `level`, RFC3339 `time`, your fields, `message`
+last — as one JSON line per event, with zero dependencies beyond the
+standard library (the module's only non-stdlib require is
+go.uber.org/goleak — a test-only dependency used by the package's
+goroutine-leak check, never linked into consumers):
+
+```go
+sink := unolog.NewJSONSink(os.Stdout)
+```
+
+The wire format matches `zerolog.New(w).With().Timestamp().Logger()`
+through `adapter/zerolog`, so existing pipelines ingest it unchanged.
+Field order is insertion order — deterministic by construction, identical across every sink.
 
 ## More Examples
 
@@ -332,19 +315,19 @@ import (
 	"net/http"
 	"os"
 
-	hc "github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	stdhc "github.com/happytoolin/happycontext/integration/std"
+	"github.com/happytoolin/unolog"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	"github.com/happytoolin/unolog/integration/std"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := sloghc.New(logger)
-	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
+	sink := uslog.New(logger)
+	mw := std.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		hc.Add(r.Context(), "router", "net/http")
+		unolog.Add(r.Context(), "router", "net/http")
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -365,19 +348,19 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	hc "github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	ginhc "github.com/happytoolin/happycontext/integration/gin"
+	"github.com/happytoolin/unolog"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	ugin "github.com/happytoolin/unolog/integration/gin"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := sloghc.New(logger)
+	sink := uslog.New(logger)
 
 	r := gin.New()
-	r.Use(ginhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	r.Use(ugin.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	r.GET("/users/:id", func(c *gin.Context) {
-		hc.Add(c.Request.Context(), "router", "gin")
+		unolog.Add(c.Request.Context(), "router", "gin")
 		c.Status(200)
 	})
 
@@ -398,19 +381,19 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v2"
-	hc "github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	fiberhc "github.com/happytoolin/happycontext/integration/fiber"
+	"github.com/happytoolin/unolog"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	ufiber "github.com/happytoolin/unolog/integration/fiber"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := sloghc.New(logger)
+	sink := uslog.New(logger)
 
 	app := fiber.New()
-	app.Use(fiberhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(ufiber.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/users/:id", func(c *fiber.Ctx) error {
-		hc.Add(c.UserContext(), "router", "fiber-v2")
+		unolog.Add(c.UserContext(), "router", "fiber-v2")
 		return c.SendStatus(200)
 	})
 
@@ -431,19 +414,19 @@ import (
 	"os"
 
 	"github.com/gofiber/fiber/v3"
-	hc "github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	fiberv3hc "github.com/happytoolin/happycontext/integration/fiberv3"
+	"github.com/happytoolin/unolog"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	ufiberv3 "github.com/happytoolin/unolog/integration/fiberv3"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := sloghc.New(logger)
+	sink := uslog.New(logger)
 
 	app := fiber.New()
-	app.Use(fiberv3hc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(ufiberv3.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/users/:id", func(c fiber.Ctx) error {
-		hc.Add(c.Context(), "router", "fiber-v3")
+		unolog.Add(c.Context(), "router", "fiber-v3")
 		return c.SendStatus(200)
 	})
 
@@ -463,20 +446,20 @@ import (
 	"log/slog"
 	"os"
 
-	hc "github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	echohc "github.com/happytoolin/happycontext/integration/echo"
+	"github.com/happytoolin/unolog"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	uecho "github.com/happytoolin/unolog/integration/echo"
 	"github.com/labstack/echo/v4"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	sink := sloghc.New(logger)
+	sink := uslog.New(logger)
 
 	e := echo.New()
-	e.Use(echohc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	e.Use(uecho.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	e.GET("/users/:id", func(c echo.Context) error {
-		hc.Add(c.Request().Context(), "router", "echo")
+		unolog.Add(c.Request().Context(), "router", "echo")
 		return c.NoContent(200)
 	})
 
@@ -495,20 +478,20 @@ package main
 import (
 	"net/http"
 
-	hc "github.com/happytoolin/happycontext"
-	zaphc "github.com/happytoolin/happycontext/adapter/zap"
-	stdhc "github.com/happytoolin/happycontext/integration/std"
+	"github.com/happytoolin/unolog"
+	uzap "github.com/happytoolin/unolog/adapter/zap"
+	"github.com/happytoolin/unolog/integration/std"
 	"go.uber.org/zap"
 )
 
 func main() {
 	logger := zap.NewExample()
-	sink := zaphc.New(logger)
-	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
+	sink := uzap.New(logger)
+	mw := std.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		hc.Add(r.Context(), "example", "adapter-zap")
+		unolog.Add(r.Context(), "example", "adapter-zap")
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -528,20 +511,20 @@ import (
 	"net/http"
 	"os"
 
-	hc "github.com/happytoolin/happycontext"
-	zerologhc "github.com/happytoolin/happycontext/adapter/zerolog"
-	stdhc "github.com/happytoolin/happycontext/integration/std"
+	"github.com/happytoolin/unolog"
+	uzerolog "github.com/happytoolin/unolog/adapter/zerolog"
+	"github.com/happytoolin/unolog/integration/std"
 	"github.com/rs/zerolog"
 )
 
 func main() {
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
-	sink := zerologhc.New(&logger)
-	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
+	sink := uzerolog.New(&logger)
+	mw := std.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		hc.Add(r.Context(), "example", "adapter-zerolog")
+		unolog.Add(r.Context(), "example", "adapter-zerolog")
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -575,7 +558,7 @@ go run ./worker-job
 - Go proxy sync: `.github/workflows/go-proxy-sync.yml`
 - Root module releases must be tagged as `vX.Y.Z`.
 - Nested Go modules must be tagged as `<subdir>/vX.Y.Z` so `go list -m -versions` can discover them.
-- To backfill historical tags created with the old `happycontext-vX.Y.Z` format, run `./scripts/backfill-go-tags.sh` and push the generated tags.
+- To backfill historical tags created with the old `unolog-vX.Y.Z` format, run `./scripts/backfill-go-tags.sh` and push the generated tags.
 
 Published nested modules:
 
@@ -588,6 +571,12 @@ Published nested modules:
 - `integration/gin`
 - `integration/std`
 - `integration/worker`
+
+## Migrating from v0.x
+
+Coming from a 0.x release? [`MIGRATION.md`](./MIGRATION.md) maps every
+removed or changed symbol, the outcome-precedence change, and the wire
+format differences.
 
 ## References
 

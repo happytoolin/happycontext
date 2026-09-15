@@ -1,31 +1,32 @@
-package stdhappycontext
+package std
+
+// Middleware behavior tests: routes, statuses, optional interfaces,
+// flush commits, panics, and the nil-runtime passthrough.
 
 import (
 	"bufio"
 	"bytes"
 	"errors"
 	"io"
-	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
 func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 		Message:      "done",
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hc.Add(r.Context(), "example", "std-integration")
+		unolog.Add(r.Context(), "example", "std-integration")
 		w.WriteHeader(http.StatusAccepted)
 	}))
 
@@ -36,29 +37,27 @@ func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Message != "done" {
-		t.Fatalf("expected message done, got %q", events[0].Message)
+	if events[0].Message() != "done" {
+		t.Fatalf("expected message done, got %q", events[0].Message())
 	}
-	if events[0].Fields["http.status"] != http.StatusAccepted {
-		t.Fatalf("expected status %d, got %v", http.StatusAccepted, events[0].Fields["http.status"])
+	if statusField(events[0], "http.status") != http.StatusAccepted {
+		t.Fatalf("expected status %d, got %v", http.StatusAccepted, statusField(events[0], "http.status"))
 	}
-	if events[0].Fields["example"] != "std-integration" {
-		t.Fatalf("expected example field, got %v", events[0].Fields["example"])
+	if fieldValue(events[0], "example") != "std-integration" {
+		t.Fatalf("expected example field, got %v", fieldValue(events[0], "example"))
 	}
 }
 
 func TestMiddlewareAppliesCustomMessageFromHandlerContext(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 		Message:      "done",
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !hc.SetMessage(r.Context(), "order shipped") {
-			t.Fatal("expected SetMessage to succeed")
-		}
+		unolog.SetMessage(r.Context(), "order shipped")
 		w.WriteHeader(http.StatusAccepted)
 	}))
 
@@ -69,20 +68,20 @@ func TestMiddlewareAppliesCustomMessageFromHandlerContext(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Message != "order shipped" {
-		t.Fatalf("expected message %q, got %q", "order shipped", events[0].Message)
+	if events[0].Message() != "order shipped" {
+		t.Fatalf("expected message %q, got %q", "order shipped", events[0].Message())
 	}
-	if events[0].Fields["http.status"] != http.StatusAccepted {
-		t.Fatalf("expected status %d, got %v", http.StatusAccepted, events[0].Fields["http.status"])
+	if statusField(events[0], "http.status") != http.StatusAccepted {
+		t.Fatalf("expected status %d, got %v", http.StatusAccepted, statusField(events[0], "http.status"))
 	}
 }
 
 func TestMiddlewarePanicPropagatesAndLogsError(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("bad")
@@ -106,23 +105,23 @@ func TestMiddlewarePanicPropagatesAndLogsError(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level != hc.LevelError {
-		t.Fatalf("expected error level, got %s", events[0].Level)
+	if events[0].Level() != unolog.LevelError {
+		t.Fatalf("expected error level, got %s", events[0].Level())
 	}
-	if events[0].Fields["http.status"] != http.StatusInternalServerError {
-		t.Fatalf("expected status 500, got %v", events[0].Fields["http.status"])
+	if statusField(events[0], "http.status") != http.StatusInternalServerError {
+		t.Fatalf("expected status 500, got %v", statusField(events[0], "http.status"))
 	}
-	if _, ok := events[0].Fields["panic"].(map[string]any); !ok {
+	if _, ok := fieldValue(events[0], "panic").(map[string]any); !ok {
 		t.Fatalf("expected panic field in event")
 	}
 }
 
 func TestMiddlewareWriteHeaderTwiceLogsFirstCommittedStatus(t *testing.T) {
-	backend := &memorySink{}
-	mw := Middleware(hc.Config{
+	backend := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         backend,
 		SamplingRate: 1,
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusCreated)
@@ -140,17 +139,17 @@ func TestMiddlewareWriteHeaderTwiceLogsFirstCommittedStatus(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Fields["http.status"] != http.StatusCreated {
-		t.Fatalf("expected logged status %d, got %v", http.StatusCreated, events[0].Fields["http.status"])
+	if statusField(events[0], "http.status") != http.StatusCreated {
+		t.Fatalf("expected logged status %d, got %v", http.StatusCreated, statusField(events[0], "http.status"))
 	}
 }
 
 func TestMiddlewarePanicAfterCommittedStatusKeepsCommittedStatus(t *testing.T) {
-	backend := &memorySink{}
-	mw := Middleware(hc.Config{
+	backend := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         backend,
 		SamplingRate: 1,
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusCreated)
@@ -179,20 +178,25 @@ func TestMiddlewarePanicAfterCommittedStatusKeepsCommittedStatus(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level != hc.LevelError {
-		t.Fatalf("expected error level, got %s", events[0].Level)
+	if events[0].Level() != unolog.LevelError {
+		t.Fatalf("expected error level, got %s", events[0].Level())
 	}
-	if events[0].Fields["http.status"] != http.StatusCreated {
-		t.Fatalf("expected logged status %d, got %v", http.StatusCreated, events[0].Fields["http.status"])
+	if statusField(events[0], "http.status") != http.StatusCreated {
+		t.Fatalf("expected logged status %d, got %v", http.StatusCreated, statusField(events[0], "http.status"))
 	}
 }
 
 func TestMiddlewareSetsRouteFromRequestPattern(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	var sampledOp string
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	})
+		Sampler: func(in unolog.SampleInput) bool {
+			sampledOp = in.Operation
+			return true
+		},
+	}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /orders/{id}", func(w http.ResponseWriter, _ *http.Request) {
@@ -207,18 +211,24 @@ func TestMiddlewareSetsRouteFromRequestPattern(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	route, ok := events[0].Fields["http.route"].(string)
+	route, ok := fieldValue(events[0], "http.route").(string)
 	if !ok || route == "" {
-		t.Fatalf("expected route template, got %#v", events[0].Fields["http.route"])
+		t.Fatalf("expected route template, got %#v", fieldValue(events[0], "http.route"))
+	}
+	if name, _ := fieldValue(events[0], "op.name").(string); name != route {
+		t.Fatalf("wire op.name = %q, want route %q", name, route)
+	}
+	if sampledOp != route {
+		t.Fatalf("SampleInput.Operation = %q, want route %q", sampledOp, route)
 	}
 }
 
 func TestMiddlewarePreservesOptionalInterfaces(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		flusher, ok := w.(http.Flusher)
@@ -265,11 +275,11 @@ func TestMiddlewarePreservesOptionalInterfaces(t *testing.T) {
 }
 
 func TestMiddlewareWriteSetsStatusCode(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if _, err := io.Copy(w, bytes.NewBufferString("ok")); err != nil {
@@ -285,17 +295,17 @@ func TestMiddlewareWriteSetsStatusCode(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Fields["http.status"] != http.StatusOK {
-		t.Fatalf("expected status 200, got %v", events[0].Fields["http.status"])
+	if statusField(events[0], "http.status") != http.StatusOK {
+		t.Fatalf("expected status 200, got %v", statusField(events[0], "http.status"))
 	}
 }
 
 func TestMiddlewareReadFromSetsStatusCode(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-	})
+	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		readerFrom, ok := w.(io.ReaderFrom)
@@ -315,13 +325,13 @@ func TestMiddlewareReadFromSetsStatusCode(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Fields["http.status"] != http.StatusOK {
-		t.Fatalf("expected status 200, got %v", events[0].Fields["http.status"])
+	if statusField(events[0], "http.status") != http.StatusOK {
+		t.Fatalf("expected status 200, got %v", statusField(events[0], "http.status"))
 	}
 }
 
 func TestMiddlewareNilSinkStillRunsHandler(t *testing.T) {
-	mw := Middleware(hc.Config{})
+	mw := Middleware(unolog.MustCompile(unolog.Config{}))
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 	}))
@@ -333,11 +343,11 @@ func TestMiddlewareNilSinkStillRunsHandler(t *testing.T) {
 }
 
 func TestMiddlewareSamplingDropForHealthyRequest(t *testing.T) {
-	sink := &memorySink{}
-	mw := Middleware(hc.Config{
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 0,
-	})
+	}))
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -348,35 +358,21 @@ func TestMiddlewareSamplingDropForHealthyRequest(t *testing.T) {
 	}
 }
 
-type memoryEvent struct {
-	Level   hc.Level
-	Message string
-	Fields  map[string]any
+// capturedEvent mirrors the v0 test-facing shape (map fields, int
+// numerics) over the v2 TestSink capture, keeping the assertions below
+// unchanged from the v0 suite.
+// Typed field reads on captured events: fieldValue for any value,
+// statusField for the int64 http.status these tests compare against
+// int constants.
+func fieldValue(ev unolog.CapturedEvent, key string) any {
+	v, _ := ev.Lookup(key)
+	return v
 }
 
-type memorySink struct {
-	mu     sync.Mutex
-	events []memoryEvent
-}
-
-func (s *memorySink) Write(level hc.Level, message string, fields map[string]any) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cp := make(map[string]any, len(fields))
-	maps.Copy(cp, fields)
-	s.events = append(s.events, memoryEvent{
-		Level:   level,
-		Message: message,
-		Fields:  cp,
-	})
-}
-
-func (s *memorySink) Events() []memoryEvent {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cp := make([]memoryEvent, len(s.events))
-	copy(cp, s.events)
-	return cp
+func statusField(ev unolog.CapturedEvent, key string) int64 {
+	v, _ := ev.Lookup(key)
+	n, _ := v.(int64)
+	return n
 }
 
 type testOptionalWriter struct {
@@ -428,4 +424,85 @@ func (w *fullOptionalWriter) ReadFrom(src io.Reader) (int64, error) {
 		w.code = http.StatusOK
 	}
 	return io.Copy(&w.body, src)
+}
+
+// TestMiddlewareFlushCommitsStatus pins the implicit-commit rule: the
+// first Flush sends the header (200 if unset), so the tracker must
+// observe it. A panic after the first flush previously resolved to 500
+// against a 200 the client already received.
+func TestMiddlewareFlushCommitsStatus(t *testing.T) {
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1}))
+
+	t.Run("panic after flush keeps the committed 200", func(t *testing.T) {
+		sink.Reset()
+		handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.(http.Flusher).Flush()
+			panic("mid-stream")
+		}))
+		rec := httptest.NewRecorder()
+		func() {
+			defer func() { _ = recover() }()
+			handler.ServeHTTP(rec, httptest.NewRequest("GET", "/s", nil))
+		}()
+		if rec.Code != http.StatusOK {
+			t.Fatalf("client saw %d, want 200", rec.Code)
+		}
+		st, _ := sink.Events()[0].Lookup("http.status")
+		o, _ := sink.Events()[0].Lookup("op.outcome")
+		if st != int64(http.StatusOK) || o != string(unolog.OutcomePanic) {
+			t.Fatalf("log = status:%v outcome:%v, want 200/panic", st, o)
+		}
+	})
+
+	t.Run("error after flush keeps the committed 200", func(t *testing.T) {
+		sink.Reset()
+		handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.(http.Flusher).Flush()
+			unolog.Error(r.Context(), errors.New("post-flush failure"))
+		}))
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/s", nil))
+		st, _ := sink.Events()[0].Lookup("http.status")
+		if st != int64(http.StatusOK) {
+			t.Fatalf("status = %v, want committed 200", st)
+		}
+		// Outcome stays success — outcome is derived from the deferred
+		// error pointer, not the recorded error field (v0 semantics) —
+		// but the structured error must be present and the event kept.
+		if o, _ := sink.Events()[0].Lookup("op.outcome"); o != string(unolog.OutcomeSuccess) {
+			t.Fatalf("outcome = %v, want success (error field is metadata)", o)
+		}
+		if _, ok := sink.Events()[0].Lookup("error"); !ok {
+			t.Fatal("error field missing")
+		}
+	})
+
+	t.Run("flush wrappers on all shapes", func(t *testing.T) {
+		// httptest.Recorder implements Flusher only; the other promoted
+		// shapes are compile-checked by the wrapper types themselves.
+		sink.Reset()
+		handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			f, ok := w.(http.Flusher)
+			if !ok {
+				t.Fatal("flusher not promoted")
+			}
+			f.Flush()
+		}))
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/s", nil))
+		if st, _ := sink.Events()[0].Lookup("http.status"); st != int64(http.StatusOK) {
+			t.Fatalf("status = %v, want 200 after plain flush", st)
+		}
+	})
+}
+
+// Consolidated from integration/std/crash_test.go: nil-runtime
+// middleware is a documented passthrough.
+func TestCrashNilRuntimePassthrough(t *testing.T) {
+	mw := Middleware(nil)
+	handler := mw(http.NotFoundHandler())
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest("GET", "/x", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 (passthrough)", rec.Code)
+	}
 }

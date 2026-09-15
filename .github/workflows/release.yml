@@ -1,8 +1,11 @@
 name: release
 
+# v2 is the release line (V2_DESIGN.md §9 amendment, 2026-08-31).
+# Exactly one branch may run release-please; main is frozen at v0.5.0.
 on:
   push:
-    branches: [main]
+    branches: [v2]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -23,9 +26,16 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: .release-please-config.json
           manifest-file: .release-please-manifest.json
+          # v2 is the release line (§9 amendment). v4 of the action has
+          # no `branch` input — the earlier `branch: v2` was silently
+          # ignored, release-please kept scanning frozen main, and no
+          # release PR ever opened (four green runs, zero PRs). The
+          # real input is target-branch: read commits from v2 and open
+          # the release PR against v2.
+          target-branch: v2
 
       - name: Checkout
-        if: ${{ steps.release.outputs.releases_created == 'true' }}
+        if: ${{ steps.release.outputs.release_created == 'true' }}
         uses: actions/checkout@v6.0.2
 
       - name: Configure git
@@ -41,6 +51,10 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
         run: |
           set -euo pipefail
+          if [[ -z "${RELEASE_TAG}" ]]; then
+            echo "release_created is true but tag_name is empty" >&2
+            exit 1
+          fi
 
           ./scripts/sync-lockstep-release.sh "$RELEASE_TAG"
 
@@ -49,21 +63,11 @@ jobs:
             exit 0
           fi
 
-          git add \
-            adapter/slog/go.mod \
-            adapter/zap/go.mod \
-            adapter/zerolog/go.mod \
-            integration/echo/go.mod \
-            integration/fiber/go.mod \
-            integration/fiberv3/go.mod \
-            integration/gin/go.mod \
-            integration/std/go.mod \
-            integration/worker/go.mod \
-            benches/go.mod \
-            cmd/examples/go.mod
+          # Same discovery list as scripts/lockstep-modules.sh
+          git add $(git ls-files 'adapter/*/go.mod' 'integration/*/go.mod' 'benches/go.mod' 'cmd/examples/go.mod')
 
           git commit -m "chore: sync lockstep modules for ${RELEASE_TAG}"
-          git push origin HEAD:main
+          git push origin HEAD:v2
 
       - name: Publish lockstep module releases
         if: ${{ steps.release.outputs.release_created == 'true' }}
@@ -73,15 +77,23 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
         run: |
           set -euo pipefail
+          if [[ -z "${RELEASE_TAG}" ]]; then
+            echo "release_created is true but tag_name is empty" >&2
+            exit 1
+          fi
           ./scripts/publish-lockstep-release.sh --push --github-releases "$RELEASE_TAG"
 
       - name: Refresh Go module indexes
-        if: ${{ steps.release.outputs.releases_created == 'true' }}
+        if: ${{ steps.release.outputs.release_created == 'true' }}
         shell: bash
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
         run: |
           set -euo pipefail
+          if [[ -z "${RELEASE_TAG}" ]]; then
+            echo "release_created is true but tag_name is empty" >&2
+            exit 1
+          fi
 
           refresh_module() {
             local module_path="$1"

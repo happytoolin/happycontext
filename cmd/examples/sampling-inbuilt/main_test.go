@@ -9,25 +9,25 @@ import (
 	"testing"
 	"time"
 
-	"github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	stdhc "github.com/happytoolin/happycontext/integration/std"
+	"github.com/happytoolin/unolog"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	"github.com/happytoolin/unolog/integration/std"
 )
 
 func TestSamplingInbuiltMiddleware(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	sink := sloghc.New(logger)
+	sink := uslog.New(logger)
 
-	mw := stdhc.Middleware(hc.Config{
+	mw := std.Middleware(unolog.MustCompile(unolog.Config{
 		Sink: sink,
-		Sampler: hc.ChainSampler(
-			hc.RateSampler(0.05),
-			hc.KeepErrors(),
-			hc.KeepPathPrefix("/users/vip"),
-			hc.KeepSlowerThan(250*time.Millisecond),
+		Sampler: unolog.ChainSampler(
+			unolog.RateSampler(0.05),
+			unolog.KeepErrors(),
+			unolog.KeepPathPrefix("/users/vip"),
+			unolog.KeepSlowerThan(250*time.Millisecond),
 		),
-	})
+	}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {

@@ -12,22 +12,22 @@ import (
 	recoverv2 "github.com/gofiber/fiber/v2/middleware/recover"
 	fiberv3 "github.com/gofiber/fiber/v3"
 	recoverv3 "github.com/gofiber/fiber/v3/middleware/recover"
-	"github.com/happytoolin/happycontext"
-	echohc "github.com/happytoolin/happycontext/integration/echo"
-	fiberhc "github.com/happytoolin/happycontext/integration/fiber"
-	fiberv3hc "github.com/happytoolin/happycontext/integration/fiberv3"
-	ginhc "github.com/happytoolin/happycontext/integration/gin"
-	stdhc "github.com/happytoolin/happycontext/integration/std"
+	"github.com/happytoolin/unolog"
+	uecho "github.com/happytoolin/unolog/integration/echo"
+	ufiber "github.com/happytoolin/unolog/integration/fiber"
+	ufiberv3 "github.com/happytoolin/unolog/integration/fiberv3"
+	ugin "github.com/happytoolin/unolog/integration/gin"
+	"github.com/happytoolin/unolog/integration/std"
 	"github.com/labstack/echo/v4"
 )
 
 type runResult struct {
-	event         hc.CapturedEvent
+	event         unolog.CapturedEvent
 	panicObserved bool
 }
 
 type comparableResult struct {
-	level        hc.Level
+	level        unolog.Level
 	status       int
 	message      string
 	method       string
@@ -82,46 +82,49 @@ func TestIntegrationConsistency(t *testing.T) {
 func assertConsistency(t *testing.T, mode string, out runResult) {
 	t.Helper()
 
-	if out.event.Fields["http.status"] == nil {
+	status, ok := out.event.Lookup("http.status")
+	if !ok {
 		t.Fatalf("expected http.status field")
 	}
-	route, _ := out.event.Fields["http.route"].(string)
+	route, _ := lookupString(out.event, "http.route")
 	if route == "" || !strings.Contains(route, "/orders") {
-		t.Fatalf("unexpected route field: %v", out.event.Fields["http.route"])
+		t.Fatalf("unexpected route field: %v", route)
 	}
 
 	switch mode {
 	case "success":
-		if out.event.Level != hc.LevelInfo {
-			t.Fatalf("level = %s, want INFO", out.event.Level)
+		if out.event.Level() != unolog.LevelInfo {
+			t.Fatalf("level = %s, want INFO", out.event.Level())
 		}
-		if statusFromField(t, out.event.Fields["http.status"]) != http.StatusOK {
-			t.Fatalf("status = %v, want %d", out.event.Fields["http.status"], http.StatusOK)
+		if statusFromField(t, status) != http.StatusOK {
+			t.Fatalf("status = %v, want %d", status, http.StatusOK)
 		}
 	case "error":
-		if out.event.Level != hc.LevelError {
-			t.Fatalf("level = %s, want ERROR", out.event.Level)
+		if out.event.Level() != unolog.LevelError {
+			t.Fatalf("level = %s, want ERROR", out.event.Level())
 		}
-		if statusFromField(t, out.event.Fields["http.status"]) != http.StatusInternalServerError {
-			t.Fatalf("status = %v, want %d", out.event.Fields["http.status"], http.StatusInternalServerError)
+		if statusFromField(t, status) != http.StatusInternalServerError {
+			t.Fatalf("status = %v, want %d", status, http.StatusInternalServerError)
 		}
-		if _, ok := out.event.Fields["error"].(map[string]any); !ok {
+		errField, _ := out.event.Lookup("error")
+		if _, ok := errField.(map[string]any); !ok {
 			t.Fatalf("expected structured error field")
 		}
-		if _, errorType := errorDetails(out.event.Fields["error"]); errorType == "" {
+		if _, errorType := errorDetails(errField); errorType == "" {
 			t.Fatalf("expected concrete error type")
 		}
 	case "panic":
 		if !out.panicObserved {
 			t.Fatal("expected panic propagation/observation")
 		}
-		if out.event.Level != hc.LevelError {
-			t.Fatalf("level = %s, want ERROR", out.event.Level)
+		if out.event.Level() != unolog.LevelError {
+			t.Fatalf("level = %s, want ERROR", out.event.Level())
 		}
-		if statusFromField(t, out.event.Fields["http.status"]) != http.StatusInternalServerError {
-			t.Fatalf("status = %v, want %d", out.event.Fields["http.status"], http.StatusInternalServerError)
+		if statusFromField(t, status) != http.StatusInternalServerError {
+			t.Fatalf("status = %v, want %d", status, http.StatusInternalServerError)
 		}
-		if _, ok := out.event.Fields["panic"].(map[string]any); !ok {
+		panicField, _ := out.event.Lookup("panic")
+		if _, ok := panicField.(map[string]any); !ok {
 			t.Fatalf("expected panic field")
 		}
 	}
@@ -144,14 +147,16 @@ func TestIntegrationImplicitErrorStatusConsistency(t *testing.T) {
 	for _, r := range runners {
 		t.Run(r.name, func(t *testing.T) {
 			out := r.run(t)
-			status := statusFromField(t, out.event.Fields["http.status"])
+			statusVal, _ := out.event.Lookup("http.status")
+			status := statusFromField(t, statusVal)
 			if status != http.StatusInternalServerError {
 				t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 			}
-			if out.event.Level != hc.LevelError {
-				t.Fatalf("level = %s, want ERROR", out.event.Level)
+			if out.event.Level() != unolog.LevelError {
+				t.Fatalf("level = %s, want ERROR", out.event.Level())
 			}
-			if _, ok := out.event.Fields["error"].(map[string]any); !ok {
+			errField, _ := out.event.Lookup("error")
+			if _, ok := errField.(map[string]any); !ok {
 				t.Fatalf("expected structured error field")
 			}
 		})
@@ -160,13 +165,13 @@ func TestIntegrationImplicitErrorStatusConsistency(t *testing.T) {
 
 func runStd(t *testing.T, mode string) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
-	mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
+	sink := unolog.NewTestSink()
+	mw := std.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1}))
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /orders/{id}", func(w http.ResponseWriter, r *http.Request) {
 		switch mode {
 		case "error":
-			hc.Error(r.Context(), errors.New("boom"))
+			unolog.Error(r.Context(), errors.New("boom"))
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		case "panic":
@@ -188,9 +193,9 @@ func runStd(t *testing.T, mode string) runResult {
 
 func runGin(t *testing.T, mode string) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	r := gin.New()
-	r.Use(ginhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	r.Use(ugin.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	r.GET("/orders/:id", func(c *gin.Context) {
 		switch mode {
 		case "error":
@@ -216,9 +221,9 @@ func runGin(t *testing.T, mode string) runResult {
 
 func runEcho(t *testing.T, mode string) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	e := echo.New()
-	e.Use(echohc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	e.Use(uecho.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	e.GET("/orders/:id", func(c echo.Context) error {
 		switch mode {
 		case "error":
@@ -242,10 +247,10 @@ func runEcho(t *testing.T, mode string) runResult {
 
 func runFiber(t *testing.T, mode string) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	app := fiber.New()
 	app.Use(recoverv2.New())
-	app.Use(fiberhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(ufiber.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/orders/:id", func(c *fiber.Ctx) error {
 		switch mode {
 		case "error":
@@ -257,16 +262,17 @@ func runFiber(t *testing.T, mode string) runResult {
 	})
 	_, err := app.Test(httptest.NewRequest(http.MethodGet, "/orders/1", nil))
 	event := onlyEvent(t, sink)
-	_, hasPanic := event.Fields["panic"].(map[string]any)
+	panicField, _ := event.Lookup("panic")
+	_, hasPanic := panicField.(map[string]any)
 	return runResult{event: event, panicObserved: err != nil || hasPanic}
 }
 
 func runFiberV3(t *testing.T, mode string) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	app := fiberv3.New()
 	app.Use(recoverv3.New())
-	app.Use(fiberv3hc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(ufiberv3.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/orders/:id", func(c fiberv3.Ctx) error {
 		switch mode {
 		case "error":
@@ -278,15 +284,16 @@ func runFiberV3(t *testing.T, mode string) runResult {
 	})
 	_, err := app.Test(httptest.NewRequest(http.MethodGet, "/orders/1", nil))
 	event := onlyEvent(t, sink)
-	_, hasPanic := event.Fields["panic"].(map[string]any)
+	panicField, _ := event.Lookup("panic")
+	_, hasPanic := panicField.(map[string]any)
 	return runResult{event: event, panicObserved: err != nil || hasPanic}
 }
 
 func runGinImplicitError(t *testing.T) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	r := gin.New()
-	r.Use(ginhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	r.Use(ugin.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	r.GET("/orders/:id", func(c *gin.Context) {
 		_ = c.Error(errors.New("boom"))
 	})
@@ -296,9 +303,9 @@ func runGinImplicitError(t *testing.T) runResult {
 
 func runEchoImplicitError(t *testing.T) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	e := echo.New()
-	e.Use(echohc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	e.Use(uecho.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	e.GET("/orders/:id", func(c echo.Context) error {
 		return errors.New("boom")
 	})
@@ -308,9 +315,9 @@ func runEchoImplicitError(t *testing.T) runResult {
 
 func runFiberImplicitError(t *testing.T) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	app := fiber.New()
-	app.Use(fiberhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(ufiber.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/orders/:id", func(c *fiber.Ctx) error {
 		return errors.New("boom")
 	})
@@ -320,9 +327,9 @@ func runFiberImplicitError(t *testing.T) runResult {
 
 func runFiberV3ImplicitError(t *testing.T) runResult {
 	t.Helper()
-	sink := hc.NewTestSink()
+	sink := unolog.NewTestSink()
 	app := fiberv3.New()
-	app.Use(fiberv3hc.Middleware(hc.Config{Sink: sink, SamplingRate: 1}))
+	app.Use(ufiberv3.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})))
 	app.Get("/orders/:id", func(c fiberv3.Ctx) error {
 		return errors.New("boom")
 	})
@@ -330,7 +337,7 @@ func runFiberV3ImplicitError(t *testing.T) runResult {
 	return runResult{event: onlyEvent(t, sink)}
 }
 
-func onlyEvent(t *testing.T, sink *hc.TestSink) hc.CapturedEvent {
+func onlyEvent(t *testing.T, sink *unolog.TestSink) unolog.CapturedEvent {
 	t.Helper()
 	events := sink.Events()
 	if len(events) != 1 {
@@ -342,16 +349,19 @@ func onlyEvent(t *testing.T, sink *hc.TestSink) hc.CapturedEvent {
 func normalizeResult(t *testing.T, out runResult) comparableResult {
 	t.Helper()
 
-	_, hasError := out.event.Fields["error"].(map[string]any)
-	_, hasPanic := out.event.Fields["panic"].(map[string]any)
-	method, _ := out.event.Fields["http.method"].(string)
-	path, _ := out.event.Fields["http.path"].(string)
-	errorMessage, _ := errorDetails(out.event.Fields["error"])
-	panicType, panicValue := panicDetails(out.event.Fields["panic"])
+	errField, _ := out.event.Lookup("error")
+	panicField, _ := out.event.Lookup("panic")
+	_, hasError := errField.(map[string]any)
+	_, hasPanic := panicField.(map[string]any)
+	method, _ := lookupString(out.event, "http.method")
+	path, _ := lookupString(out.event, "http.path")
+	errorMessage, _ := errorDetails(errField)
+	panicType, panicValue := panicDetails(panicField)
+	statusVal, _ := out.event.Lookup("http.status")
 	return comparableResult{
-		level:        out.event.Level,
-		status:       statusFromField(t, out.event.Fields["http.status"]),
-		message:      out.event.Message,
+		level:        out.event.Level(),
+		status:       statusFromField(t, statusVal),
+		message:      out.event.Message(),
 		method:       method,
 		path:         path,
 		hasError:     hasError,
@@ -362,14 +372,27 @@ func normalizeResult(t *testing.T, out runResult) comparableResult {
 	}
 }
 
+func lookupString(ev unolog.CapturedEvent, key string) (string, bool) {
+	v, ok := ev.Lookup(key)
+	if !ok {
+		return "", false
+	}
+	s, ok := v.(string)
+	return s, ok
+}
+
 func statusFromField(t *testing.T, value any) int {
 	t.Helper()
 
-	status, ok := value.(int)
-	if !ok {
+	switch n := value.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	default:
 		t.Fatalf("expected int status, got %T (%v)", value, value)
+		return 0
 	}
-	return status
 }
 
 func errorDetails(value any) (message, typ string) {

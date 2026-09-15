@@ -1,6 +1,34 @@
-package hc
+package unolog
 
-// IsValidLevel reports whether level is a valid severity level.
+// Level is the event severity, int-backed with slog-compatible ranks.
+// The wire format is unchanged: lowercase on the JSON wire, uppercase
+// from String.
+type Level int
+
+const (
+	LevelDebug Level = -4 // lower on the wire: "debug"
+	LevelInfo  Level = 0  // the success default
+	LevelWarn  Level = 4
+	LevelError Level = 8 // the failure and panic default
+)
+
+// String renders the classic level names.
+func (l Level) String() string {
+	switch l {
+	case LevelDebug:
+		return "DEBUG"
+	case LevelInfo:
+		return "INFO"
+	case LevelWarn:
+		return "WARN"
+	case LevelError:
+		return "ERROR"
+	default:
+		return "INFO"
+	}
+}
+
+// IsValidLevel reports whether level is one of the four defined levels.
 func IsValidLevel(level Level) bool {
 	switch level {
 	case LevelDebug, LevelInfo, LevelWarn, LevelError:
@@ -10,30 +38,10 @@ func IsValidLevel(level Level) bool {
 	}
 }
 
-// LevelRank returns the numeric severity rank for a level.
-// Higher values indicate more severe levels.
-func LevelRank(level Level) int {
-	switch level {
-	case LevelDebug:
-		return 10
-	case LevelInfo:
-		return 20
-	case LevelWarn:
-		return 30
-	case LevelError:
-		return 40
-	default:
-		return 20
+// levelFloor returns the more severe of auto and requested (when set).
+func levelFloor(auto Level, requested Level, hasRequested bool) Level {
+	if !hasRequested || !IsValidLevel(requested) {
+		return auto
 	}
-}
-
-// MergeLevelWithFloor merges an automatically chosen level with an optional requested floor.
-func MergeLevelWithFloor(autoLevel, requestedLevel Level, hasRequested bool) Level {
-	if !hasRequested || !IsValidLevel(requestedLevel) {
-		return autoLevel
-	}
-	if LevelRank(requestedLevel) > LevelRank(autoLevel) {
-		return requestedLevel
-	}
-	return autoLevel
+	return max(auto, requested)
 }

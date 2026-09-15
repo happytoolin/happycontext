@@ -57,7 +57,7 @@ curl -i http://localhost:8110/users/u_123
 Useful variants to exercise additional API helpers:
 
 ```bash
-# triggers SetLevel/GetLevel path
+# triggers SetLevel path
 curl -i "http://localhost:8101/users/u_123?debug=1"
 
 # triggers Error path (returns 500 and logs error fields)
