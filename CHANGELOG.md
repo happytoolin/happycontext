@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## [1.0.1](https://github.com/happytoolin/unolog/compare/v1.0.0...v1.0.1) (2026-09-15)
+
+
+### Performance Improvements
+
+* cut ~15% off the canonical encoder path ([0d24e2f](https://github.com/happytoolin/unolog/commit/0d24e2f826006f3a212ec1cbf7ef70ba3365be29))
+* cut ~15% off the canonical encoder path ([d388306](https://github.com/happytoolin/unolog/commit/d388306e85bea4ee6eb2bcdc860442a2e01f41be))
+
 ## [1.0.0](https://github.com/happytoolin/unolog/compare/v0.5.0...v1.0.0) (2026-09-15)
 
 
