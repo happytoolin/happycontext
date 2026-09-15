@@ -1,91 +1,37 @@
 <svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-  <title id="title">Log Stream Transformation</title>
-  <desc id="desc">Infinite incoming log lines smoothly scroll upward, then become one wide structured log stream.</desc>
+  <title id="title">Log stream</title>
+  <desc id="desc">Many incoming log lines collapse into one canonical unolog record.</desc>
+  <rect width="1200" height="520" fill="#0A0C10"/>
 
-  <defs>
-    <linearGradient id="frameStroke" x1="0" y1="0" x2="1200" y2="520" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#F60" stop-opacity="0.5" />
-      <stop offset="0.5" stop-color="#F60" stop-opacity="0.25" />
-      <stop offset="1" stop-color="#F60" stop-opacity="0.5" />
-    </linearGradient>
-    <linearGradient id="linkStroke" x1="664" y1="254" x2="760" y2="254" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#F60" stop-opacity="0.9" />
-      <stop offset="1" stop-color="#F60" stop-opacity="0.65" />
-    </linearGradient>
-    <radialGradient id="vignette" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(600 260) rotate(90) scale(360 700)">
-      <stop offset="0.72" stop-color="#F2F2F0" stop-opacity="0" />
-      <stop offset="1" stop-color="#F60" stop-opacity="0.18" />
-    </radialGradient>
-    <filter id="lineGlow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="2.2" result="blur" />
-      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-    </filter>
-    <clipPath id="incomingClip">
-      <rect x="64" y="154" width="596" height="200" rx="10" />
-    </clipPath>
-    <clipPath id="wideLogClip">
-      <rect x="760" y="189" width="380" height="130" rx="10" />
-    </clipPath>
-  </defs>
+  <text x="60" y="78" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="28" font-weight="700" fill="#F4F6F8">Log stream</text>
+  <text x="60" y="108" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" fill="#8B94A1">Many lines in, one canonical record out.</text>
 
-  <rect width="1200" height="520" fill="#F2F2F0" />
-  <rect x="8" y="8" width="1184" height="504" fill="none" stroke="url(#frameStroke)" stroke-width="1.5" />
-
-  <text x="60" y="76" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="40" font-weight="700" fill="#F60">Demo</text>
-
-  <rect x="60" y="144" width="604" height="220" rx="12" fill="#F8F6F3" stroke="#F60" stroke-opacity="0.52" stroke-width="1.4" />
-
-  <g clip-path="url(#incomingClip)" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="10.5">
-    <g>
-      <animateTransform attributeName="transform" type="translate" values="0 0; 0 -220" dur="8s" repeatCount="indefinite" />
-      <text x="74" y="190" fill="#76767A" fill-opacity="0.82">03:14:24.156</text><text x="202" y="190" fill="#61AFEF">INFO</text><text x="292" y="190" fill="#3E3E43" fill-opacity="0.88">Request completed status=200 duration_ms=1247 bytes=48291 request_id=req_8f7a2b3c</text>
-      <text x="74" y="212" fill="#76767A" fill-opacity="0.82">03:14:24.312</text><text x="202" y="212" fill="#E06C75">ERROR</text><text x="292" y="212" fill="#3E3E43" fill-opacity="0.88">Database connection pool exhausted active=20 waiting=14 timeout_ms=30000</text>
-      <text x="74" y="234" fill="#76767A" fill-opacity="0.82">03:14:24.445</text><text x="202" y="234" fill="#E5C07B">WARN</text><text x="292" y="234" fill="#3E3E43" fill-opacity="0.88">Retrying failed HTTP request endpoint=/v1/charges attempt=1 max_attempts=3</text>
-      <text x="74" y="256" fill="#76767A" fill-opacity="0.82">03:14:25.112</text><text x="202" y="256" fill="#61AFEF">INFO</text><text x="292" y="256" fill="#3E3E43" fill-opacity="0.88">Circuit breaker transition service=payment-api state=open failure_count=5</text>
-      <text x="74" y="278" fill="#76767A" fill-opacity="0.82">03:14:25.645</text><text x="202" y="278" fill="#56B6C2" fill-opacity="0.92">DEBUG</text><text x="292" y="278" fill="#3E3E43" fill-opacity="0.88">Background job succeeded job_id=job_9x8w7v6u duration_ms=2341</text>
-      <text x="74" y="300" fill="#76767A" fill-opacity="0.82">03:14:26.201</text><text x="202" y="300" fill="#E06C75">ERROR</text><text x="292" y="300" fill="#3E3E43" fill-opacity="0.88">Memory pressure critical heap_used_bytes=1932735283 rss_bytes=2415919104</text>
-      <text x="74" y="322" fill="#76767A" fill-opacity="0.82">03:14:26.556</text><text x="202" y="322" fill="#E5C07B">WARN</text><text x="292" y="322" fill="#3E3E43" fill-opacity="0.88">Rate limit threshold approaching user_id=user_abc123 current_requests=890</text>
-      <text x="74" y="344" fill="#76767A" fill-opacity="0.82">03:14:27.112</text><text x="202" y="344" fill="#61AFEF">INFO</text><text x="292" y="344" fill="#3E3E43" fill-opacity="0.88">WebSocket connected client_id=ws_7f8g9h2j protocol=wss rooms=3</text>
-      <text x="74" y="366" fill="#76767A" fill-opacity="0.82">03:14:27.445</text><text x="202" y="366" fill="#56B6C2" fill-opacity="0.92">DEBUG</text><text x="292" y="366" fill="#3E3E43" fill-opacity="0.88">Kafka consumed topic=user-events partition=3 offset=1847291 lag=12</text>
-      <text x="74" y="388" fill="#76767A" fill-opacity="0.82">03:14:28.112</text><text x="202" y="388" fill="#61AFEF">INFO</text><text x="292" y="388" fill="#3E3E43" fill-opacity="0.88">Health check passed service=api-gateway uptime_seconds=847291</text>
-    </g>
-    <g transform="translate(0 220)">
-      <animateTransform attributeName="transform" type="translate" values="0 0; 0 -220" dur="8s" repeatCount="indefinite" />
-      <text x="74" y="190" fill="#76767A" fill-opacity="0.82">03:14:24.156</text><text x="202" y="190" fill="#61AFEF">INFO</text><text x="292" y="190" fill="#3E3E43" fill-opacity="0.88">Request completed status=200 duration_ms=1247 bytes=48291 request_id=req_8f7a2b3c</text>
-      <text x="74" y="212" fill="#76767A" fill-opacity="0.82">03:14:24.312</text><text x="202" y="212" fill="#E06C75">ERROR</text><text x="292" y="212" fill="#3E3E43" fill-opacity="0.88">Database connection pool exhausted active=20 waiting=14 timeout_ms=30000</text>
-      <text x="74" y="234" fill="#76767A" fill-opacity="0.82">03:14:24.445</text><text x="202" y="234" fill="#E5C07B">WARN</text><text x="292" y="234" fill="#3E3E43" fill-opacity="0.88">Retrying failed HTTP request endpoint=/v1/charges attempt=1 max_attempts=3</text>
-      <text x="74" y="256" fill="#76767A" fill-opacity="0.82">03:14:25.112</text><text x="202" y="256" fill="#61AFEF">INFO</text><text x="292" y="256" fill="#3E3E43" fill-opacity="0.88">Circuit breaker transition service=payment-api state=open failure_count=5</text>
-      <text x="74" y="278" fill="#76767A" fill-opacity="0.82">03:14:25.645</text><text x="202" y="278" fill="#56B6C2" fill-opacity="0.92">DEBUG</text><text x="292" y="278" fill="#3E3E43" fill-opacity="0.88">Background job succeeded job_id=job_9x8w7v6u duration_ms=2341</text>
-      <text x="74" y="300" fill="#76767A" fill-opacity="0.82">03:14:26.201</text><text x="202" y="300" fill="#E06C75">ERROR</text><text x="292" y="300" fill="#3E3E43" fill-opacity="0.88">Memory pressure critical heap_used_bytes=1932735283 rss_bytes=2415919104</text>
-      <text x="74" y="322" fill="#76767A" fill-opacity="0.82">03:14:26.556</text><text x="202" y="322" fill="#E5C07B">WARN</text><text x="292" y="322" fill="#3E3E43" fill-opacity="0.88">Rate limit threshold approaching user_id=user_abc123 current_requests=890</text>
-      <text x="74" y="344" fill="#76767A" fill-opacity="0.82">03:14:27.112</text><text x="202" y="344" fill="#61AFEF">INFO</text><text x="292" y="344" fill="#3E3E43" fill-opacity="0.88">WebSocket connected client_id=ws_7f8g9h2j protocol=wss rooms=3</text>
-      <text x="74" y="366" fill="#76767A" fill-opacity="0.82">03:14:27.445</text><text x="202" y="366" fill="#56B6C2" fill-opacity="0.92">DEBUG</text><text x="292" y="366" fill="#3E3E43" fill-opacity="0.88">Kafka consumed topic=user-events partition=3 offset=1847291 lag=12</text>
-      <text x="74" y="388" fill="#76767A" fill-opacity="0.82">03:14:28.112</text><text x="202" y="388" fill="#61AFEF">INFO</text><text x="292" y="388" fill="#3E3E43" fill-opacity="0.88">Health check passed service=api-gateway uptime_seconds=847291</text>
-    </g>
+  <rect x="60" y="140" width="600" height="300" rx="14" fill="#10151C" stroke="#1B222B"/>
+  <text x="84" y="178" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.4" fill="#6F7885">INCOMING</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="11">
+    <text x="84" y="214" fill="#6F7885">03:14:24.156</text><text x="204" y="214" fill="#61AFEF">INFO</text><text x="286" y="214" fill="#C5CDD8">Request completed status=200 dur_ms=1247</text>
+    <text x="84" y="244" fill="#6F7885">03:14:24.312</text><text x="204" y="244" fill="#E06C75">ERROR</text><text x="286" y="244" fill="#C5CDD8">Database pool exhausted active=20 waiting=14</text>
+    <text x="84" y="274" fill="#6F7885">03:14:24.445</text><text x="204" y="274" fill="#E5C07B">WARN</text><text x="286" y="274" fill="#C5CDD8">Retrying HTTP request attempt=1 max=3</text>
+    <text x="84" y="304" fill="#6F7885">03:14:25.112</text><text x="204" y="304" fill="#61AFEF">INFO</text><text x="286" y="304" fill="#C5CDD8">Circuit breaker open service=payment-api</text>
+    <text x="84" y="334" fill="#6F7885">03:14:25.645</text><text x="204" y="334" fill="#56B6C2">DEBUG</text><text x="286" y="334" fill="#C5CDD8">Background job succeeded job_id=job_9x8w7v6u</text>
+    <text x="84" y="364" fill="#6F7885">03:14:26.201</text><text x="204" y="364" fill="#E06C75">ERROR</text><text x="286" y="364" fill="#C5CDD8">Memory pressure critical heap=1.9GiB</text>
+    <text x="84" y="394" fill="#6F7885">03:14:26.556</text><text x="204" y="394" fill="#E5C07B">WARN</text><text x="286" y="394" fill="#C5CDD8">Rate limit approaching user_id=user_abc123</text>
+    <text x="84" y="424" fill="#6F7885">03:14:27.112</text><text x="204" y="424" fill="#61AFEF">INFO</text><text x="286" y="424" fill="#C5CDD8">WebSocket connected rooms=3</text>
   </g>
 
-  <g>
-    <path d="M664 254C696 246 726 246 760 254" stroke="url(#linkStroke)" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round" filter="url(#lineGlow)" />
-    <circle cx="760" cy="254" r="4.5" fill="#F60" />
-    <circle cx="664" cy="254" r="3.2" fill="#F60" />
+  <path d="M676 290h54" stroke="#7CFFB2" stroke-opacity="0.45" stroke-width="1.5"/>
+  <path d="M722 284l8 6-8 6" fill="none" stroke="#7CFFB2" stroke-opacity="0.8" stroke-width="1.5"/>
+
+  <rect x="780" y="170" width="360" height="240" rx="14" fill="#10151C" stroke="#1B222B"/>
+  <text x="804" y="208" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.4" fill="#7CFFB2">ONE EVENT</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="11">
+    <text x="804" y="236" fill="#5B6472">{</text>
+    <text x="818" y="260" fill="#8B94A1">"level":</text><text x="892" y="260" fill="#61AFEF">"INFO",</text>
+    <text x="818" y="284" fill="#8B94A1">"msg":</text><text x="892" y="284" fill="#E6EBF1">"request_completed",</text>
+    <text x="818" y="308" fill="#8B94A1">"route":</text><text x="892" y="308" fill="#E6EBF1">"/orders/{id}",</text>
+    <text x="818" y="332" fill="#8B94A1">"status":</text><text x="892" y="332" fill="#7CFFB2">200</text><text x="916" y="332" fill="#5B6472">,</text>
+    <text x="818" y="356" fill="#8B94A1">"dur_ms":</text><text x="892" y="356" fill="#7CFFB2">12</text><text x="910" y="356" fill="#5B6472">,</text>
+    <text x="818" y="380" fill="#8B94A1">"request_id":</text><text x="892" y="380" fill="#E6EBF1">"req_8f7a2b3c"</text>
+    <text x="804" y="404" fill="#5B6472">}</text>
   </g>
-
-  <g>
-    <rect x="760" y="189" width="380" height="130" rx="12" fill="#F8F6F3" stroke="#F60" stroke-opacity="0.72" stroke-width="1.6" />
-
-    <g clip-path="url(#wideLogClip)">
-      <g>
-        <animateTransform attributeName="transform" type="translate" values="0 0; -620 0" dur="8.5s" repeatCount="indefinite" />
-        <rect x="778" y="205" width="1040" height="28" rx="7" fill="#F2F2F0" stroke="#F60" stroke-opacity="0.3" />
-        <rect x="778" y="239" width="1040" height="28" rx="7" fill="#F2F2F0" stroke="#F60" stroke-opacity="0.24" />
-        <rect x="778" y="273" width="1040" height="28" rx="7" fill="#F2F2F0" stroke="#F60" stroke-opacity="0.18" />
-
-        <text x="792" y="223" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="10.8" fill="#F60">{"ts":"03:14:28.219","level":"INFO","msg":"request_completed","http":{"route":"/orders/{id}","status":200,"dur_ms":12},"request_id":"req_8f7a2b3c"}</text>
-        <text x="792" y="257" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="10.8" fill="#F60" fill-opacity="0.78">{"user":{"id":"u_8472"},"trace":"9f1c","sampled":true,"logger":"slog","integration":"net/http","cache_hit":false}</text>
-        <text x="792" y="291" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="10.8" fill="#F60" fill-opacity="0.86">{"db_queries":3,"external_calls":1,"bytes_sent":48291,"service":"api-gateway","region":"us-east-1","version":"2.4.1"}</text>
-      </g>
-    </g>
-  </g>
-
-  <rect width="1200" height="520" fill="url(#vignette)" />
 </svg>

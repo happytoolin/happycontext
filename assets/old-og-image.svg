@@ -1,48 +1,18 @@
 <svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">happycontext</title>
   <desc id="desc">Minimal banner with soft grid, smooth signal lines, and subtle depth.</desc>
-  <defs>
-    <linearGradient id="lineMain" x1="60" y1="430" x2="1140" y2="210" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#F60" />
-      <stop offset="1" stop-color="#F2F2F0" />
-    </linearGradient>
-    <linearGradient id="lineSub" x1="60" y1="485" x2="1140" y2="330" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#F60" stop-opacity="0.55" />
-      <stop offset="1" stop-color="#F2F2F0" stop-opacity="0.5" />
-    </linearGradient>
-    <filter id="lineGlow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="4.5" result="blur" />
-      <feMerge>
-        <feMergeNode in="blur" />
-        <feMergeNode in="SourceGraphic" />
-      </feMerge>
-    </filter>
-    <linearGradient id="frameStroke" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#F60" stop-opacity="0.42" />
-      <stop offset="0.5" stop-color="#F60" stop-opacity="0.2" />
-      <stop offset="1" stop-color="#F60" stop-opacity="0.4" />
-    </linearGradient>
-    <linearGradient id="cornerGlow" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#F60" stop-opacity="0.58" />
-      <stop offset="1" stop-color="#F60" stop-opacity="0" />
-    </linearGradient>
-    <radialGradient id="vignette" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(600 315) rotate(90) scale(420 760)">
-      <stop offset="0.72" stop-color="#F2F2F0" stop-opacity="0" />
-      <stop offset="1" stop-color="#F60" stop-opacity="0.18" />
-    </radialGradient>
-  </defs>
-  <rect width="1200" height="630" fill="#F2F2F0" />
-  <rect x="8" y="8" width="1184" height="614" fill="none" stroke="url(#frameStroke)" stroke-width="1.5" />
+    <rect width="1200" height="630" fill="#F2F2F0" />
+  <rect x="8" y="8" width="1184" height="614" fill="none" stroke="#F60" stroke-opacity="0.3" stroke-width="1.5" />
   <rect x="16" y="16" width="1168" height="598" fill="none" stroke="#F60" stroke-opacity="0.18" stroke-width="1" />
-  <path d="M28 28H148V30H30V148H28V28Z" fill="url(#cornerGlow)" />
-  <path d="M1172 28V148H1170V30H1052V28H1172Z" fill="url(#cornerGlow)" />
-  <path d="M28 602V482H30V600H148V602H28Z" fill="url(#cornerGlow)" />
-  <path d="M1172 602H1052V600H1170V482H1172V602Z" fill="url(#cornerGlow)" />
-  <path d="M60 430C198 374 302 510 430 436C558 362 628 248 760 268C900 289 985 196 1140 210" pathLength="1000" stroke="url(#lineMain)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" filter="url(#lineGlow)" stroke-dasharray="1000 0">
+  <path d="M28 28H148V30H30V148H28V28Z" fill="#F60" fill-opacity="0.35" />
+  <path d="M1172 28V148H1170V30H1052V28H1172Z" fill="#F60" fill-opacity="0.35" />
+  <path d="M28 602V482H30V600H148V602H28Z" fill="#F60" fill-opacity="0.35" />
+  <path d="M1172 602H1052V600H1170V482H1172V602Z" fill="#F60" fill-opacity="0.35" />
+  <path d="M60 430C198 374 302 510 430 436C558 362 628 248 760 268C900 289 985 196 1140 210" pathLength="1000" stroke="#F60" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1000 0">
     <animate attributeName="stroke-dasharray" values="0 1000; 1000 0" dur="12s" fill="freeze" />
     <animate attributeName="opacity" values="0.9; 1" dur="12s" fill="freeze" />
   </path>
-  <path d="M60 485C208 440 292 548 430 492C562 438 642 334 772 348C904 362 1006 304 1140 322" pathLength="1000" stroke="url(#lineSub)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1000 0">
+  <path d="M60 485C208 440 292 548 430 492C562 438 642 334 772 348C904 362 1006 304 1140 322" pathLength="1000" stroke="#F60" stroke-opacity="0.5" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1000 0">
     <animate attributeName="stroke-dasharray" values="0 1000; 1000 0" dur="16s" begin="0.9s" fill="freeze" />
     <animate attributeName="opacity" values="0.6; 0.85" dur="16s" begin="0.9s" fill="freeze" />
   </path>
@@ -122,5 +92,4 @@
       <text x="20" y="316" fill="#F60" fill-opacity="0.88" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="14">}</text>
     </g>
   </g>
-  <rect width="1200" height="630" fill="url(#vignette)" />
 </svg>
