@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+## [1.0.0](https://github.com/happytoolin/unolog/compare/v0.5.0...v1.0.0) (2026-09-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* module path moved from github.com/happytoolin/happycontext to github.com/happytoolin/unolog.
+* remove the raw-JSON surface — AddRawJSON, KindRaw, Field.Raw()
+* The entire v0 public API is replaced. See MIGRATION.md for the complete v0 -> v1 symbol map.
+
+### Features
+
+* add first-party JSON sink with SWAR encoder ([#23](https://github.com/happytoolin/unolog/issues/23)) ([7919d17](https://github.com/happytoolin/unolog/commit/7919d1711553292954bc417885ef0967d3537e73))
+* remove the raw-JSON surface — AddRawJSON, KindRaw, Field.Raw() ([a683c53](https://github.com/happytoolin/unolog/commit/a683c5339f0c345d2560fe1e989714df21b8479f))
+* v2 record core (W3-W9) + DST hardening ([#29](https://github.com/happytoolin/unolog/issues/29)) ([07b8293](https://github.com/happytoolin/unolog/commit/07b82938720bca7d84ce30db8a913300ab671f5f))
+
+
+### Bug Fixes
+
+* **ci:** point release-please at v2 with the input that exists ([04519dc](https://github.com/happytoolin/unolog/commit/04519dca0804194439f63c0c3b9d1e7891ac12f3))
+* **ci:** point release-please at v2 with the input that exists ([b8139cb](https://github.com/happytoolin/unolog/commit/b8139cbda3f089027a83d628d01efdd5f6646864))
+* **core:** GLM whole-branch audit — 1 defect + 2 probable-defects + API-freeze polish ([5850c19](https://github.com/happytoolin/unolog/commit/5850c1953d625851f3e9fdcb6929a50c193203c9))
+* **v2:** apply the final pre-1.0 quality-audit fixes ([1a4e91d](https://github.com/happytoolin/unolog/commit/1a4e91d3b8423bf2f157e40d550bc24c4334f29f))
+* **v2:** apply the final pre-1.0 quality-audit fixes ([1ed5f45](https://github.com/happytoolin/unolog/commit/1ed5f450d50c68356d6e292601862be0be1fc738))
+* **v2:** close the GLM-5.3 review findings ([1c8d236](https://github.com/happytoolin/unolog/commit/1c8d2361b6410fd7648b0674a64a0615626ca9d5))
+* **v2:** close the post-End write race with always-guarded events ([deb20d8](https://github.com/happytoolin/unolog/commit/deb20d8e93e6e4ef27e83ae334f69dac52c66c6c))
+* **v2:** close the post-End write race with always-guarded events ([7ad1dac](https://github.com/happytoolin/unolog/commit/7ad1dac8c1cd2dc256a30e4900af4b96352cd342))
+* **v2:** mirror the retry sampling rule in the lifecycle fuzz model ([f2c15bf](https://github.com/happytoolin/unolog/commit/f2c15bfe7dd64718247514892b9be632d0ddb004))
+* **v2:** resolve the 1.0.0 release-review findings ([6e2d549](https://github.com/happytoolin/unolog/commit/6e2d54926b7ec6b5ffa3b4396cd1296788d3b046))
+* **v2:** serialize reset with stale watchdog snapshots ([3bc0066](https://github.com/happytoolin/unolog/commit/3bc0066a9917340841b2014394bf5c8b59d30500))
+
+
+### Performance Improvements
+
+* deliver the optimization the review caught as half-implemented ([6cbafe3](https://github.com/happytoolin/unolog/commit/6cbafe3fb7a1bfc6e006602aabfb7ec5bf4e987a))
+* hot-path wins — EndDrop −18%, encode −10%, batched post-seal ([5f3ce19](https://github.com/happytoolin/unolog/commit/5f3ce196cf6dfec493dea516d13b27b0a728c529))
+* hot-path wins — EndDrop −18%, encode −10%, batched post-seal ([388ed12](https://github.com/happytoolin/unolog/commit/388ed1253880e5b6a3e5e50f097173fa360e56eb))
+* v2 optimizations — zerolog Encoded(), Record pooling, lazy start fields, fast-path sampling ([4f725f4](https://github.com/happytoolin/unolog/commit/4f725f4accc965f7460b8280a1669154fb5c3fcd))
+
+
+### Code Refactoring
+
+* point the module path at github.com/happytoolin/unolog ([bbd06cb](https://github.com/happytoolin/unolog/commit/bbd06cb458ecec98bfca3bdd5ef018448f1c4439))
+
 ## [0.5.0](https://github.com/happytoolin/happycontext/compare/v0.4.0...v0.5.0) (2026-08-30)
 
 
