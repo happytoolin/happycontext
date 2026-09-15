@@ -1,7 +1,5 @@
 # unolog
 
-> Snapshot of v1.0.0 — development continues on [`v2`](https://github.com/happytoolin/unolog/tree/v2).
-
 ![unolog banner](./assets/og-image.svg)
 
 [![CI](https://github.com/happytoolin/unolog/actions/workflows/ci.yml/badge.svg)](https://github.com/happytoolin/unolog/actions/workflows/ci.yml)

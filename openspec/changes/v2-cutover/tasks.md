@@ -5,17 +5,17 @@ No cutover merge and no classic-line freeze: `main` is frozen at v0.5.0
 behind a pointer banner. Prerequisite: `add-first-party-json-sink`
 merged on `v2` and v0.6.0 released there.
 
-## 1. Release line switch (target: v2)
+## 1. Release line switch (target: main)
 
 - [ ] Choreography PR: release workflow triggers on v2 only; CI gates
       v2 PRs; V2_DESIGN §9 + ledger amended; main banner PR open
 - [ ] Merge PR-A/PR-B (retargeted to v2); release v0.6.0 via
-      release-please on v2; verify the release PR computes 0.5.0 →
+      release-please on main; verify the release PR computes 0.5.0 →
       0.6.0 and the lockstep workflow tags nested modules v0.6.0 (the
       v0.5.0 lesson: never merge a release PR with a surprising
       version)
 
-## 2. v1.0.0 (target: v2, after `v2-record-core`)
+## 2. v1.0.0 (target: main, after `v2-record-core`)
 
 - [ ] Rename to unolog: merge `refactor/rename-to-unolog` (module path,
       package names, scripts, docs, assets), rename the GitHub repository
