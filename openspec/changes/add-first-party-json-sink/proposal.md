@@ -12,7 +12,7 @@ amendment 10.
 
 - Vendor zerolog v1.34.0's `internal/json` into `internal/json` (MIT,
   attributed), trimmed to what we use, upgraded with a hybrid SWAR escape
-  fast path (pure Go, `-11–18%` on clean ASCII, measured in `V2_PLAN.md` §3b).
+  fast path (pure Go, `-11–18%` on clean ASCII, measured).
 - Add `hc.NewJSONSink(io.Writer)` implementing the **current** Sink interface
   (map in, encoded line out) — additive, non-breaking.
 - Add the jsontext comparator in `benches/` behind a `go1.27` build tag.

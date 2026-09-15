@@ -12,13 +12,10 @@ golden tests rather than by re-vendoring.
 
 ## Why
 
-> V2_DESIGN.md and V2_PLAN.md live on the `v2` branch until the v1.0
-> cutover merges it to main; the references below resolve there.
-
 V2_DESIGN.md §8 (encoder decision): fork the zerolog append-only JSON
 encoder, keep zero third-party dependencies in the root module, and earn
 production trust for it on the classic API before the v2 record core
-lands. The full rationale and measurements live in V2_PLAN.md §3b.
+lands.
 
 ## Modifications from the original
 
@@ -32,7 +29,8 @@ lands. The full rationale and measurements live in V2_PLAN.md §3b.
   as the correctness oracle for the property and fuzz tests. The zero-byte
   detector is the canonical `(x - 0x0101010101010101) &^ x &
   0x8080808080808080` form; see the comments there for why the `&^ x`
-  term is load-bearing (V2_PLAN.md §05 documents the incident class).
+  term is load-bearing — dropping it silently disables zero detection,
+  which the property suite pins.
 - Trimmed to what unolog encodes: single-value appends only —
   string/bytes escaping, ints/uints, floats, bool, time, duration, nil,
   markers/keys, and an `any` fallback via `encoding/json`. Slice/array

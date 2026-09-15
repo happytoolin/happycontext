@@ -167,8 +167,8 @@ const (
 // Dropping the &^ x term compiles and runs several times faster —
 // because it never detects anything: a zero byte clears its own high
 // bit in x, so the masked result is always zero and escaping is
-// silently skipped. V2_PLAN.md §05 documents the incident; the property
-// test in this package fails any such regression.
+// silently skipped. The property test in this package fails any such
+// regression.
 func hasZero64(x uint64) bool {
 	return (x-swarOnes)&^x&swarHighs != 0
 }

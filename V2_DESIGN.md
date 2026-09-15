@@ -1,10 +1,10 @@
 # unolog v2 — Final Design
 
 Status: **locked** (2026-08-30). This is the buildable specification.
-Rationale, measurements, and the research trail live in `V2_PLAN.md`;
-this document only states what we build and how it is judged. v0.5.0
-already shipped the adapter sort removal (PR #21) — that decision is
-behind us.
+Rationale, measurements, and the research trail live in the commit
+history and the benchmark artefacts; this document only states what we
+build and how it is judged. v0.5.0 already shipped the adapter sort
+removal (PR #21) — that decision is behind us.
 
 ## 1. The path
 

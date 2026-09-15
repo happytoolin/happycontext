@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Payload shapes mirror V2_PLAN.md §3b's prototype table so the §4 gate
+// Payload shapes mirror the §4 gate's prototype table so the gate
 // ("escape, 96-char clean ASCII ≤ 26 ns") is measured on the same inputs.
 var (
 	benchKey7   = "user_id"

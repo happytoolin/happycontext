@@ -190,8 +190,8 @@ func TestChunkDetector(t *testing.T) {
 // random bytes, clean ASCII with injected specials at random positions,
 // multi-byte UTF-8, systematic adversarial placements — must encode
 // byte-identically through the hybrid SWAR path and the vendored zerolog
-// table reference. No benchmark result counts until this passes
-// (V2_PLAN.md §05).
+// table reference. No benchmark result counts until this passes — the
+// same rule the crash and property suites enforce.
 func TestAppendStringProperty(t *testing.T) {
 	const total = 200_000
 	rng := rand.New(rand.NewPCG(0xC0FFEE, 0xBEEF))
@@ -264,6 +264,45 @@ func TestAppendStringProperty(t *testing.T) {
 		want := appendStringTable(append([]byte(nil), base...), s)
 		if !bytes.Equal(got, want) {
 			t.Fatalf("property violation at i=%d s=%q:\n got %s\nwant %s (table)", i, s, got, want)
+		}
+	}
+}
+
+func TestAppendBytesMirrorsString(t *testing.T) {
+	rng := rand.New(rand.NewPCG(7, 7))
+	for range 20_000 {
+		b := make([]byte, rng.IntN(80))
+		for j := range b {
+			b[j] = byte(rng.Uint64())
+		}
+		got := Encoder{}.AppendBytes(nil, b)
+		want := Encoder{}.AppendString(nil, string(b))
+		if !bytes.Equal(got, want) {
+			t.Fatalf("AppendBytes != AppendString for %q: %s vs %s", b, got, want)
+		}
+		wantTable := appendBytesTable(nil, b)
+		if !bytes.Equal(got, wantTable) {
+			t.Fatalf("AppendBytes != table for %q: %s vs %s", b, got, wantTable)
+		}
+	}
+}
+
+func TestAppendBytesBasics(t *testing.T) {
+	cases := []struct {
+		in   []byte
+		want string
+	}{
+		{nil, `""`},
+		{[]byte("v"), `"v"`},
+		{[]byte("hello \" world"), `"hello \" world"`},
+		{[]byte{0x00}, `"\u0000"`},
+		{[]byte{0x7f}, `"\u007f"`},
+		{[]byte{0xff}, `"\ufffd"`},
+		{bytes.Repeat([]byte("a"), 32), `"` + string(bytes.Repeat([]byte("a"), 32)) + `"`},
+	}
+	for _, c := range cases {
+		if got := string(Encoder{}.AppendBytes(nil, c.in)); got != c.want {
+			t.Errorf("AppendBytes(%q) = %s, want %s", c.in, got, c.want)
 		}
 	}
 }

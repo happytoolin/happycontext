@@ -32,7 +32,8 @@ file only indexes the load-bearing decisions an implementer needs at hand.
 ## Performance gates
 - `V2_DESIGN.md` §4. Standing rule: no benchmark counts until the property
   test passes; parallel results require interleaved reruns to be believed
-  (see `V2_PLAN.md` §05's cautionary tale for why).
+  (a number never counts without the matching property test passing
+  first — the crash/simulation suites pin the invariant).
 
 ## Mechanics on the branch
 - Nested modules use `replace … => ../` during development; the lockstep

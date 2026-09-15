@@ -1,12 +1,18 @@
 package slog
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	stdslog "log/slog"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/happytoolin/unolog"
+	"go.uber.org/goleak"
 )
 
 func emit(t *testing.T, sink unolog.Sink, level unolog.Level, kv ...any) {
@@ -209,3 +215,174 @@ func (h *captureSlogHandler) Handle(_ context.Context, r stdslog.Record) error {
 
 func (h *captureSlogHandler) WithAttrs([]stdslog.Attr) stdslog.Handler { return h }
 func (h *captureSlogHandler) WithGroup(string) stdslog.Handler         { return h }
+
+// Bridge robustness tests: nil/garbage abuse and typed-nil error
+// containment.
+
+type recSink struct{ rec *unolog.Record }
+
+func (s *recSink) Write(_ context.Context, rec *unolog.Record) { s.rec = rec }
+
+func crashRecord(t *testing.T) *unolog.Record {
+	t.Helper()
+	s := &recSink{}
+	rt := unolog.MustCompile(unolog.Config{Sink: s, SamplingRate: 1})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "j"})
+	unolog.Add(op.Context(), "k", "v")
+	if !op.End(nil) || s.rec == nil {
+		t.Fatal("no record captured")
+	}
+	return s.rec
+}
+
+func TestCrashNilAbuse(t *testing.T) {
+	rec := crashRecord(t)
+	New(nil).Write(context.Background(), rec)
+	New(nil).Write(context.Background(), nil)
+	var nilSink *Sink
+	nilSink.Write(context.Background(), rec)
+	New(stdslog.New(stdslog.DiscardHandler)).Write(context.Background(), rec)
+	New(stdslog.Default()).Write(context.Background(), rec)
+}
+
+func TestCrashTypedNilErrorField(t *testing.T) {
+	var pe *os.PathError
+	var buf bytes.Buffer
+	s := &recSink{}
+	rt := unolog.MustCompile(unolog.Config{Sink: s, SamplingRate: 1})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "j"})
+	unolog.Add(op.Context(), "e", pe)
+	unolog.Error(op.Context(), pe)
+	_ = op.End(nil)
+	rec := s.rec
+	New(stdslog.New(stdslog.NewTextHandler(&buf, nil))).Write(context.Background(), rec)
+	if !strings.Contains(buf.String(), "<nil>") {
+		t.Fatalf("typed-nil error not rendered as <nil>: %s", buf.String())
+	}
+}
+
+type retainingHandler struct {
+	mu      sync.Mutex
+	records []stdslog.Record
+}
+
+func (h *retainingHandler) Enabled(context.Context, stdslog.Level) bool { return true }
+
+func (h *retainingHandler) Handle(_ context.Context, r stdslog.Record) error {
+	h.mu.Lock()
+	h.records = append(h.records, r)
+	h.mu.Unlock()
+	return nil
+}
+
+func (h *retainingHandler) WithAttrs([]stdslog.Attr) stdslog.Handler { return h }
+func (h *retainingHandler) WithGroup(string) stdslog.Handler         { return h }
+
+// TestSinkRecordsSurviveRetainingHandler drives many lifecycles
+// through the adapter; a handler that retains records must never see
+// corrupted or cross-request data.
+func TestSinkRecordsSurviveRetainingHandler(t *testing.T) {
+	h := &retainingHandler{}
+	rt := unolog.MustCompile(unolog.Config{Sink: New(stdslog.New(h)), SamplingRate: 1})
+
+	for range 100 {
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "t"})
+		unolog.Add(op.Context(), "a", 1, "b", "two", "c", true)
+		op.End(nil)
+	}
+
+	if len(h.records) != 100 {
+		t.Fatalf("got %d records, want 100", len(h.records))
+	}
+	for i, r := range h.records {
+		count := 0
+		r.Attrs(func(a stdslog.Attr) bool {
+			count++
+			switch a.Key {
+			case "a":
+				if a.Value.Int64() != 1 {
+					t.Fatalf("record %d: a = %v", i, a.Value)
+				}
+			case "b":
+				if a.Value.String() != "two" {
+					t.Fatalf("record %d: b = %v", i, a.Value)
+				}
+			case "c":
+				if !a.Value.Bool() {
+					t.Fatalf("record %d: c = %v", i, a.Value)
+				}
+			}
+			return true
+		})
+		if count < 3 {
+			t.Fatalf("record %d: %d attrs, want >= 3", i, count)
+		}
+	}
+}
+
+// TestSinkConcurrentWrites drives concurrent lifecycles with distinct
+// field payloads through one adapter instance.
+func TestSinkConcurrentWrites(t *testing.T) {
+	h := &retainingHandler{}
+	rt := unolog.MustCompile(unolog.Config{Sink: New(stdslog.New(h)), SamplingRate: 1})
+
+	const writers = 8
+	const writes = 50
+
+	var wg sync.WaitGroup
+	for w := range writers {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			tag := "w" + strconv.Itoa(w)
+			for range writes {
+				op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: tag})
+				ctx := op.Context()
+				for i := range 10 {
+					unolog.Add(ctx, "k"+strconv.Itoa(i), tag+":"+strconv.Itoa(i))
+				}
+				op.End(nil)
+			}
+		}(w)
+	}
+	wg.Wait()
+
+	total := writers * writes
+	if len(h.records) != total {
+		t.Fatalf("got %d records, want %d", len(h.records), total)
+	}
+}
+
+// TestStressSlogSustainedCorrectness hammers the adapter with
+// sustained concurrent traffic; every record must stay intact.
+func TestStressSlogSustainedCorrectness(t *testing.T) {
+	h := &retainingHandler{}
+	rt := unolog.MustCompile(unolog.Config{Sink: New(stdslog.New(h)), SamplingRate: 1})
+
+	const goroutines = 8
+	const writes = 2_000
+
+	var wg sync.WaitGroup
+	for range goroutines {
+		wg.Go(func() {
+			for range writes {
+				op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "stress"})
+				unolog.Add(op.Context(), "a", 1, "b", "two", "c", true)
+				op.End(nil)
+			}
+		})
+	}
+	wg.Wait()
+
+	if len(h.records) != goroutines*writes {
+		t.Fatalf("got %d records, want %d", len(h.records), goroutines*writes)
+	}
+}
+
+// goleak integration: every test in this module runs under
+// goleak.VerifyTestMain, failing the suite on any leaked goroutine.
+// goleak is test-only: nothing outside _test.go imports it.
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
