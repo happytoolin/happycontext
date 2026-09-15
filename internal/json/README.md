@@ -12,10 +12,9 @@ golden tests rather than by re-vendoring.
 
 ## Why
 
-V2_DESIGN.md §8 (encoder decision): fork the zerolog append-only JSON
-encoder, keep zero third-party dependencies in the root module, and earn
-production trust for it on the classic API before the v2 record core
-lands.
+The encoder decision: fork the zerolog append-only JSON encoder, keep
+zero third-party dependencies in the root module, and earn production
+trust for it on the classic API before the record core landed.
 
 ## Modifications from the original
 

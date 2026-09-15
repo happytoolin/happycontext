@@ -185,8 +185,8 @@ func TestChunkDetector(t *testing.T) {
 	}
 }
 
-// TestAppendStringProperty is the encoder's core equivalence gate
-// (openspec json-encoder delta, V2_DESIGN §4): 200,000 generated strings —
+// TestAppendStringProperty is the encoder's core equivalence gate:
+// 200,000 generated strings —
 // random bytes, clean ASCII with injected specials at random positions,
 // multi-byte UTF-8, systematic adversarial placements — must encode
 // byte-identically through the hybrid SWAR path and the vendored zerolog

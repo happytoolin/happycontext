@@ -22,8 +22,8 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// TestGoldenZerologBridgeParity is the bridge golden gate (V2_DESIGN
-// §4): for a fixed corpus driven through real lifecycles, the
+// TestGoldenZerologBridgeParity is the bridge golden gate: for a fixed
+// corpus driven through real lifecycles, the
 // first-party JSON sink and the zerolog bridge must emit the same
 // PARSED field set. Equivalence is on parsed values, not bytes. The
 // exception list: the time value (each sink stamps its own write).

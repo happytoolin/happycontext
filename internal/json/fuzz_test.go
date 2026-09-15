@@ -11,8 +11,7 @@ import (
 // FuzzAppendString checks the equivalence gate continuously: the hybrid
 // SWAR path and the vendored zerolog table reference must produce
 // byte-identical output for every input. CI runs 60s per target
-// (~1M+ execs); the 1M-exec clean gate is a release requirement
-// (openspec json-encoder delta).
+// (~1M+ execs); the 1M-exec clean gate is a release requirement.
 //
 // The body carries a second, semantic oracle (the zap adoption —
 // FuzzSafeAppendStringLike + roundTripsCorrectly*, zapcore/

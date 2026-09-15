@@ -363,8 +363,7 @@ just bench-adapters  # slog, zap, zerolog bridges
 
 The head-to-head runs the logger directly in the handler and unolog through its
 std middleware on the same route with the same fields, both discarding output —
-no strawman baselines. `just bench` reproduces every suite; the 1.0.0
-performance gates and method notes live in [`V2_DESIGN.md`](./V2_DESIGN.md) §4.
+no strawman baselines. `just bench` reproduces every suite.
 
 ## More Examples
 
