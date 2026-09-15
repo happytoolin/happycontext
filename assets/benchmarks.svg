@@ -15,9 +15,9 @@
   <line x1="100" y1="480" x2="1100" y2="480" stroke="#1B222B"/>
 
   <!-- slog · JSON: alone 801 + unolog 951 = 1752 -->
-  <path d="M285 344 h110 v128 a8 8 0 0 1 -8 8 h94 a8 8 0 0 1 -8 -8 z" fill="#4A5568"/>
+  <path d="M285 343 h110 v129 a8 8 0 0 1 -8 8 h-94 a8 8 0 0 1 -8 -8 z" fill="#4A5568"/>
   <text x="340" y="415" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="11.5" fill="#E6EBF1">801 ns</text>
-  <path d="M285 188 a8 8 0 0 1 8 -8 h94 a8 8 0 0 1 8 8 v155 h-110 z" fill="#7CFFB2"/>
+  <path d="M285 188 a8 8 0 0 1 8 -8 h94 a8 8 0 0 1 8 8 v156 h-110 z" fill="#7CFFB2"/>
   <text x="340" y="265" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="12" font-weight="700" fill="#0A0C10">+951 ns</text>
   <text x="340" y="156" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="12" fill="#F4F6F8">1752 ns</text>
   <text x="340" y="171" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="10.5" fill="#6F7885">4 allocs</text>
@@ -25,9 +25,9 @@
   <text x="340" y="538" text-anchor="middle" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" fill="#7CFFB2">+119%</text>
 
   <!-- zap · JSON: alone 609 + unolog 980 = 1589 -->
-  <path d="M575 377 h110 v95 a8 8 0 0 1 -8 8 h94 a8 8 0 0 1 -8 -8 z" fill="#4A5568"/>
+  <path d="M575 376 h110 v96 a8 8 0 0 1 -8 8 h-94 a8 8 0 0 1 -8 -8 z" fill="#4A5568"/>
   <text x="630" y="432" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="11.5" fill="#E6EBF1">609 ns</text>
-  <path d="M575 216 a8 8 0 0 1 8 -8 h94 a8 8 0 0 1 8 8 v160 h-110 z" fill="#7CFFB2"/>
+  <path d="M575 216 a8 8 0 0 1 8 -8 h94 a8 8 0 0 1 8 8 v161 h-110 z" fill="#7CFFB2"/>
   <text x="630" y="296" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="12" font-weight="700" fill="#0A0C10">+980 ns</text>
   <text x="630" y="184" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="12" fill="#F4F6F8">1589 ns</text>
   <text x="630" y="199" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="10.5" fill="#6F7885">4 allocs</text>
@@ -35,9 +35,9 @@
   <text x="630" y="538" text-anchor="middle" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" fill="#7CFFB2">+161%</text>
 
   <!-- zerolog: alone 197 + unolog 519 = 716 -->
-  <path d="M865 447 h110 v25 a8 8 0 0 1 -8 8 h94 a8 8 0 0 1 -8 -8 z" fill="#4A5568"/>
+  <path d="M865 446 h110 v26 a8 8 0 0 1 -8 8 h-94 a8 8 0 0 1 -8 -8 z" fill="#4A5568"/>
   <text x="920" y="467" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="11.5" fill="#E6EBF1">197 ns</text>
-  <path d="M865 365 a8 8 0 0 1 8 -8 h94 a8 8 0 0 1 8 8 v81 h-110 z" fill="#7CFFB2"/>
+  <path d="M865 365 a8 8 0 0 1 8 -8 h94 a8 8 0 0 1 8 8 v82 h-110 z" fill="#7CFFB2"/>
   <text x="920" y="406" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="12" font-weight="700" fill="#0A0C10">+519 ns</text>
   <text x="920" y="333" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="12" fill="#F4F6F8">716 ns</text>
   <text x="920" y="348" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="10.5" fill="#6F7885">3 allocs</text>
