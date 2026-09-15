@@ -1,9 +1,9 @@
-module github.com/happytoolin/happycontext/adapter/zerolog
+module github.com/happytoolin/unolog/adapter/zerolog
 
 go 1.25.0
 
 require (
-	github.com/happytoolin/happycontext v0.5.0 // x-release-please-version
+	github.com/happytoolin/unolog v0.5.0 // x-release-please-version
 	github.com/rs/zerolog v1.35.1
 )
 
@@ -14,4 +14,4 @@ require (
 	golang.org/x/sys v0.39.0 // indirect
 )
 
-replace github.com/happytoolin/happycontext => ../..
+replace github.com/happytoolin/unolog => ../..

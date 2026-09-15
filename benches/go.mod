@@ -1,4 +1,4 @@
-module github.com/happytoolin/happycontext/benches
+module github.com/happytoolin/unolog/benches
 
 go 1.25.0
 
@@ -6,15 +6,15 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/gofiber/fiber/v2 v2.52.15
 	github.com/gofiber/fiber/v3 v3.5.0
-	github.com/happytoolin/happycontext v0.5.0
-	github.com/happytoolin/happycontext/adapter/slog v0.0.0-00010101000000-000000000000
-	github.com/happytoolin/happycontext/adapter/zap v0.0.0-00010101000000-000000000000
-	github.com/happytoolin/happycontext/adapter/zerolog v0.0.0-00010101000000-000000000000
-	github.com/happytoolin/happycontext/integration/echo v0.0.0-00010101000000-000000000000
-	github.com/happytoolin/happycontext/integration/fiber v0.0.0-00010101000000-000000000000
-	github.com/happytoolin/happycontext/integration/fiberv3 v0.0.0-00010101000000-000000000000
-	github.com/happytoolin/happycontext/integration/gin v0.0.0-00010101000000-000000000000
-	github.com/happytoolin/happycontext/integration/std v0.0.0-00010101000000-000000000000
+	github.com/happytoolin/unolog v0.5.0
+	github.com/happytoolin/unolog/adapter/slog v0.0.0-00010101000000-000000000000
+	github.com/happytoolin/unolog/adapter/zap v0.0.0-00010101000000-000000000000
+	github.com/happytoolin/unolog/adapter/zerolog v0.0.0-00010101000000-000000000000
+	github.com/happytoolin/unolog/integration/echo v0.0.0-00010101000000-000000000000
+	github.com/happytoolin/unolog/integration/fiber v0.0.0-00010101000000-000000000000
+	github.com/happytoolin/unolog/integration/fiberv3 v0.0.0-00010101000000-000000000000
+	github.com/happytoolin/unolog/integration/gin v0.0.0-00010101000000-000000000000
+	github.com/happytoolin/unolog/integration/std v0.0.0-00010101000000-000000000000
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/rs/zerolog v1.35.1
 	go.uber.org/zap v1.28.0
@@ -67,20 +67,20 @@ require (
 	google.golang.org/protobuf v1.36.10 // indirect
 )
 
-replace github.com/happytoolin/happycontext => ..
+replace github.com/happytoolin/unolog => ..
 
-replace github.com/happytoolin/happycontext/integration/std => ../integration/std
+replace github.com/happytoolin/unolog/integration/std => ../integration/std
 
-replace github.com/happytoolin/happycontext/integration/gin => ../integration/gin
+replace github.com/happytoolin/unolog/integration/gin => ../integration/gin
 
-replace github.com/happytoolin/happycontext/integration/echo => ../integration/echo
+replace github.com/happytoolin/unolog/integration/echo => ../integration/echo
 
-replace github.com/happytoolin/happycontext/integration/fiber => ../integration/fiber
+replace github.com/happytoolin/unolog/integration/fiber => ../integration/fiber
 
-replace github.com/happytoolin/happycontext/integration/fiberv3 => ../integration/fiberv3
+replace github.com/happytoolin/unolog/integration/fiberv3 => ../integration/fiberv3
 
-replace github.com/happytoolin/happycontext/adapter/slog => ../adapter/slog
+replace github.com/happytoolin/unolog/adapter/slog => ../adapter/slog
 
-replace github.com/happytoolin/happycontext/adapter/zap => ../adapter/zap
+replace github.com/happytoolin/unolog/adapter/zap => ../adapter/zap
 
-replace github.com/happytoolin/happycontext/adapter/zerolog => ../adapter/zerolog
+replace github.com/happytoolin/unolog/adapter/zerolog => ../adapter/zerolog

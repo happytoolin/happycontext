@@ -8,24 +8,24 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	stdhc "github.com/happytoolin/happycontext/integration/std"
+	"github.com/happytoolin/unolog"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	"github.com/happytoolin/unolog/integration/std"
 )
 
 func TestAdapterSlogMiddleware(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	sink := sloghc.New(logger)
-	mw := stdhc.Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1, Message: "request handled"}))
+	sink := uslog.New(logger)
+	mw := std.Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1, Message: "request handled"}))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		id := r.PathValue("id")
 
-		hc.Add(ctx, "example", "adapter-slog")
-		hc.Add(
+		unolog.Add(ctx, "example", "adapter-slog")
+		unolog.Add(
 			ctx,
 			"user", map[string]any{
 				"id":   id,
@@ -36,11 +36,11 @@ func TestAdapterSlogMiddleware(t *testing.T) {
 				"tags":    []string{"examples", "slog"},
 			},
 		)
-		hc.SetRoute(ctx, "/users/{id}")
+		unolog.SetRoute(ctx, "/users/{id}")
 
 		if r.URL.Query().Get("debug") == "1" {
-			hc.SetLevel(ctx, hc.LevelDebug)
-			hc.Add(ctx, "requested_level", hc.LevelDebug)
+			unolog.SetLevel(ctx, unolog.LevelDebug)
+			unolog.Add(ctx, "requested_level", unolog.LevelDebug)
 		}
 
 		if r.URL.Query().Get("fail") == "1" {

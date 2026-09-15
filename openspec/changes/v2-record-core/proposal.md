@@ -41,7 +41,7 @@ line — nothing flows to main:
   `lifecycle` (all new capabilities; the classic line's behavior is
   superseded, not delta-modified — no baseline specs exist).
 - Affected code: every module. Nested modules gain
-  `replace github.com/happytoolin/happycontext => ../` on the branch;
+  `replace github.com/happytoolin/unolog => ../` on the branch;
   the lockstep release tooling strips them at cutover.
 - Gates: `V2_DESIGN.md` §4 (lifecycle ≤ 250 ns/4 allocs, dropped ≤ 100 ns,
   middleware ≤ 350 ns, escape ≤ 26 ns; every PR carries benchstat evidence).

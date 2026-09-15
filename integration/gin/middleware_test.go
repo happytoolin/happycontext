@@ -1,4 +1,4 @@
-package ginhappycontext
+package gin
 
 import (
 	"errors"
@@ -6,21 +6,21 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gin-gonic/gin"
-	"github.com/happytoolin/happycontext"
+	gogin "github.com/gin-gonic/gin"
+	"github.com/happytoolin/unolog"
 )
 
 func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+	gogin.SetMode(gogin.TestMode)
 
-	sink := hc.NewTestSink()
-	r := gin.New()
-	r.Use(Middleware(hc.MustCompile(hc.Config{
+	sink := unolog.NewTestSink()
+	r := gogin.New()
+	r.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})))
-	r.GET("/orders/:id", func(c *gin.Context) {
-		hc.Add(c.Request.Context(), "user_id", "u_1")
+	r.GET("/orders/:id", func(c *gogin.Context) {
+		unolog.Add(c.Request.Context(), "user_id", "u_1")
 		c.Status(http.StatusCreated)
 	})
 
@@ -44,10 +44,10 @@ func TestMiddlewareCapturesRouteAndFields(t *testing.T) {
 }
 
 func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	r.Use(Middleware(hc.MustCompile(hc.Config{})))
-	r.GET("/ok", func(c *gin.Context) {
+	gogin.SetMode(gogin.TestMode)
+	r := gogin.New()
+	r.Use(Middleware(unolog.MustCompile(unolog.Config{})))
+	r.GET("/ok", func(c *gogin.Context) {
 		c.Status(http.StatusAccepted)
 	})
 
@@ -59,17 +59,17 @@ func TestMiddlewareSinkNilStillRunsHandler(t *testing.T) {
 }
 
 func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	sink := hc.NewTestSink()
-	r := gin.New()
-	r.Use(Middleware(hc.MustCompile(hc.Config{
+	gogin.SetMode(gogin.TestMode)
+	sink := unolog.NewTestSink()
+	r := gogin.New()
+	r.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 0,
 	})))
-	r.GET("/drop", func(c *gin.Context) {
+	r.GET("/drop", func(c *gogin.Context) {
 		c.Status(http.StatusOK)
 	})
-	r.GET("/err", func(c *gin.Context) {
+	r.GET("/err", func(c *gogin.Context) {
 		_ = c.Error(errors.New("boom"))
 		c.Status(http.StatusOK)
 	})
@@ -84,7 +84,7 @@ func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level() != hc.LevelError {
+	if events[0].Level() != unolog.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level())
 	}
 	if statusField(events[0], "http.status") != http.StatusInternalServerError {
@@ -96,14 +96,14 @@ func TestMiddlewareErrorAndSamplingBehavior(t *testing.T) {
 }
 
 func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	sink := hc.NewTestSink()
-	r := gin.New()
-	r.Use(Middleware(hc.MustCompile(hc.Config{
+	gogin.SetMode(gogin.TestMode)
+	sink := unolog.NewTestSink()
+	r := gogin.New()
+	r.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})))
-	r.GET("/panic/:id", func(c *gin.Context) {
+	r.GET("/panic/:id", func(c *gogin.Context) {
 		panic("bad")
 	})
 
@@ -135,14 +135,14 @@ func TestMiddlewarePanicLogsAndPropagates(t *testing.T) {
 }
 
 func TestMiddlewareLogsNoRouteWithoutTemplate(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	sink := hc.NewTestSink()
-	r := gin.New()
-	r.Use(Middleware(hc.MustCompile(hc.Config{
+	gogin.SetMode(gogin.TestMode)
+	sink := unolog.NewTestSink()
+	r := gogin.New()
+	r.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})))
-	r.NoRoute(func(c *gin.Context) {
+	r.NoRoute(func(c *gogin.Context) {
 		c.Status(http.StatusNotFound)
 	})
 
@@ -160,14 +160,14 @@ func TestMiddlewareLogsNoRouteWithoutTemplate(t *testing.T) {
 }
 
 func TestMiddlewareGinErrorKeepsCommittedStatus(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	sink := hc.NewTestSink()
-	r := gin.New()
-	r.Use(Middleware(hc.MustCompile(hc.Config{
+	gogin.SetMode(gogin.TestMode)
+	sink := unolog.NewTestSink()
+	r := gogin.New()
+	r.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})))
-	r.GET("/too-many", func(c *gin.Context) {
+	r.GET("/too-many", func(c *gogin.Context) {
 		_ = c.Error(errors.New("boom"))
 		c.AbortWithStatus(http.StatusTooManyRequests)
 	})
@@ -180,20 +180,20 @@ func TestMiddlewareGinErrorKeepsCommittedStatus(t *testing.T) {
 	if statusField(events[0], "http.status") != http.StatusTooManyRequests {
 		t.Fatalf("status = %v, want %d", statusField(events[0], "http.status"), http.StatusTooManyRequests)
 	}
-	if events[0].Level() != hc.LevelError {
+	if events[0].Level() != unolog.LevelError {
 		t.Fatalf("level = %s, want ERROR", events[0].Level())
 	}
 }
 
 func TestMiddlewareGinErrorUsesUnderlyingErrorMetadata(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	sink := hc.NewTestSink()
-	r := gin.New()
-	r.Use(Middleware(hc.MustCompile(hc.Config{
+	gogin.SetMode(gogin.TestMode)
+	sink := unolog.NewTestSink()
+	r := gogin.New()
+	r.Use(Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	})))
-	r.GET("/err", func(c *gin.Context) {
+	r.GET("/err", func(c *gogin.Context) {
 		_ = c.Error(errors.New("boom"))
 		c.AbortWithStatus(http.StatusInternalServerError)
 	})
@@ -221,12 +221,12 @@ func TestMiddlewareGinErrorUsesUnderlyingErrorMetadata(t *testing.T) {
 // Typed field reads on captured events: fieldValue for any value,
 // statusField for the int64 http.status these tests compare against
 // int constants.
-func fieldValue(ev hc.CapturedEvent, key string) any {
+func fieldValue(ev unolog.CapturedEvent, key string) any {
 	v, _ := ev.Lookup(key)
 	return v
 }
 
-func statusField(ev hc.CapturedEvent, key string) int64 {
+func statusField(ev unolog.CapturedEvent, key string) int64 {
 	v, _ := ev.Lookup(key)
 	n, _ := v.(int64)
 	return n

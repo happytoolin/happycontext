@@ -1,11 +1,11 @@
-package hc
+package unolog
 
 import (
 	"context"
 )
 
 // contextKey carries the request's WAL handle. The accessors are
-// unexported: the in-flight WAL is written by the hc.Add helpers and
+// unexported: the in-flight WAL is written by the unolog.Add helpers and
 // read once at End — nothing reads it mid-flight by design.
 type contextKey struct{}
 

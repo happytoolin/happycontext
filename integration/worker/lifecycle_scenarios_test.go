@@ -1,4 +1,4 @@
-package workerhappycontext
+package worker
 
 // P8.2 worker lifecycle scenario battery (dst-research §8.2): the
 // job-shaped scenarios assembled as end-to-end flows with real
@@ -15,15 +15,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
 // TestWorkerRetryMetadata: attempt/max_attempts survive to the wire
 // through op.*, and a retryable error produces a failure outcome with
 // the error level.
 func TestWorkerRetryMetadata(t *testing.T) {
-	ts := hc.NewTestSink()
-	rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: 1})
+	ts := unolog.NewTestSink()
+	rt := unolog.MustCompile(unolog.Config{Sink: ts, SamplingRate: 1})
 	ctx := t.Context()
 
 	err := errors.New("retryable")
@@ -42,10 +42,10 @@ func TestWorkerRetryMetadata(t *testing.T) {
 			t.Fatalf("%s = %v (%v), want %v", tc.key, v, ok, tc.want)
 		}
 	}
-	if v, _ := ev.Lookup("op.outcome"); v != string(hc.OutcomeFailure) {
+	if v, _ := ev.Lookup("op.outcome"); v != string(unolog.OutcomeFailure) {
 		t.Fatalf("outcome = %v, want failure", v)
 	}
-	if ev.Level() != hc.LevelError {
+	if ev.Level() != unolog.LevelError {
 		t.Fatalf("level = %v, want error", ev.Level())
 	}
 	if e, ok := ev.Lookup("error"); !ok {
@@ -59,8 +59,8 @@ func TestWorkerRetryMetadata(t *testing.T) {
 // with the error bypass (never sampled away, even at rate 0).
 func TestWorkerCancellation(t *testing.T) {
 	for _, rate := range []float64{1, 0} { // error bypass at any rate
-		ts := hc.NewTestSink()
-		rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: rate})
+		ts := unolog.NewTestSink()
+		rt := unolog.MustCompile(unolog.Config{Sink: ts, SamplingRate: rate})
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // canceled before the job starts
 		err := context.Canceled
@@ -70,10 +70,10 @@ func TestWorkerCancellation(t *testing.T) {
 			t.Fatalf("rate %v: canceled event dropped", rate)
 		}
 		ev := ts.Events()[0]
-		if v, _ := ev.Lookup("op.outcome"); v != string(hc.OutcomeCanceled) {
+		if v, _ := ev.Lookup("op.outcome"); v != string(unolog.OutcomeCanceled) {
 			t.Fatalf("rate %v: outcome = %v, want canceled", rate, v)
 		}
-		if ev.Level() != hc.LevelError {
+		if ev.Level() != unolog.LevelError {
 			t.Fatalf("rate %v: level = %v", rate, ev.Level())
 		}
 	}
@@ -82,8 +82,8 @@ func TestWorkerCancellation(t *testing.T) {
 // TestWorkerDeadline: an expired context deadline yields
 // OutcomeTimeout with the error bypass.
 func TestWorkerDeadline(t *testing.T) {
-	ts := hc.NewTestSink()
-	rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: 1})
+	ts := unolog.NewTestSink()
+	rt := unolog.MustCompile(unolog.Config{Sink: ts, SamplingRate: 1})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
 	defer cancel()
 	time.Sleep(time.Millisecond) // let the deadline expire
@@ -91,7 +91,7 @@ func TestWorkerDeadline(t *testing.T) {
 	op := Start(ctx, rt, JobMeta{Name: "slow"})
 	op.End(&err)
 	ev := ts.Events()[0]
-	if v, _ := ev.Lookup("op.outcome"); v != string(hc.OutcomeTimeout) {
+	if v, _ := ev.Lookup("op.outcome"); v != string(unolog.OutcomeTimeout) {
 		t.Fatalf("outcome = %v, want timeout", v)
 	}
 }
@@ -100,8 +100,8 @@ func TestWorkerDeadline(t *testing.T) {
 // OutcomePanic + the panic field, re-panics the original value, and
 // records error level.
 func TestWorkerJobPanic(t *testing.T) {
-	ts := hc.NewTestSink()
-	rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: 1})
+	ts := unolog.NewTestSink()
+	rt := unolog.MustCompile(unolog.Config{Sink: ts, SamplingRate: 1})
 
 	repanicked := false
 	func() {
@@ -118,10 +118,10 @@ func TestWorkerJobPanic(t *testing.T) {
 		t.Fatal("the panic did not propagate")
 	}
 	ev := ts.Events()[0]
-	if v, _ := ev.Lookup("op.outcome"); v != string(hc.OutcomePanic) {
+	if v, _ := ev.Lookup("op.outcome"); v != string(unolog.OutcomePanic) {
 		t.Fatalf("outcome = %v", v)
 	}
-	if ev.Level() != hc.LevelError {
+	if ev.Level() != unolog.LevelError {
 		t.Fatalf("level = %v", ev.Level())
 	}
 	if p, ok := ev.Lookup("panic"); !ok {
@@ -152,8 +152,8 @@ func TestWorkerNilRuntime(t *testing.T) {
 // TestWorkerScheduledAtPreserved: job.scheduled_at survives to the
 // wire as the RFC3339 string of the UTC instant.
 func TestWorkerScheduledAtPreserved(t *testing.T) {
-	ts := hc.NewTestSink()
-	rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: 1})
+	ts := unolog.NewTestSink()
+	rt := unolog.MustCompile(unolog.Config{Sink: ts, SamplingRate: 1})
 	scheduled := time.Date(2026, 2, 10, 8, 30, 0, 0, time.FixedZone("+05:30", 5*3600+1800))
 	op := Start(context.Background(), rt, JobMeta{Name: "sched", ScheduledAt: scheduled})
 	op.End(nil)
@@ -174,12 +174,12 @@ func TestWorkerScheduledAtPreserved(t *testing.T) {
 // the pooled event between them; each event carries only its own
 // fields.
 func TestWorkerConsecutiveJobs(t *testing.T) {
-	ts := hc.NewTestSink()
-	rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: 1})
+	ts := unolog.NewTestSink()
+	rt := unolog.MustCompile(unolog.Config{Sink: ts, SamplingRate: 1})
 	const jobs = 32
 	for i := range jobs {
 		op := Start(context.Background(), rt, JobMeta{Name: "job", ID: string(rune('a' + i))})
-		hc.Add(op.Context(), "index", i)
+		unolog.Add(op.Context(), "index", i)
 		var err error
 		op.End(&err)
 	}
@@ -200,8 +200,8 @@ func TestWorkerConsecutiveJobs(t *testing.T) {
 // TestWorkerConcurrentJobs: many workers over one runtime, each with
 // its own request-confined event (the -race pin for the pooled WAL).
 func TestWorkerConcurrentJobs(t *testing.T) {
-	ts := hc.NewTestSink()
-	rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: 1})
+	ts := unolog.NewTestSink()
+	rt := unolog.MustCompile(unolog.Config{Sink: ts, SamplingRate: 1})
 	var wg sync.WaitGroup
 	for w := range 12 {
 		wg.Add(1)
@@ -209,7 +209,7 @@ func TestWorkerConcurrentJobs(t *testing.T) {
 			defer wg.Done()
 			for i := range 100 {
 				op := Start(context.Background(), rt, JobMeta{Name: "worker", ID: "w"})
-				hc.Add(op.Context(), "worker", w, "seq", i)
+				unolog.Add(op.Context(), "worker", w, "seq", i)
 				var err error
 				op.End(&err)
 			}

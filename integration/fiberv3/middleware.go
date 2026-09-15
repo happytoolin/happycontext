@@ -1,19 +1,19 @@
-// Package fiberv3happycontext provides the Fiber v3 happycontext
+// Package fiberv3 provides the Fiber v3 unolog
 // middleware: one canonical event per request, with errors, panics,
 // status, and route resolved from the Fiber context.
-package fiberv3happycontext
+package fiberv3
 
 import (
 	"errors"
 	"net/http"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/happytoolin/happycontext"
-	"github.com/happytoolin/happycontext/integration/common"
+	"github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog/integration/flow"
 )
 
 // Middleware returns a Fiber v3 middleware that captures one event per request.
-func Middleware(rt *hc.Runtime) fiber.Handler {
+func Middleware(rt *unolog.Runtime) fiber.Handler {
 	if rt == nil {
 		return func(c fiber.Ctx) error {
 			return c.Next()
@@ -21,7 +21,7 @@ func Middleware(rt *hc.Runtime) fiber.Handler {
 	}
 
 	return func(c fiber.Ctx) (err error) {
-		op := common.StartRequest(c.Context(), rt, c.Method(), c.Path())
+		op := flow.StartRequest(c.Context(), rt, c.Method(), c.Path())
 		c.SetContext(op.Context())
 		var finalizeErr error
 
@@ -41,14 +41,14 @@ func Middleware(rt *hc.Runtime) fiber.Handler {
 			// resolves to 500. Do not "simplify" this — it is the
 			// panic-vs-committed-status contract.
 			responseStarted := status != 0 && (status != http.StatusOK || len(c.Response().Body()) > 0)
-			status = common.ResolveStatus(common.StatusInput{
+			status = flow.ResolveStatus(flow.StatusInput{
 				Committed:       status,
 				Err:             finalizeErr,
 				Recovered:       recovered,
 				ResponseStarted: responseStarted,
 				ErrorStatus:     statusFromFiberError(finalizeErr),
 			})
-			common.FinalizeRequest(op, routePath, status, finalizeErr, recovered)
+			flow.FinalizeRequest(op, routePath, status, finalizeErr, recovered)
 
 			if recovered != nil {
 				panic(recovered)

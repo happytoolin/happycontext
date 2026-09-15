@@ -19,11 +19,11 @@ import (
 	"strings"
 	"testing"
 
-	gc "github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
-	zaphc "github.com/happytoolin/happycontext/adapter/zap"
-	zerologhc "github.com/happytoolin/happycontext/adapter/zerolog"
-	stdhc "github.com/happytoolin/happycontext/integration/std"
+	gc "github.com/happytoolin/unolog"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	uzap "github.com/happytoolin/unolog/adapter/zap"
+	uzerolog "github.com/happytoolin/unolog/adapter/zerolog"
+	"github.com/happytoolin/unolog/integration/std"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -90,7 +90,7 @@ func parseWireLine(t *testing.T, ln, pipeline string) parsedWire {
 func drivePipeline(t *testing.T, sink gc.Sink, buf *bytes.Buffer, pipeline string) []parsedWire {
 	t.Helper()
 	rt := gc.MustCompile(gc.Config{Sink: sink, SamplingRate: 1})
-	srv := httptest.NewServer(stdhc.Middleware(rt)(wireMux()))
+	srv := httptest.NewServer(std.Middleware(rt)(wireMux()))
 	defer srv.Close() // safety net for early fatals; Close is idempotent
 
 	for _, c := range wireCases {
@@ -123,15 +123,15 @@ func TestAdaptersWireParity(t *testing.T) {
 	reference := drivePipeline(t, gc.NewJSONSink(&jsonBuf), &jsonBuf, "jsonsink")
 
 	var slogBuf bytes.Buffer
-	slogEvents := drivePipeline(t, sloghc.New(slog.New(slog.NewJSONHandler(&slogBuf, nil))), &slogBuf, "slog")
+	slogEvents := drivePipeline(t, uslog.New(slog.New(slog.NewJSONHandler(&slogBuf, nil))), &slogBuf, "slog")
 
 	var zapBuf bytes.Buffer
 	zapLogger := zap.New(zapcore.NewCore(zapcore.NewJSONEncoder(zapcore.EncoderConfig{TimeKey: "ts", LevelKey: "level", MessageKey: "msg", EncodeTime: zapcore.EpochTimeEncoder, EncodeLevel: zapcore.LowercaseLevelEncoder}), zapcore.Lock(zapcore.AddSync(&zapBuf)), zapcore.DebugLevel))
-	zapEvents := drivePipeline(t, zaphc.New(zapLogger), &zapBuf, "zap")
+	zapEvents := drivePipeline(t, uzap.New(zapLogger), &zapBuf, "zap")
 
 	var zeroBuf bytes.Buffer
 	zl := zerolog.New(&zeroBuf)
-	zeroEvents := drivePipeline(t, zerologhc.New(&zl), &zeroBuf, "zerolog")
+	zeroEvents := drivePipeline(t, uzerolog.New(&zl), &zeroBuf, "zerolog")
 
 	pipelines := []struct {
 		name   string

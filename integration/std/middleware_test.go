@@ -1,4 +1,4 @@
-package stdhappycontext
+package std
 
 // Middleware behavior tests: routes, statuses, optional interfaces,
 // flush commits, panics, and the nil-runtime passthrough.
@@ -14,19 +14,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
 func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {
-	sink := hc.NewTestSink()
-	mw := Middleware(hc.MustCompile(hc.Config{
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 		Message:      "done",
 	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hc.Add(r.Context(), "example", "std-integration")
+		unolog.Add(r.Context(), "example", "std-integration")
 		w.WriteHeader(http.StatusAccepted)
 	}))
 
@@ -49,15 +49,15 @@ func TestMiddlewareDelegatesToCoreAndLogs(t *testing.T) {
 }
 
 func TestMiddlewareAppliesCustomMessageFromHandlerContext(t *testing.T) {
-	sink := hc.NewTestSink()
-	mw := Middleware(hc.MustCompile(hc.Config{
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 		Message:      "done",
 	}))
 
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hc.SetMessage(r.Context(), "order shipped")
+		unolog.SetMessage(r.Context(), "order shipped")
 		w.WriteHeader(http.StatusAccepted)
 	}))
 
@@ -77,8 +77,8 @@ func TestMiddlewareAppliesCustomMessageFromHandlerContext(t *testing.T) {
 }
 
 func TestMiddlewarePanicPropagatesAndLogsError(t *testing.T) {
-	sink := hc.NewTestSink()
-	mw := Middleware(hc.MustCompile(hc.Config{
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
@@ -105,7 +105,7 @@ func TestMiddlewarePanicPropagatesAndLogsError(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level() != hc.LevelError {
+	if events[0].Level() != unolog.LevelError {
 		t.Fatalf("expected error level, got %s", events[0].Level())
 	}
 	if statusField(events[0], "http.status") != http.StatusInternalServerError {
@@ -117,8 +117,8 @@ func TestMiddlewarePanicPropagatesAndLogsError(t *testing.T) {
 }
 
 func TestMiddlewareWriteHeaderTwiceLogsFirstCommittedStatus(t *testing.T) {
-	backend := hc.NewTestSink()
-	mw := Middleware(hc.MustCompile(hc.Config{
+	backend := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         backend,
 		SamplingRate: 1,
 	}))
@@ -145,8 +145,8 @@ func TestMiddlewareWriteHeaderTwiceLogsFirstCommittedStatus(t *testing.T) {
 }
 
 func TestMiddlewarePanicAfterCommittedStatusKeepsCommittedStatus(t *testing.T) {
-	backend := hc.NewTestSink()
-	mw := Middleware(hc.MustCompile(hc.Config{
+	backend := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         backend,
 		SamplingRate: 1,
 	}))
@@ -178,7 +178,7 @@ func TestMiddlewarePanicAfterCommittedStatusKeepsCommittedStatus(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
-	if events[0].Level() != hc.LevelError {
+	if events[0].Level() != unolog.LevelError {
 		t.Fatalf("expected error level, got %s", events[0].Level())
 	}
 	if statusField(events[0], "http.status") != http.StatusCreated {
@@ -188,11 +188,11 @@ func TestMiddlewarePanicAfterCommittedStatusKeepsCommittedStatus(t *testing.T) {
 
 func TestMiddlewareSetsRouteFromRequestPattern(t *testing.T) {
 	var sampledOp string
-	sink := hc.NewTestSink()
-	mw := Middleware(hc.MustCompile(hc.Config{
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
-		Sampler: func(in hc.SampleInput) bool {
+		Sampler: func(in unolog.SampleInput) bool {
 			sampledOp = in.Operation
 			return true
 		},
@@ -224,8 +224,8 @@ func TestMiddlewareSetsRouteFromRequestPattern(t *testing.T) {
 }
 
 func TestMiddlewarePreservesOptionalInterfaces(t *testing.T) {
-	sink := hc.NewTestSink()
-	mw := Middleware(hc.MustCompile(hc.Config{
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
@@ -275,8 +275,8 @@ func TestMiddlewarePreservesOptionalInterfaces(t *testing.T) {
 }
 
 func TestMiddlewareWriteSetsStatusCode(t *testing.T) {
-	sink := hc.NewTestSink()
-	mw := Middleware(hc.MustCompile(hc.Config{
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
@@ -301,8 +301,8 @@ func TestMiddlewareWriteSetsStatusCode(t *testing.T) {
 }
 
 func TestMiddlewareReadFromSetsStatusCode(t *testing.T) {
-	sink := hc.NewTestSink()
-	mw := Middleware(hc.MustCompile(hc.Config{
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 1,
 	}))
@@ -331,7 +331,7 @@ func TestMiddlewareReadFromSetsStatusCode(t *testing.T) {
 }
 
 func TestMiddlewareNilSinkStillRunsHandler(t *testing.T) {
-	mw := Middleware(hc.MustCompile(hc.Config{}))
+	mw := Middleware(unolog.MustCompile(unolog.Config{}))
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 	}))
@@ -343,8 +343,8 @@ func TestMiddlewareNilSinkStillRunsHandler(t *testing.T) {
 }
 
 func TestMiddlewareSamplingDropForHealthyRequest(t *testing.T) {
-	sink := hc.NewTestSink()
-	mw := Middleware(hc.MustCompile(hc.Config{
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{
 		Sink:         sink,
 		SamplingRate: 0,
 	}))
@@ -364,12 +364,12 @@ func TestMiddlewareSamplingDropForHealthyRequest(t *testing.T) {
 // Typed field reads on captured events: fieldValue for any value,
 // statusField for the int64 http.status these tests compare against
 // int constants.
-func fieldValue(ev hc.CapturedEvent, key string) any {
+func fieldValue(ev unolog.CapturedEvent, key string) any {
 	v, _ := ev.Lookup(key)
 	return v
 }
 
-func statusField(ev hc.CapturedEvent, key string) int64 {
+func statusField(ev unolog.CapturedEvent, key string) int64 {
 	v, _ := ev.Lookup(key)
 	n, _ := v.(int64)
 	return n
@@ -431,8 +431,8 @@ func (w *fullOptionalWriter) ReadFrom(src io.Reader) (int64, error) {
 // observe it. A panic after the first flush previously resolved to 500
 // against a 200 the client already received.
 func TestMiddlewareFlushCommitsStatus(t *testing.T) {
-	sink := hc.NewTestSink()
-	mw := Middleware(hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1}))
+	sink := unolog.NewTestSink()
+	mw := Middleware(unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1}))
 
 	t.Run("panic after flush keeps the committed 200", func(t *testing.T) {
 		sink.Reset()
@@ -450,7 +450,7 @@ func TestMiddlewareFlushCommitsStatus(t *testing.T) {
 		}
 		st, _ := sink.Events()[0].Lookup("http.status")
 		o, _ := sink.Events()[0].Lookup("op.outcome")
-		if st != int64(http.StatusOK) || o != string(hc.OutcomePanic) {
+		if st != int64(http.StatusOK) || o != string(unolog.OutcomePanic) {
 			t.Fatalf("log = status:%v outcome:%v, want 200/panic", st, o)
 		}
 	})
@@ -459,7 +459,7 @@ func TestMiddlewareFlushCommitsStatus(t *testing.T) {
 		sink.Reset()
 		handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.(http.Flusher).Flush()
-			hc.Error(r.Context(), errors.New("post-flush failure"))
+			unolog.Error(r.Context(), errors.New("post-flush failure"))
 		}))
 		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/s", nil))
 		st, _ := sink.Events()[0].Lookup("http.status")
@@ -469,7 +469,7 @@ func TestMiddlewareFlushCommitsStatus(t *testing.T) {
 		// Outcome stays success — outcome is derived from the deferred
 		// error pointer, not the recorded error field (v0 semantics) —
 		// but the structured error must be present and the event kept.
-		if o, _ := sink.Events()[0].Lookup("op.outcome"); o != string(hc.OutcomeSuccess) {
+		if o, _ := sink.Events()[0].Lookup("op.outcome"); o != string(unolog.OutcomeSuccess) {
 			t.Fatalf("outcome = %v, want success (error field is metadata)", o)
 		}
 		if _, ok := sink.Events()[0].Lookup("error"); !ok {

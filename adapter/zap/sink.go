@@ -1,31 +1,31 @@
-// Package zapadapter bridges happycontext records into zap: a Sink that
+// Package zap bridges unolog records into zap: a Sink that
 // forwards each finalized record as typed zap fields through the
 // logger's CheckedEntry path.
-package zapadapter
+package zap
 
 import (
 	"context"
 
-	"github.com/happytoolin/happycontext"
-	"github.com/happytoolin/happycontext/bridge"
-	"go.uber.org/zap"
+	"github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog/wire"
+	gozap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-// Sink writes happycontext records to zap.
+// Sink writes unolog records to the zap logger.
 type Sink struct {
-	logger *zap.Logger
+	logger *gozap.Logger
 }
 
 // New creates a zap-backed sink.
-func New(l *zap.Logger) *Sink {
+func New(l *gozap.Logger) *Sink {
 	return &Sink{logger: l}
 }
 
-// Write implements hc.Sink: the record's fields are appended in
+// Write implements unolog.Sink: the record's fields are appended in
 // insertion order (last-write-wins duplicates resolved) as typed zap
 // fields.
-func (s *Sink) Write(ctx context.Context, rec *hc.Record) {
+func (s *Sink) Write(ctx context.Context, rec *unolog.Record) {
 	if s == nil || s.logger == nil || rec == nil {
 		return
 	}
@@ -39,8 +39,8 @@ func (s *Sink) Write(ctx context.Context, rec *hc.Record) {
 		return
 	}
 
-	zapFields := make([]zap.Field, 0, len(fields))
-	for _, i := range bridge.LastIndices(fields, hc.Field.Key) {
+	zapFields := make([]gozap.Field, 0, len(fields))
+	for _, i := range wire.LastIndices(fields, unolog.Field.Key) {
 		zapFields = append(zapFields, fieldOf(fields[i]))
 	}
 	checked.Write(zapFields...)
@@ -48,49 +48,49 @@ func (s *Sink) Write(ctx context.Context, rec *hc.Record) {
 
 // fieldOf maps a typed record field to the matching zap constructor.
 // Error fields render the message string; everything without a typed
-// slot goes through zap.Any.
-func fieldOf(f hc.Field) zap.Field {
+// slot goes through gozap.Any.
+func fieldOf(f unolog.Field) gozap.Field {
 	if err, ok := f.Err(); ok {
-		return zap.String(f.Key(), bridge.ErrorMessage(err))
+		return gozap.String(f.Key(), wire.ErrorMessage(err))
 	}
 	if str, ok := f.Str(); ok {
-		return zap.String(f.Key(), str)
+		return gozap.String(f.Key(), str)
 	}
 	if i, ok := f.Int(); ok {
-		return zap.Int64(f.Key(), i)
+		return gozap.Int64(f.Key(), i)
 	}
 	if u, ok := f.Uint(); ok {
-		return zap.Uint64(f.Key(), u)
+		return gozap.Uint64(f.Key(), u)
 	}
 	if fl, ok := f.Float(); ok {
-		if f.Kind() == hc.KindFloat32 {
-			return zap.Float32(f.Key(), float32(fl))
+		if f.Kind() == unolog.KindFloat32 {
+			return gozap.Float32(f.Key(), float32(fl))
 		}
-		return zap.Float64(f.Key(), fl)
+		return gozap.Float64(f.Key(), fl)
 	}
 	if b, ok := f.Bool(); ok {
-		return zap.Bool(f.Key(), b)
+		return gozap.Bool(f.Key(), b)
 	}
 	if tm, ok := f.Time(); ok {
-		return zap.Time(f.Key(), tm)
+		return gozap.Time(f.Key(), tm)
 	}
 	if d, ok := f.Duration(); ok {
-		return zap.Duration(f.Key(), d)
+		return gozap.Duration(f.Key(), d)
 	}
-	return zap.Any(f.Key(), f.Any())
+	return gozap.Any(f.Key(), f.Any())
 }
 
-func (s *Sink) check(level hc.Level, message string) *zapcore.CheckedEntry {
+func (s *Sink) check(level unolog.Level, message string) *zapcore.CheckedEntry {
 	switch level {
-	case hc.LevelDebug:
+	case unolog.LevelDebug:
 		return s.logger.Check(zapcore.DebugLevel, message)
-	case hc.LevelWarn:
+	case unolog.LevelWarn:
 		return s.logger.Check(zapcore.WarnLevel, message)
-	case hc.LevelError:
+	case unolog.LevelError:
 		return s.logger.Check(zapcore.ErrorLevel, message)
 	default:
 		return s.logger.Check(zapcore.InfoLevel, message)
 	}
 }
 
-var _ hc.Sink = (*Sink)(nil)
+var _ unolog.Sink = (*Sink)(nil)

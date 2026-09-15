@@ -1,8 +1,8 @@
-package hc
+package unolog
 
 // The canonical field keys the library writes: start metadata, HTTP
 // request fields, completion annotations, and the error/panic fields.
-// Every hc-side write and scan goes through these constants; user code
+// Every unolog-side write and scan goes through these constants; user code
 // may use them with Record.Lookup, CapturedEvent.Lookup, and
 // SampleInput.Lookup. The values are a wire contract — pinned by the
 // golden and property tests, they must never change.

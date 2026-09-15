@@ -28,5 +28,5 @@ resolve the updated `require` line.
 
 #### Scenario: Nested module discovery
 - GIVEN the v1.0.0 release completed
-- WHEN a user runs `go list -m -versions github.com/happytoolin/happycontext/adapter/slog`
+- WHEN a user runs `go list -m -versions github.com/happytoolin/unolog/adapter/slog`
 - THEN `v1.0.0` appears in the version list

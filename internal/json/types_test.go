@@ -1,4 +1,4 @@
-package hcjson
+package json
 
 import (
 	"math"
@@ -7,7 +7,7 @@ import (
 )
 
 // TestAppendTypes ports the relevant zerolog v1.34.0 internal/json type
-// encoding tests, covering every append the happycontext sink uses.
+// encoding tests, covering every append the unolog sink uses.
 func TestAppendTypes(t *testing.T) {
 	// bools
 	if got := string(Encoder{}.AppendBool(nil, true)); got != "true" {

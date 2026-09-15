@@ -6,33 +6,33 @@ import (
 	"log/slog"
 	"testing"
 
-	hc "github.com/happytoolin/happycontext"
-	slogadapter "github.com/happytoolin/happycontext/adapter/slog"
-	zapadapter "github.com/happytoolin/happycontext/adapter/zap"
-	zerologadapter "github.com/happytoolin/happycontext/adapter/zerolog"
+	"github.com/happytoolin/unolog"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	uzap "github.com/happytoolin/unolog/adapter/zap"
+	uzerolog "github.com/happytoolin/unolog/adapter/zerolog"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 // adapterEvent runs one 12-field lifecycle through the sink under test.
-func adapterEvent(ctx context.Context, rt *hc.Runtime) {
-	op := hc.Start(ctx, rt, hc.OperationStart{Domain: hc.DomainHTTP, Name: "GET /api/v1/orders/:id"})
+func adapterEvent(ctx context.Context, rt *unolog.Runtime) {
+	op := unolog.Start(ctx, rt, unolog.OperationStart{Domain: unolog.DomainHTTP, Name: "GET /api/v1/orders/:id"})
 	benchmarkFields(op.Context(), 12)
 	op.End(nil)
 }
 
 // bridgeRecords pre-builds records via a capturing sink (the bridge-only
 // gate shape: sink.Write on a ready record, mirroring the v0 benches).
-type bridgeCapture struct{ recs []*hc.Record }
+type bridgeCapture struct{ recs []*unolog.Record }
 
-func (c *bridgeCapture) Write(_ context.Context, rec *hc.Record) { c.recs = append(c.recs, rec) }
+func (c *bridgeCapture) Write(_ context.Context, rec *unolog.Record) { c.recs = append(c.recs, rec) }
 
-func bridgeRecords(n int) []*hc.Record {
+func bridgeRecords(n int) []*unolog.Record {
 	cap := &bridgeCapture{}
-	rt := hc.MustCompile(hc.Config{Sink: cap, SamplingRate: 1})
+	rt := unolog.MustCompile(unolog.Config{Sink: cap, SamplingRate: 1})
 	for range 64 {
-		op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainHTTP, Name: "GET /api/v1/orders/:id"})
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainHTTP, Name: "GET /api/v1/orders/:id"})
 		benchmarkFields(op.Context(), n)
 		op.End(nil)
 	}
@@ -108,8 +108,8 @@ func BenchmarkHostFloors(b *testing.B) {
 
 func BenchmarkAdapterSlog(b *testing.B) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	sink := slogadapter.New(logger)
-	rt := hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})
+	sink := uslog.New(logger)
+	rt := unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})
 	ctx := context.Background()
 	recs := bridgeRecords(12)
 
@@ -131,7 +131,7 @@ func BenchmarkAdapterSlog(b *testing.B) {
 	b.Run("write_empty", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			hc.Start(ctx, rt, hc.OperationStart{}).End(nil)
+			unolog.Start(ctx, rt, unolog.OperationStart{}).End(nil)
 		}
 	})
 }
@@ -142,8 +142,8 @@ func BenchmarkAdapterZap(b *testing.B) {
 		zapcore.AddSync(io.Discard),
 		zapcore.DebugLevel,
 	)
-	sink := zapadapter.New(zap.New(core))
-	rt := hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})
+	sink := uzap.New(zap.New(core))
+	rt := unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})
 	ctx := context.Background()
 	recs := bridgeRecords(12)
 
@@ -165,15 +165,15 @@ func BenchmarkAdapterZap(b *testing.B) {
 	b.Run("write_empty", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			hc.Start(ctx, rt, hc.OperationStart{}).End(nil)
+			unolog.Start(ctx, rt, unolog.OperationStart{}).End(nil)
 		}
 	})
 }
 
 func BenchmarkAdapterZerolog(b *testing.B) {
 	logger := zerolog.New(io.Discard)
-	sink := zerologadapter.New(&logger)
-	rt := hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})
+	sink := uzerolog.New(&logger)
+	rt := unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})
 	ctx := context.Background()
 	recs := bridgeRecords(12)
 
@@ -195,7 +195,7 @@ func BenchmarkAdapterZerolog(b *testing.B) {
 	b.Run("write_empty", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			hc.Start(ctx, rt, hc.OperationStart{}).End(nil)
+			unolog.Start(ctx, rt, unolog.OperationStart{}).End(nil)
 		}
 	})
 }

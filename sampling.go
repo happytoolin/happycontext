@@ -1,4 +1,4 @@
-package hc
+package unolog
 
 import (
 	"math/rand/v2"

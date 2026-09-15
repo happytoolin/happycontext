@@ -6,7 +6,7 @@ Two PRs, then release, on the single v2 release line (§9 amendment,
 
 ## 1. PR-A `feat: add first-party JSON sink with SWAR encoder` (target: v2)
 
-- [x] Vendor `internal/hcjson` from zerolog v1.34.0 `internal/json`
+- [x] Vendor `internal/json` from zerolog v1.34.0 `internal/json`
       (types/string/time/bytes/base), MIT notice + attribution file
 - [x] Hybrid SWAR escape: chunk scan for len ≥ 16, table path otherwise;
       include the `\x7f` check; canonical `hasZero64` form

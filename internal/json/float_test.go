@@ -1,7 +1,7 @@
-package hcjson
+package json
 
 import (
-	"encoding/json"
+	stdjson "encoding/json"
 	"math"
 	"testing"
 )
@@ -86,7 +86,7 @@ func TestAppendFloat32Table(t *testing.T) {
 
 // FuzzAppendFloat64 checks the vendored float policy continuously: for
 // NaN/±Inf the three quoted-string shapes, for finite values exact
-// parity with encoding/json and an exact json.Unmarshal round-trip
+// parity with encoding/json and an exact stdjson.Unmarshal round-trip
 // (the DST research's shared-blind-spot closer for the numeric path —
 // a differential-only oracle could not catch a policy both paths got
 // wrong).
@@ -122,13 +122,13 @@ func FuzzAppendFloat64(f *testing.F) {
 			}
 			return
 		}
-		if expected, err := json.Marshal(val); err != nil {
+		if expected, err := stdjson.Marshal(val); err != nil {
 			t.Error(err)
 		} else if string(actual) != string(expected) {
-			t.Errorf("json.Marshal parity: expected %s, got %s", expected, actual)
+			t.Errorf("stdjson.Marshal parity: expected %s, got %s", expected, actual)
 		}
 		var parsed float64
-		if err := json.Unmarshal(actual, &parsed); err != nil {
+		if err := stdjson.Unmarshal(actual, &parsed); err != nil {
 			t.Fatal(err)
 		}
 		if parsed != val && !(parsed != parsed && val != val) { // NaN already handled above
@@ -175,13 +175,13 @@ func FuzzAppendFloat32(f *testing.F) {
 			}
 			return
 		}
-		if expected, err := json.Marshal(val); err != nil {
+		if expected, err := stdjson.Marshal(val); err != nil {
 			t.Error(err)
 		} else if string(actual) != string(expected) {
-			t.Errorf("json.Marshal parity: expected %s, got %s", expected, actual)
+			t.Errorf("stdjson.Marshal parity: expected %s, got %s", expected, actual)
 		}
 		var parsed32 float32
-		if err := json.Unmarshal(actual, &parsed32); err != nil {
+		if err := stdjson.Unmarshal(actual, &parsed32); err != nil {
 			t.Fatal(err)
 		}
 		// the wire contract is 32-bit: parse back at float32 width and

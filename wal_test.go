@@ -1,4 +1,4 @@
-package hc
+package unolog
 
 // WAL protocol tests: the state machine and append paths, the loom-lite
 // deterministic simulations of seal/recycle races, and the straggler

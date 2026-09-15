@@ -1,36 +1,36 @@
-package slogadapter
+package slog
 
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
+	stdslog "log/slog"
 	"testing"
 
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
-func emit(t *testing.T, sink hc.Sink, level hc.Level, kv ...any) {
+func emit(t *testing.T, sink unolog.Sink, level unolog.Level, kv ...any) {
 	t.Helper()
-	rt := hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})
-	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
-	hc.SetLevel(op.Context(), level)
+	rt := unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "t"})
+	unolog.SetLevel(op.Context(), level)
 	if len(kv) > 0 {
-		hc.Add(op.Context(), kv[0].(string), kv[1], kv[2:]...)
+		unolog.Add(op.Context(), kv[0].(string), kv[1], kv[2:]...)
 	}
 	op.End(nil)
 }
 
 func TestSinkWriteMapsLevelAndMessage(t *testing.T) {
 	h := &captureSlogHandler{}
-	emit(t, New(slog.New(h)), hc.LevelWarn, "user_id", "u_1")
+	emit(t, New(stdslog.New(h)), unolog.LevelWarn, "user_id", "u_1")
 
 	if len(h.records) != 1 {
 		t.Fatalf("expected 1 record, got %d", len(h.records))
 	}
-	if h.records[0].Message != hc.DefaultOperationMessage {
+	if h.records[0].Message != unolog.DefaultOperationMessage {
 		t.Fatalf("expected default message, got %q", h.records[0].Message)
 	}
-	if h.records[0].Level != slog.LevelWarn {
+	if h.records[0].Level != stdslog.LevelWarn {
 		t.Fatalf("expected warn level, got %v", h.records[0].Level)
 	}
 	if h.records[0].Attrs["user_id"] != "u_1" {
@@ -43,41 +43,41 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 	// error via the error outcome — each must map to its slog level.
 	t.Run("debug", func(t *testing.T) {
 		h := &captureSlogHandler{}
-		rt := hc.MustCompile(hc.Config{
-			Sink:         New(slog.New(h)),
+		rt := unolog.MustCompile(unolog.Config{
+			Sink:         New(stdslog.New(h)),
 			SamplingRate: 1,
-			OperationPolicies: map[hc.Domain]hc.OperationPolicy{
-				hc.DomainJob: {SuccessLevel: hc.LevelDebug},
+			OperationPolicies: map[unolog.Domain]unolog.OperationPolicy{
+				unolog.DomainJob: {SuccessLevel: unolog.LevelDebug},
 			},
 		})
-		hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"}).End(nil)
-		if h.records[0].Level != slog.LevelDebug {
+		unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "t"}).End(nil)
+		if h.records[0].Level != stdslog.LevelDebug {
 			t.Fatalf("level = %v, want DEBUG", h.records[0].Level)
 		}
 	})
 	t.Run("warn", func(t *testing.T) {
 		h := &captureSlogHandler{}
-		op := hc.Start(context.Background(), mustRT(t, New(slog.New(h))), hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
-		hc.SetLevel(op.Context(), hc.LevelWarn)
+		op := unolog.Start(context.Background(), mustRT(t, New(stdslog.New(h))), unolog.OperationStart{Domain: unolog.DomainJob, Name: "t"})
+		unolog.SetLevel(op.Context(), unolog.LevelWarn)
 		op.End(nil)
-		if h.records[0].Level != slog.LevelWarn {
+		if h.records[0].Level != stdslog.LevelWarn {
 			t.Fatalf("level = %v, want WARN", h.records[0].Level)
 		}
 	})
 	t.Run("error", func(t *testing.T) {
 		h := &captureSlogHandler{}
 		var err error = errBoom{}
-		op := hc.Start(context.Background(), mustRT(t, New(slog.New(h))), hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
+		op := unolog.Start(context.Background(), mustRT(t, New(stdslog.New(h))), unolog.OperationStart{Domain: unolog.DomainJob, Name: "t"})
 		op.End(&err)
-		if h.records[0].Level != slog.LevelError {
+		if h.records[0].Level != stdslog.LevelError {
 			t.Fatalf("level = %v, want ERROR", h.records[0].Level)
 		}
 	})
 }
 
-func mustRT(t *testing.T, sink hc.Sink) *hc.Runtime {
+func mustRT(t *testing.T, sink unolog.Sink) *unolog.Runtime {
 	t.Helper()
-	return hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})
+	return unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})
 }
 
 type errBoom struct{}
@@ -88,7 +88,7 @@ func (errBoom) Error() string { return "boom" }
 // order is preserved and kinds survive (int64, bool, duration).
 func TestSinkTypedAttrs(t *testing.T) {
 	h := &captureSlogHandler{}
-	emit(t, New(slog.New(h)), hc.LevelInfo,
+	emit(t, New(stdslog.New(h)), unolog.LevelInfo,
 		"s", "v", "i", 7, "b", true, "d", 1500*int64(1000000))
 
 	rec := h.records[0]
@@ -112,9 +112,9 @@ func TestSinkTypedAttrs(t *testing.T) {
 // TestSinkDedupesLastWriteWins mirrors the core encode-side resolution.
 func TestSinkDedupesLastWriteWins(t *testing.T) {
 	h := &captureSlogHandler{}
-	rt := hc.MustCompile(hc.Config{Sink: New(slog.New(h)), SamplingRate: 1})
-	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
-	hc.Add(op.Context(), "k", "first", "k", "second")
+	rt := unolog.MustCompile(unolog.Config{Sink: New(stdslog.New(h)), SamplingRate: 1})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "t"})
+	unolog.Add(op.Context(), "k", "first", "k", "second")
 	op.End(nil)
 
 	if got := h.records[0].Attrs["k"]; got != "second" {
@@ -132,20 +132,20 @@ func TestSinkDedupesLastWriteWins(t *testing.T) {
 }
 
 // TestSinkErrorAndRawWireFidelity pins the v0 shapes: error fields
-// render the message string (never null); raw bytes render via slog.Any.
+// render the message string (never null); raw bytes render via stdslog.Any.
 func TestSinkErrorAndRawWireFidelity(t *testing.T) {
 	h := &captureSlogHandler{}
-	rt := hc.MustCompile(hc.Config{Sink: New(slog.New(h)), SamplingRate: 1})
-	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
-	hc.Add(op.Context(), "e", errBoom{})
-	hc.Add(op.Context(), "meta", json.RawMessage(`{"raw":true}`))
+	rt := unolog.MustCompile(unolog.Config{Sink: New(stdslog.New(h)), SamplingRate: 1})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "t"})
+	unolog.Add(op.Context(), "e", errBoom{})
+	unolog.Add(op.Context(), "meta", json.RawMessage(`{"raw":true}`))
 	op.End(nil)
 
 	if got := h.records[0].Attrs["e"]; got != "boom" {
 		t.Fatalf("error field = %v (%T), want \"boom\"", got, got)
 	}
 	if got, ok := h.records[0].Attrs["meta"]; !ok || got == nil {
-		t.Fatalf("raw field = %v, want non-nil (slog.Any bytes)", got)
+		t.Fatalf("raw field = %v, want non-nil (stdslog.Any bytes)", got)
 	}
 }
 
@@ -161,24 +161,24 @@ type disabledSlogHandler struct {
 	handled bool
 }
 
-func (*disabledSlogHandler) Enabled(context.Context, slog.Level) bool { return false }
-func (h *disabledSlogHandler) Handle(context.Context, slog.Record) error {
+func (*disabledSlogHandler) Enabled(context.Context, stdslog.Level) bool { return false }
+func (h *disabledSlogHandler) Handle(context.Context, stdslog.Record) error {
 	h.handled = true
 	return nil
 }
-func (h *disabledSlogHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *disabledSlogHandler) WithGroup(string) slog.Handler      { return h }
+func (h *disabledSlogHandler) WithAttrs([]stdslog.Attr) stdslog.Handler { return h }
+func (h *disabledSlogHandler) WithGroup(string) stdslog.Handler         { return h }
 
 func TestSinkSkipsDisabledEvent(t *testing.T) {
 	handler := &disabledSlogHandler{}
-	emit(t, New(slog.New(handler)), hc.LevelDebug)
+	emit(t, New(stdslog.New(handler)), unolog.LevelDebug)
 	if handler.handled {
 		t.Fatal("disabled debug reached handler")
 	}
 }
 
 type captureSlogRecord struct {
-	Level   slog.Level
+	Level   stdslog.Level
 	Message string
 	Attrs   map[string]any
 	Order   []string
@@ -188,17 +188,17 @@ type captureSlogHandler struct {
 	records []captureSlogRecord
 }
 
-func (h *captureSlogHandler) Enabled(context.Context, slog.Level) bool {
+func (h *captureSlogHandler) Enabled(context.Context, stdslog.Level) bool {
 	return true
 }
 
-func (h *captureSlogHandler) Handle(_ context.Context, r slog.Record) error {
+func (h *captureSlogHandler) Handle(_ context.Context, r stdslog.Record) error {
 	rec := captureSlogRecord{
 		Level:   r.Level,
 		Message: r.Message,
 		Attrs:   make(map[string]any),
 	}
-	r.Attrs(func(attr slog.Attr) bool {
+	r.Attrs(func(attr stdslog.Attr) bool {
 		rec.Attrs[attr.Key] = attr.Value.Any()
 		rec.Order = append(rec.Order, attr.Key)
 		return true
@@ -207,5 +207,5 @@ func (h *captureSlogHandler) Handle(_ context.Context, r slog.Record) error {
 	return nil
 }
 
-func (h *captureSlogHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *captureSlogHandler) WithGroup(string) slog.Handler      { return h }
+func (h *captureSlogHandler) WithAttrs([]stdslog.Attr) stdslog.Handler { return h }
+func (h *captureSlogHandler) WithGroup(string) stdslog.Handler         { return h }

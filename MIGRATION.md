@@ -1,42 +1,67 @@
-# Migrating from v0.x to v1.0.0
+# Migrating from happycontext v0.x to unolog v1.0.0
 
-v1.0.0 is the v2 record core: the same one-canonical-event-per-request
-philosophy on a typed, insertion-ordered WAL instead of a map. This
-guide maps every removed or changed symbol. The
+v1.0.0 is the v2 record core — and the release that renames the project.
+The module is now `github.com/happytoolin/unolog` and the root package is
+`unolog` (was `hc`). The same one-canonical-event-per-request philosophy
+runs on a typed, insertion-ordered WAL instead of a map. This guide maps
+every removed or changed symbol. The
 [wire format](#wire-format-changes) section covers output differences.
+
+## Module and package rename
+
+Published v0.x versions stay downloadable from the Go module proxy under
+the old path, but `github.com/happytoolin/happycontext` receives no
+further releases. Import paths and package names changed as follows:
+
+| Area | v0 | v1 |
+|---|---|---|
+| Root | `github.com/happytoolin/happycontext`, package `hc` | `github.com/happytoolin/unolog`, package `unolog` |
+| slog adapter | package `slogadapter` | package `slog` (alias it — `log/slog` collides) |
+| zap adapter | package `zapadapter` | package `zap` (alias it) |
+| zerolog adapter | package `zerologadapter` | package `zerolog` (alias it) |
+| `integration/std` | package `stdhappycontext` | package `std` |
+| `integration/gin` | package `ginhappycontext` | package `gin` (alias it) |
+| `integration/echo` | package `echohappycontext` | package `echo` (alias it) |
+| `integration/fiber` | package `fiberhappycontext` | package `fiber` (alias it) |
+| `integration/fiberv3` | package `fiberv3happycontext` | package `fiberv3` |
+| `integration/worker` | package `workerhappycontext` | package `worker` |
+
+The nested module paths keep their directories; only the root prefix
+changes. The v0 examples below deliberately keep the old `hc.` qualifier
+because that is what v0 code looks like; the v1 column is `unolog.`.
 
 ## The mental model
 
 - **v0**: configure per call sites (`hc.Config` handed to middleware or
   `op.End`), fields in a `map[string]any` (random order), sinks receive
   `(level, message, map)`.
-- **v1**: `hc.Compile`/`hc.MustCompile` once at startup → an immutable
-  `*Runtime` shared by everything; fields are typed `hc.Field` records
-  in insertion order; sinks receive `(ctx, *hc.Record)`.
+- **v1**: `unolog.Compile`/`unolog.MustCompile` once at startup → an immutable
+  `*Runtime` shared by everything; fields are typed `unolog.Field` records
+  in insertion order; sinks receive `(ctx, *unolog.Record)`.
 
 ## Construction
 
 | v0 | v1 |
 |---|---|
-| `hc.Config{...}` passed to middleware / `op.End(cfg, &err)` | `rt := hc.MustCompile(hc.Config{...})` once; middleware takes `rt`; `op.End(&err)` |
+| `hc.Config{...}` passed to middleware / `op.End(cfg, &err)` | `rt := unolog.MustCompile(unolog.Config{...})` once; middleware takes `rt`; `op.End(&err)` |
 | `hc.NormalizeConfig(cfg)` | internal to `Compile`; invalid config is now a **construction-time error** (`ErrInvalidRate`, `ErrInvalidLevel`, `ErrInvalidOutcome`, wrapped with `%w`) |
-| — | `hc.Compile(cfg) (*Runtime, error)` for config from files/flags |
+| — | `unolog.Compile(cfg) (*Runtime, error)` for config from files/flags |
 
 ```go
 // v0
 mw := stdhc.Middleware(hc.Config{Sink: sink, SamplingRate: 1})
 
 // v1
-rt := hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})
-mw := stdhc.Middleware(rt)
+rt := unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})
+mw := std.Middleware(rt)
 ```
 
 ## Lifecycle
 
 | v0 | v1 |
 |---|---|
-| `hc.BeginOperation(ctx, start)` → `(ctx, *Event)` | `op := hc.Start(ctx, rt, start)`; pass `op.Context()` down |
-| `hc.StartOperation(ctx, start)` → `*Operation` | `hc.Start(ctx, rt, start)` |
+| `hc.BeginOperation(ctx, start)` → `(ctx, *Event)` | `op := unolog.Start(ctx, rt, start)`; pass `op.Context()` down |
+| `hc.StartOperation(ctx, start)` → `*Operation` | `unolog.Start(ctx, rt, start)` |
 | `op.End(cfg, &err)` | `op.End(&err)` — one-shot, returns *emitted* |
 | `hc.FinishOperation(cfg, OperationFinish{...})` | gone; integrations call `op.End` |
 | `hc.Commit(ctx, sink, level)` | gone; the event commits once at `op.End` |
@@ -51,14 +76,14 @@ panic capture.
 | v0 | v1 |
 |---|---|
 | `hc.Add(ctx, k, v)` returning `bool` | same call, returns nothing (silent no-op without an event — the `slog` helper idiom) |
-| `hc.EventFields(e)` / `EventMessage` / `EventHasMessage` / `EventHasError` / `EventStartTime` | gone; sinks receive `*hc.Record` (`Fields()`, `Lookup`, `Message()`, `Level()`); samplers receive `SampleInput.Fields()`/`Lookup`. HTTP `SampleInput.Operation` is the last-write `op.name` (the route template), not the Start name `"request"`. Non-HTTP `SampleInput.Code` surfaces the canonical `op.code` (`StatusCode` stays the `http.status` view); HTTP `Code` remains `http.status`. |
+| `hc.EventFields(e)` / `EventMessage` / `EventHasMessage` / `EventHasError` / `EventStartTime` | gone; sinks receive `*unolog.Record` (`Fields()`, `Lookup`, `Message()`, `Level()`); samplers receive `SampleInput.Fields()`/`Lookup`. HTTP `SampleInput.Operation` is the last-write `op.name` (the route template), not the Start name `"request"`. Non-HTTP `SampleInput.Code` surfaces the canonical `op.code` (`StatusCode` stays the `http.status` view); HTTP `Code` remains `http.status`. |
 | `hc.NewContext(ctx)` / `hc.FromContext(ctx)` | gone (internal) |
 | `hc.AddRaw(ctx, k, raw)` | gone; pass `json.RawMessage` to `hc.Add` — it embeds verbatim through the regular path with bridge parity |
-| — | `hc.SetLevel(ctx, level)` unchanged in shape; `GetLevel` removed |
+| — | `unolog.SetLevel(ctx, level)` unchanged in shape; `GetLevel` removed |
 
 ## Levels
 
-`hc.Level` is now int-backed with slog-compatible ranks
+`unolog.Level` is now int-backed with slog-compatible ranks
 (`LevelDebug = -4`, `LevelInfo = 0`, `LevelWarn = 4`, `LevelError = 8`).
 Source that references the constants compiles unchanged;
 `hc.LevelRank` and `hc.MergeLevelWithFloor` are gone (internal).
@@ -73,7 +98,7 @@ type Sink interface {
 
 // v1 — slog.Handler.Handle shape
 type Sink interface {
-    Write(ctx context.Context, rec *hc.Record)
+    Write(ctx context.Context, rec *unolog.Record)
 }
 ```
 

@@ -1,4 +1,4 @@
-package hc
+package unolog
 
 // Benchmarks for the WAL (event) state machine itself — the guarded
 // append path, sealing, straggler no-ops, the watchdog snapshot, the

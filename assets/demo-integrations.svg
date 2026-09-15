@@ -1,6 +1,6 @@
 <svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">Integrations</title>
-  <desc id="desc">Framework integrations flow through HappyContext to logger adapters.</desc>
+  <desc id="desc">Framework integrations flow through unolog to logger adapters.</desc>
 
   <defs>
     <linearGradient id="frameStroke" x1="0" y1="0" x2="1200" y2="520" gradientUnits="userSpaceOnUse">
@@ -60,7 +60,7 @@
   <g transform="translate(430 188)">
     <rect width="340" height="146" rx="14" fill="#F60" />
     <rect x="10" y="10" width="320" height="126" rx="10" fill="#F2F2F0" fill-opacity="0.09" />
-    <text x="170" y="68" text-anchor="middle" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="38" font-weight="700" fill="#F2F2F0">happycontext</text>
+    <text x="170" y="68" text-anchor="middle" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="38" font-weight="700" fill="#F2F2F0">unolog</text>
     <text x="170" y="96" text-anchor="middle" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="17" font-weight="500" fill="#F2F2F0" fill-opacity="0.9">Core context + sampling pipeline</text>
   </g>
 

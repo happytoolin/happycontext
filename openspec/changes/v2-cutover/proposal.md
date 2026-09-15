@@ -17,6 +17,12 @@ banner. `V2_DESIGN.md` §9 is amended accordingly.
 - The v1.0.0 path is unchanged in mechanism: the record-core breaking
   markers compute 0.6.x → 1.0.0 on v2; lockstep scripts tag all nested
   modules; no cutover merge, no classic-line retirement PR.
+- The 1.0.0 range also renames the project to unolog: repository
+  `happytoolin/unolog`, module `github.com/happytoolin/unolog`, root
+  package `unolog` (was `hc`), and short subpackage names (`std`, `gin`,
+  `slog`, …). Pre-1.0 tags keep the old path and stay served by the
+  module proxy; the rename commit carries a breaking marker, so it must
+  land after the v0.6.0 release PR if 0.6.0 is still to be cut.
 - `main` keeps the 0.x tags and a banner; afterwards the default branch
   moves to v2 (or main is fast-forwarded once — a plain merge).
 
@@ -24,13 +30,18 @@ banner. `V2_DESIGN.md` §9 is amended accordingly.
 
 - v1.1 features (BufferedSink, watchdog, `adapter/otlp` evaluation) —
   sequenced after 1.0.0 as fresh changes.
-- Renaming the module or moving to `/v2` import paths.
+- Moving to `/v2` import paths — the module path changes only in its
+  repository prefix, not its major-version suffix.
 - Any change to the record-core work itself (`v2-record-core` is
   unaffected: it already targets `v2`).
 
 ## Impact
 
-- Affected specs: `release-process` (branch references retargeted).
-- Affected code: CI/release workflows only.
+- Affected specs: `release-process` (branch references retargeted,
+  module paths in the lockstep scenarios updated).
+- Affected code: CI/release workflows, plus the rename branch (module
+  paths, packages, scripts, docs, assets) landed in the 1.0.0 range.
 - Risk: release automation surprises — mitigated by verifying the v0.6.0
-  release end-to-end on v2 before any breaking work lands.
+  release end-to-end on v2 before any breaking work lands. The rename
+  commit's breaking marker makes the next release 1.0.0; do not merge it
+  before the v0.6.0 release PR if that rehearsal is still planned.

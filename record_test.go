@@ -1,4 +1,4 @@
-package hc
+package unolog
 
 // Record/encoder tests: canonical line shape, accessors, sinks, and
 // the dedupe fuzz target.

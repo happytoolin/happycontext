@@ -1,4 +1,4 @@
-package hc
+package unolog
 
 import (
 	"cmp"
@@ -63,7 +63,7 @@ func Start(ctx context.Context, rt *Runtime, start OperationStart) *Operation {
 }
 
 // Context returns the operation context — the ctx to pass down so the
-// hc.Add helpers reach this operation's WAL.
+// unolog.Add helpers reach this operation's WAL.
 func (op *Operation) Context() context.Context {
 	if op == nil {
 		return nil

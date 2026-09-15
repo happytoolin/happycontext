@@ -1,4 +1,4 @@
-# internal/hcjson — provenance and modifications
+# internal/json — provenance and modifications
 
 This package is vendored from
 [zerolog](https://github.com/rs/zerolog) v1.34.0 `internal/json`, MIT
@@ -22,8 +22,9 @@ lands. The full rationale and measurements live in V2_PLAN.md §3b.
 
 ## Modifications from the original
 
-- Package renamed from `internal/json` to `internal/hcjson`; the `Encoder`
-  value type and method set are kept.
+- The package lived as `internal/hcjson` during v2 development; the unolog
+  rename restored the upstream name (`internal/json`). The `Encoder` value
+  type and method set are kept.
 - **Hybrid SWAR escape fast path** (`string.go`, `bytes.go`): strings of
   16+ bytes are scanned 8 bytes per iteration with SWAR predicates; clean
   printable-ASCII strings are appended in bulk, everything else falls back
@@ -32,7 +33,7 @@ lands. The full rationale and measurements live in V2_PLAN.md §3b.
   detector is the canonical `(x - 0x0101010101010101) &^ x &
   0x8080808080808080` form; see the comments there for why the `&^ x`
   term is load-bearing (V2_PLAN.md §05 documents the incident class).
-- Trimmed to what happycontext encodes: single-value appends only —
+- Trimmed to what unolog encodes: single-value appends only —
   string/bytes escaping, ints/uints, floats, bool, time, duration, nil,
   markers/keys, and an `any` fallback via `encoding/json`. Slice/array
   append variants, net types, reflect helpers, and hex encoding were

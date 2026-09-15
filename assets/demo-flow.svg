@@ -1,5 +1,5 @@
 <svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-  <title id="title">happycontext request flow</title>
+  <title id="title">unolog request flow</title>
   <desc id="desc">Request lifecycle: start, enrich, finalize, write.</desc>
   <defs>
     <linearGradient id="frameStroke" x1="0" y1="0" x2="1200" y2="520" gradientUnits="userSpaceOnUse">
@@ -33,11 +33,11 @@
     <rect width="200" height="300" rx="12" fill="#F2F2F0" stroke="#F60" stroke-opacity="0.58" stroke-width="1.6" />
     <rect width="200" height="38" rx="12" fill="#F60" fill-opacity="0.1" />
     <text x="16" y="25" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#F60">01 START</text>
-    <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="13" fill="#F60">
-      <text x="16" y="78">ctx, ev := hc.New()</text>
-      <text x="16" y="108">hc.Add("method", ...)</text>
-      <text x="16" y="138">hc.Add("route", ...)</text>
-      <text x="16" y="168">hc.Add("req_id", ...)</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="11" fill="#F60">
+      <text x="16" y="78">ctx, ev := unolog.New()</text>
+      <text x="16" y="108">unolog.Add("method", ...)</text>
+      <text x="16" y="138">unolog.Add("route", ...)</text>
+      <text x="16" y="168">unolog.Add("req_id", ...)</text>
     </g>
   </g>
 
@@ -45,11 +45,11 @@
     <rect width="200" height="300" rx="12" fill="#F2F2F0" stroke="#F60" stroke-opacity="0.58" stroke-width="1.6" />
     <rect width="200" height="38" rx="12" fill="#F60" fill-opacity="0.1" />
     <text x="16" y="25" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#F60">02 ENRICH</text>
-    <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="13" fill="#F60">
-      <text x="16" y="78">hc.Add("user_id", ...)</text>
-      <text x="16" y="108">hc.Add(ctx, ...)</text>
-      <text x="16" y="138">hc.Error(err)</text>
-      <text x="16" y="168">hc.Warn(warn)</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="11" fill="#F60">
+      <text x="16" y="78">unolog.Add("user_id", ...)</text>
+      <text x="16" y="108">unolog.Add(ctx, ...)</text>
+      <text x="16" y="138">unolog.Error(err)</text>
+      <text x="16" y="168">unolog.Warn(warn)</text>
     </g>
   </g>
 
@@ -57,9 +57,9 @@
     <rect width="200" height="300" rx="12" fill="#F2F2F0" stroke="#F60" stroke-opacity="0.58" stroke-width="1.6" />
     <rect width="200" height="38" rx="12" fill="#F60" fill-opacity="0.1" />
     <text x="16" y="25" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#F60">03 FINALIZE</text>
-    <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="13" fill="#F60">
-      <text x="16" y="78">hc.Add("status", ...)</text>
-      <text x="16" y="108">hc.Add("dur_ms", ...)</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="11" fill="#F60">
+      <text x="16" y="78">unolog.Add("status", ...)</text>
+      <text x="16" y="108">unolog.Add("dur_ms", ...)</text>
       <text x="16" y="138">sampler.Decide(ev)</text>
       <text x="16" y="168">event complete</text>
     </g>

@@ -1,25 +1,25 @@
-// Package ginhappycontext provides the Gin happycontext middleware: one
+// Package gin provides the Gin unolog middleware: one
 // canonical event per request, with errors, panics, status, and route
 // resolved from the Gin context.
-package ginhappycontext
+package gin
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/happytoolin/happycontext"
-	"github.com/happytoolin/happycontext/integration/common"
+	gogin "github.com/gin-gonic/gin"
+	"github.com/happytoolin/unolog"
+	"github.com/happytoolin/unolog/integration/flow"
 )
 
 // Middleware returns a Gin middleware that captures one event per
-// request. rt comes from hc.Compile/MustCompile; nil is a passthrough.
-func Middleware(rt *hc.Runtime) gin.HandlerFunc {
+// request. rt comes from unolog.Compile/MustCompile; nil is a passthrough.
+func Middleware(rt *unolog.Runtime) gogin.HandlerFunc {
 	if rt == nil {
-		return func(c *gin.Context) {
+		return func(c *gogin.Context) {
 			c.Next()
 		}
 	}
 
-	return func(c *gin.Context) {
-		op := common.StartRequest(c.Request.Context(), rt, c.Request.Method, c.Request.URL.Path)
+	return func(c *gogin.Context) {
+		op := flow.StartRequest(c.Request.Context(), rt, c.Request.Method, c.Request.URL.Path)
 		c.Request = c.Request.WithContext(op.Context())
 
 		defer func() {
@@ -30,13 +30,13 @@ func Middleware(rt *hc.Runtime) gin.HandlerFunc {
 					err = last.Err
 				}
 			}
-			status := common.ResolveStatus(common.StatusInput{
+			status := flow.ResolveStatus(flow.StatusInput{
 				Committed:       c.Writer.Status(),
 				Err:             err,
 				Recovered:       recovered,
 				ResponseStarted: c.Writer.Written(),
 			})
-			common.FinalizeRequest(op, c.FullPath(), status, err, recovered)
+			flow.FinalizeRequest(op, c.FullPath(), status, err, recovered)
 
 			if recovered != nil {
 				panic(recovered)

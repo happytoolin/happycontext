@@ -1,4 +1,4 @@
-package workerhappycontext
+package worker
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
 func TestStartAddsWorkerFields(t *testing.T) {
@@ -18,10 +18,10 @@ func TestStartAddsWorkerFields(t *testing.T) {
 
 	// in-flight fields are observable through the sampler view
 	var fields map[string]any
-	capture := hc.MustCompile(hc.Config{
-		Sink:         hc.NewTestSink(),
+	capture := unolog.MustCompile(unolog.Config{
+		Sink:         unolog.NewTestSink(),
 		SamplingRate: 1,
-		Sampler: func(in hc.SampleInput) bool {
+		Sampler: func(in unolog.SampleInput) bool {
 			fields = map[string]any{}
 			for _, f := range in.Fields() {
 				if v, ok := in.Lookup(f.Key()); ok {
@@ -43,7 +43,7 @@ func TestStartAddsWorkerFields(t *testing.T) {
 	if fields == nil {
 		t.Fatal("sampler never saw the fields")
 	}
-	if fields["op.domain"] != string(hc.DomainJob) {
+	if fields["op.domain"] != string(unolog.DomainJob) {
 		t.Fatalf("op.domain = %v", fields["op.domain"])
 	}
 	if fields["op.name"] != "cleanup" {
@@ -63,8 +63,8 @@ func TestStartAddsWorkerFields(t *testing.T) {
 }
 
 func TestEndSuccessDefaultMessage(t *testing.T) {
-	sink := hc.NewTestSink()
-	rt := hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 1})
+	sink := unolog.NewTestSink()
+	rt := unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 1})
 	op := Start(context.Background(), rt, JobMeta{Name: "cleanup", ID: "job_1", Queue: "nightly"})
 	var err error
 
@@ -79,32 +79,32 @@ func TestEndSuccessDefaultMessage(t *testing.T) {
 	if events[0].Message() != "operation_completed" {
 		t.Fatalf("message = %q", events[0].Message())
 	}
-	if v, _ := events[0].Lookup("op.outcome"); v != string(hc.OutcomeSuccess) {
+	if v, _ := events[0].Lookup("op.outcome"); v != string(unolog.OutcomeSuccess) {
 		t.Fatalf("op.outcome = %v", v)
 	}
 }
 
 func TestEndErrorAndPanic(t *testing.T) {
 	t.Run("error", func(t *testing.T) {
-		sink := hc.NewTestSink()
-		rt := hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 0})
+		sink := unolog.NewTestSink()
+		rt := unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 0})
 		op := Start(context.Background(), rt, JobMeta{Name: "cleanup"})
 		err := errors.New("boom")
 		if !op.End(&err) {
 			t.Fatal("expected error to bypass sampling")
 		}
 		ev := sink.Events()[0]
-		if ev.Level() != hc.LevelError {
+		if ev.Level() != unolog.LevelError {
 			t.Fatalf("level = %v, want ERROR", ev.Level())
 		}
-		if v, _ := ev.Lookup("op.outcome"); v != string(hc.OutcomeFailure) {
+		if v, _ := ev.Lookup("op.outcome"); v != string(unolog.OutcomeFailure) {
 			t.Fatalf("outcome = %v", v)
 		}
 	})
 
 	t.Run("panic", func(t *testing.T) {
-		sink := hc.NewTestSink()
-		rt := hc.MustCompile(hc.Config{Sink: sink, SamplingRate: 0})
+		sink := unolog.NewTestSink()
+		rt := unolog.MustCompile(unolog.Config{Sink: sink, SamplingRate: 0})
 		op := Start(context.Background(), rt, JobMeta{Name: "cleanup"})
 		func() {
 			var err error
@@ -118,7 +118,7 @@ func TestEndErrorAndPanic(t *testing.T) {
 			panic("panic-value")
 		}()
 		ev := sink.Events()[0]
-		if v, _ := ev.Lookup("op.outcome"); v != string(hc.OutcomePanic) {
+		if v, _ := ev.Lookup("op.outcome"); v != string(unolog.OutcomePanic) {
 			t.Fatalf("outcome = %v", v)
 		}
 		if p, ok := ev.Lookup("panic"); !ok {
@@ -130,13 +130,13 @@ func TestEndErrorAndPanic(t *testing.T) {
 }
 
 func TestEndGuards(t *testing.T) {
-	rt := hc.MustCompile(hc.Config{})
+	rt := unolog.MustCompile(unolog.Config{})
 	op := Start(context.Background(), rt, JobMeta{Name: "cleanup"})
 	var err error
 	if op.End(&err) {
 		t.Fatal("expected false without sink")
 	}
-	var nilOp *hc.Operation
+	var nilOp *unolog.Operation
 	if nilOp.End(&err) {
 		t.Fatal("expected false with nil operation")
 	}

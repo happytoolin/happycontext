@@ -1,4 +1,4 @@
-package hc
+package unolog
 
 // Model-driven verification: the lifecycle fuzz model (the executable
 // mirror of End/commit semantics) drives both the fuzz target and the
@@ -175,7 +175,7 @@ func rtWireCheck(t *testing.T, kind FieldKind, val any, raw []byte) {
 	case KindString:
 		if s, ok := val.(string); ok && !utf8.ValidString(s) {
 			// invalid UTF-8: parseability only (mapping pinned by the
-			// hcjson suites)
+			// internal/json suites)
 			var decoded string
 			if err := json.Unmarshal(raw, &decoded); err != nil {
 				t.Fatalf("invalid-UTF-8 string did not parse: %v (%s)", err, raw)
@@ -620,7 +620,7 @@ func FuzzRecordEncodedDedupe(f *testing.F) {
 // programs through a drop-everything runtime (NeverSampler at rate 0):
 // failures must still emit — the amendment-4 structural bypass — while
 // healthy events drop. The model's error predicate (end error, panic,
-// hc.Error, or a non-success outcome) is the oracle.
+// unolog.Error, or a non-success outcome) is the oracle.
 func TestSamplingErrorBypassProperty(t *testing.T) {
 	rng := rand.New(rand.NewPCG(0x5A9A1E5eed, 0x8A55E5eed))
 	for i := range 3000 {
@@ -910,7 +910,7 @@ const (
 	opAdd    lifeOpKind = iota // typed value from the table
 	opAddStr                   // raw string value from the stream (may be invalid UTF-8)
 	opAddVar                   // variadic Add with (possibly malformed) kv tails
-	opErr                      // hc.Error with a generated message
+	opErr                      // unolog.Error with a generated message
 	opSetMsg
 	opSetLevel
 	opSetRoute
@@ -1278,7 +1278,7 @@ type lifeModel struct {
 	msg         string
 	level       Level
 	hasLevel    bool
-	errOp       bool // an hc.Error op executed while live
+	errOp       bool // an unolog.Error op executed while live
 	endErr      error
 	endPanicked bool
 	endPayload  any
@@ -1662,7 +1662,7 @@ func checkFieldWire(f Field, raw []byte) error {
 
 // jsonSemanticEqual compares two decoded JSON values, treating
 // json.Number and float64 as equal when the numeric value matches.
-// The hcjson package mirrors this as jsonDecodedEqual (plain
+// The internal json package mirrors this as jsonDecodedEqual (plain
 // json.Unmarshal domain, float64 only) in fuzz_interface_test.go; the
 // helpers cannot be shared because test-only code is package-private.
 func jsonSemanticEqual(a, b any) bool {
@@ -1875,7 +1875,7 @@ func seedPrograms() []seedProg {
 	// panic-then-error: error pointer already set when the panic hits.
 	add("panic-then-error", p(modeRate1, DomainJob,
 		errOp("before"), endPanic("boom", errors.New("co-err"))))
-	// error-then-panic: hc.Error op, then a bare panic (panic-fallback error).
+	// error-then-panic: unolog.Error op, then a bare panic (panic-fallback error).
 	add("error-then-panic", p(modeRate1, DomainJob,
 		errOp("u-error"), endPanic(int64(42), nil)))
 	// straggler-after-seal: writes after End must no-op.

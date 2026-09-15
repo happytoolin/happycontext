@@ -1,4 +1,4 @@
-package stdhappycontext
+package std
 
 // FuzzMiddlewareRequest (dst-research §6.5): fuzz bytes decode into a
 // request-behavior script (handler actions: Add fields, SetMessage,
@@ -26,7 +26,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	hc "github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
 // Interface-masked ResponseWriter
@@ -172,7 +172,7 @@ type mwAction struct {
 	key    string
 	value  any
 	msg    string
-	level  hc.Level
+	level  unolog.Level
 	status int
 	body   string
 	panic  any
@@ -192,7 +192,7 @@ const (
 var (
 	mwKeys     = []string{"ua", "ub", "uc"}
 	mwStatuses = []int{0, 200, 201, 204, 301, 400, 404, 418, 500, 503}
-	mwLevels   = []hc.Level{hc.LevelDebug, hc.LevelInfo, hc.LevelWarn, hc.LevelError, hc.Level(99)}
+	mwLevels   = []unolog.Level{unolog.LevelDebug, unolog.LevelInfo, unolog.LevelWarn, unolog.LevelError, unolog.Level(99)}
 )
 
 // decodeScript parses fuzz bytes into an action list (total: any byte
@@ -266,7 +266,7 @@ func decodeScript(b []byte) (mask byte, actions []mwAction) {
 // mwModel is the expected event state for one executed request.
 type mwModel struct {
 	msg            string
-	requested      hc.Level
+	requested      unolog.Level
 	hasRequested   bool
 	committed      int  // first committed status (0 = nothing committed)
 	started        bool // any Write/WriteHeader/ReadFrom happened
@@ -317,15 +317,15 @@ func (m *mwModel) apply(a mwAction, mask byte) {
 	}
 }
 
-func validMWLevel(l hc.Level) bool {
+func validMWLevel(l unolog.Level) bool {
 	switch l {
-	case hc.LevelDebug, hc.LevelInfo, hc.LevelWarn, hc.LevelError:
+	case unolog.LevelDebug, unolog.LevelInfo, unolog.LevelWarn, unolog.LevelError:
 		return true
 	}
 	return false
 }
 
-// resolveStatus mirrors common.ResolveStatus.
+// resolveStatus mirrors flow.ResolveStatus.
 func (m *mwModel) resolveStatus() int {
 	if m.hasPanic && !m.started {
 		return http.StatusInternalServerError
@@ -336,25 +336,25 @@ func (m *mwModel) resolveStatus() int {
 	return m.committed
 }
 
-// finalize mirrors common.FinalizeRequest + End's resolution.
-func (m *mwModel) finalize() (outcome hc.Outcome, level hc.Level, status int) {
+// finalize mirrors flow.FinalizeRequest + End's resolution.
+func (m *mwModel) finalize() (outcome unolog.Outcome, level unolog.Level, status int) {
 	status = m.resolveStatus()
 	switch {
 	case m.hasPanic:
-		outcome = hc.OutcomePanic
-		level = hc.LevelError
+		outcome = unolog.OutcomePanic
+		level = unolog.LevelError
 	case status >= 500:
-		outcome = hc.OutcomeFailure
-		level = hc.LevelError
+		outcome = unolog.OutcomeFailure
+		level = unolog.LevelError
 	default:
-		outcome = hc.OutcomeSuccess
-		level = hc.LevelInfo
+		outcome = unolog.OutcomeSuccess
+		level = unolog.LevelInfo
 	}
 	if m.hasRequested && m.requested > level {
 		level = m.requested
 	}
 	if m.msg == "" {
-		m.msg = hc.DefaultMessage
+		m.msg = unolog.DefaultMessage
 	}
 	return outcome, level, status
 }
@@ -445,8 +445,8 @@ func FuzzMiddlewareRequest(f *testing.F) {
 			}
 		}
 
-		ts := hc.NewTestSink()
-		rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: 1})
+		ts := unolog.NewTestSink()
+		rt := unolog.MustCompile(unolog.Config{Sink: ts, SamplingRate: 1})
 		mw := Middleware(rt)
 		base := maskedWriterFor(mask)
 
@@ -454,11 +454,11 @@ func FuzzMiddlewareRequest(f *testing.F) {
 			for _, a := range actions {
 				switch a.kind {
 				case mwAdd:
-					hc.Add(r.Context(), a.key, a.value)
+					unolog.Add(r.Context(), a.key, a.value)
 				case mwSetMsg:
-					hc.SetMessage(r.Context(), a.msg)
+					unolog.SetMessage(r.Context(), a.msg)
 				case mwSetLevel:
-					hc.SetLevel(r.Context(), a.level)
+					unolog.SetLevel(r.Context(), a.level)
 				case mwWriteHeader:
 					w.WriteHeader(a.status)
 				case mwWrite:

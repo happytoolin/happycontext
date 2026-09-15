@@ -6,24 +6,24 @@ import (
 	"strings"
 	"testing"
 
-	hc "github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
 // captureRecords drives n kept lifecycles with fieldsFor(n) fields and
 // returns the records a sink saw (one per request).
 type recordCapture struct {
-	recs []*hc.Record
+	recs []*unolog.Record
 }
 
-func (c *recordCapture) Write(_ context.Context, rec *hc.Record) {
+func (c *recordCapture) Write(_ context.Context, rec *unolog.Record) {
 	c.recs = append(c.recs, rec)
 }
 
-func captureRecords(n int, fields int) []*hc.Record {
+func captureRecords(n int, fields int) []*unolog.Record {
 	cap := &recordCapture{}
-	rt := hc.MustCompile(hc.Config{Sink: cap, SamplingRate: 1})
+	rt := unolog.MustCompile(unolog.Config{Sink: cap, SamplingRate: 1})
 	for range n {
-		op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainHTTP, Name: "GET /api/v1/orders/:id"})
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainHTTP, Name: "GET /api/v1/orders/:id"})
 		benchmarkFields(op.Context(), fields)
 		op.End(nil)
 	}
@@ -34,7 +34,7 @@ func captureRecords(n int, fields int) []*hc.Record {
 // records (Encoded() cached after the first call — the loop measures
 // Write of the canonical line).
 func BenchmarkJSONSink(b *testing.B) {
-	sink := hc.NewJSONSink(io.Discard)
+	sink := unolog.NewJSONSink(io.Discard)
 	recs := captureRecords(64, 12)
 	b.Run("write_12_fields", func(b *testing.B) {
 		b.ReportAllocs()
@@ -51,11 +51,11 @@ func BenchmarkJSONSink(b *testing.B) {
 // Write). The §4 sink gate (≤ 400 ns / ≤ 2 allocs) was stated for the
 // v0.6 sink-write shape; this is the v2 lifecycle inclusive of it.
 func BenchmarkJSONSinkLifecycle(b *testing.B) {
-	rt := hc.MustCompile(hc.Config{Sink: hc.NewJSONSink(io.Discard), SamplingRate: 1})
+	rt := unolog.MustCompile(unolog.Config{Sink: unolog.NewJSONSink(io.Discard), SamplingRate: 1})
 	b.Run("12_fields", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainHTTP, Name: "GET /api/v1/orders/:id"})
+			op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainHTTP, Name: "GET /api/v1/orders/:id"})
 			benchmarkFields(op.Context(), 12)
 			op.End(nil)
 		}
@@ -63,7 +63,7 @@ func BenchmarkJSONSinkLifecycle(b *testing.B) {
 	b.Run("0_fields", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			op := hc.Start(context.Background(), rt, hc.OperationStart{})
+			op := unolog.Start(context.Background(), rt, unolog.OperationStart{})
 			op.End(nil)
 		}
 	})
@@ -71,14 +71,14 @@ func BenchmarkJSONSinkLifecycle(b *testing.B) {
 
 // BenchmarkJSONSinkEscaping isolates escape-scan cost at the sink level.
 func BenchmarkJSONSinkEscaping(b *testing.B) {
-	rt := hc.MustCompile(hc.Config{Sink: hc.NewJSONSink(io.Discard), SamplingRate: 1})
+	rt := unolog.MustCompile(unolog.Config{Sink: unolog.NewJSONSink(io.Discard), SamplingRate: 1})
 	b.Run("escape_heavy", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			op := hc.Start(context.Background(), rt, hc.OperationStart{})
+			op := unolog.Start(context.Background(), rt, unolog.OperationStart{})
 			ctx := op.Context()
-			hc.Add(ctx, "url", "/search?q="+strings.Repeat("héllo☃", 8))
-			hc.Add(ctx, "agent", `Mozilla/5.0 (X11; "quote" back\slash) Engine/1.0`)
+			unolog.Add(ctx, "url", "/search?q="+strings.Repeat("héllo☃", 8))
+			unolog.Add(ctx, "agent", `Mozilla/5.0 (X11; "quote" back\slash) Engine/1.0`)
 			op.End(nil)
 		}
 	})

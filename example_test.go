@@ -1,4 +1,4 @@
-package hc_test
+package unolog_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	hc "github.com/happytoolin/happycontext"
+	"github.com/happytoolin/unolog"
 )
 
 // printSink renders records deterministically for the output-checked
@@ -18,7 +18,7 @@ type printSink struct {
 	w *os.File
 }
 
-func (p printSink) Write(_ context.Context, rec *hc.Record) {
+func (p printSink) Write(_ context.Context, rec *unolog.Record) {
 	keys := make([]string, 0, len(rec.Fields()))
 	seen := map[string]bool{}
 	for _, f := range rec.Fields() {
@@ -49,43 +49,43 @@ func (p printSink) Write(_ context.Context, rec *hc.Record) {
 // ExampleCompile shows the compile-once contract: bad configuration is
 // a construction-time error wrapping sentinel values.
 func ExampleCompile() {
-	_, err := hc.Compile(hc.Config{SamplingRate: 1.5})
+	_, err := unolog.Compile(unolog.Config{SamplingRate: 1.5})
 	fmt.Println(err)
-	fmt.Println(errors.Is(err, hc.ErrInvalidRate))
+	fmt.Println(errors.Is(err, unolog.ErrInvalidRate))
 
-	rt, err := hc.Compile(hc.Config{Sink: printSink{os.Stdout}, SamplingRate: 1})
+	rt, err := unolog.Compile(unolog.Config{Sink: printSink{os.Stdout}, SamplingRate: 1})
 	if err != nil {
 		fmt.Println("bad config:", err)
 		return
 	}
-	hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "j"}).End(nil)
+	unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "j"}).End(nil)
 	// Output:
-	// hc: sampling rate 1.5: invalid rate
+	// unolog: sampling rate 1.5: invalid rate
 	// true
 	// INFO operation_completed op.domain="job" op.name="j" op.outcome="success"
 }
 
 // ExampleMustCompile is the literal-config idiom for main.
 func ExampleMustCompile() {
-	rt := hc.MustCompile(hc.Config{
+	rt := unolog.MustCompile(unolog.Config{
 		Sink:         printSink{os.Stdout},
 		SamplingRate: 1,
 		Message:      "done",
 	})
-	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "digest"})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "digest"})
 	op.End(nil)
 	// Output:
 	// INFO done op.domain="job" op.name="digest" op.outcome="success"
 }
 
 // ExampleStart shows the request lifecycle: Start attaches the WAL,
-// the hc.Add helpers annotate, the deferred End commits exactly once.
+// the unolog.Add helpers annotate, the deferred End commits exactly once.
 func ExampleStart() {
-	rt := hc.MustCompile(hc.Config{Sink: printSink{os.Stdout}, SamplingRate: 1})
+	rt := unolog.MustCompile(unolog.Config{Sink: printSink{os.Stdout}, SamplingRate: 1})
 
 	func() (err error) {
-		op := hc.Start(context.Background(), rt, hc.OperationStart{
-			Domain:      hc.DomainJob,
+		op := unolog.Start(context.Background(), rt, unolog.OperationStart{
+			Domain:      unolog.DomainJob,
 			Name:        "import",
 			ID:          "job_1",
 			Attempt:     2,
@@ -93,8 +93,8 @@ func ExampleStart() {
 		})
 		defer op.End(&err) // direct defer: captures errors and panics
 
-		hc.Add(op.Context(), "rows", 42, "source", "queue")
-		hc.Add(op.Context(), "meta", json.RawMessage(`{"batch":true}`))
+		unolog.Add(op.Context(), "rows", 42, "source", "queue")
+		unolog.Add(op.Context(), "meta", json.RawMessage(`{"batch":true}`))
 		return errors.New("row 17 failed")
 	}()
 	// Output:
@@ -105,9 +105,9 @@ func ExampleStart() {
 // emitted flag; a second End call is a no-op returning the first
 // result.
 func ExampleOperation_End() {
-	rt := hc.MustCompile(hc.Config{Sink: printSink{os.Stdout}, SamplingRate: 1})
+	rt := unolog.MustCompile(unolog.Config{Sink: printSink{os.Stdout}, SamplingRate: 1})
 	var err error
-	op := hc.Start(context.Background(), rt, hc.OperationStart{})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{})
 	emitted := op.End(&err)
 	fmt.Println("emitted:", emitted, "again:", op.End(&err))
 	// Output:
@@ -118,12 +118,12 @@ func ExampleOperation_End() {
 // ExampleAdd shows annotation-style fields: strings, ints, nested
 // values, and the kv variadic.
 func ExampleAdd() {
-	rt := hc.MustCompile(hc.Config{Sink: printSink{os.Stdout}, SamplingRate: 1})
-	op := hc.Start(context.Background(), rt, hc.OperationStart{})
+	rt := unolog.MustCompile(unolog.Config{Sink: printSink{os.Stdout}, SamplingRate: 1})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{})
 	ctx := op.Context()
-	hc.Add(ctx, "user_id", "u_1", "attempt", 2)
-	hc.Add(ctx, "cart", map[string]any{"items": 3})
-	hc.SetRoute(ctx, "/orders/:id")
+	unolog.Add(ctx, "user_id", "u_1", "attempt", 2)
+	unolog.Add(ctx, "cart", map[string]any{"items": 3})
+	unolog.SetRoute(ctx, "/orders/:id")
 	op.End(nil)
 	// Output:
 	// INFO operation_completed attempt=2 cart={"items":3} http.route="/orders/:id" op.domain="operation" op.name="operation" op.outcome="success" user_id="u_1"
@@ -132,12 +132,12 @@ func ExampleAdd() {
 // ExampleError records a structured error; failures are never sampled
 // away, even under NeverSampler.
 func ExampleError() {
-	rt := hc.MustCompile(hc.Config{
+	rt := unolog.MustCompile(unolog.Config{
 		Sink:    printSink{os.Stdout},
-		Sampler: func(hc.SampleInput) bool { return false },
+		Sampler: func(unolog.SampleInput) bool { return false },
 	})
 	err := errors.New("db timeout")
-	op := hc.Start(context.Background(), rt, hc.OperationStart{})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{})
 	op.End(&err) // still emitted: error bypass is structural
 	// Output:
 	// ERROR operation_completed error={"message":"db timeout","type":"*errors.errorString"} op.domain="operation" op.name="operation" op.outcome="failure"
@@ -148,9 +148,9 @@ func ExampleError() {
 // the timestamp for determinism.
 func ExampleNewJSONSink() {
 	var buf strings.Builder
-	rt := hc.MustCompile(hc.Config{Sink: hc.NewJSONSink(&buf), SamplingRate: 1})
-	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "j"})
-	hc.Add(op.Context(), "k", 1)
+	rt := unolog.MustCompile(unolog.Config{Sink: unolog.NewJSONSink(&buf), SamplingRate: 1})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "j"})
+	unolog.Add(op.Context(), "k", 1)
 	op.End(nil)
 	line := buf.String()
 	if i := strings.Index(line, `,"duration_ms"`); i >= 0 {
@@ -163,10 +163,10 @@ func ExampleNewJSONSink() {
 
 // ExampleNewTestSink shows the in-memory sink for assertions.
 func ExampleNewTestSink() {
-	ts := hc.NewTestSink()
-	rt := hc.MustCompile(hc.Config{Sink: ts, SamplingRate: 1})
-	op := hc.Start(context.Background(), rt, hc.OperationStart{})
-	hc.Add(op.Context(), "k", "v")
+	ts := unolog.NewTestSink()
+	rt := unolog.MustCompile(unolog.Config{Sink: ts, SamplingRate: 1})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{})
+	unolog.Add(op.Context(), "k", "v")
 	op.End(nil)
 
 	events := ts.Events()

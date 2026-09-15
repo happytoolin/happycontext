@@ -1,7 +1,7 @@
-package hcjson
+package json
 
 import (
-	"encoding/json"
+	stdjson "encoding/json"
 	"strings"
 	"testing"
 )
@@ -27,38 +27,38 @@ func FuzzAppendInterface(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, raw []byte) {
 		var v any
-		if err := json.Unmarshal(raw, &v); err != nil {
+		if err := stdjson.Unmarshal(raw, &v); err != nil {
 			return // not a valid JSON shape; nothing to check
 		}
 		got := Encoder{}.AppendInterface(nil, v)
 		if len(got) == 0 {
 			t.Fatal("empty output")
 		}
-		if !json.Valid(got) {
+		if !stdjson.Valid(got) {
 			t.Fatalf("AppendInterface(%v) produced invalid JSON: %s", v, got)
 		}
-		want, err := json.Marshal(v)
+		want, err := stdjson.Marshal(v)
 		if err != nil {
 			t.Fatalf("oracle marshal failed: %v", err)
 		}
 		var gotV, wantV any
-		if err := json.Unmarshal(got, &gotV); err != nil {
+		if err := stdjson.Unmarshal(got, &gotV); err != nil {
 			t.Fatalf("output unparseable: %v", err)
 		}
-		if err := json.Unmarshal(want, &wantV); err != nil {
+		if err := stdjson.Unmarshal(want, &wantV); err != nil {
 			t.Fatalf("oracle unparseable: %v", err)
 		}
 		if !jsonDecodedEqual(gotV, wantV) {
-			t.Fatalf("AppendInterface(%v) = %s, parses to %v; json.Marshal parses to %v", v, got, gotV, wantV)
+			t.Fatalf("AppendInterface(%v) = %s, parses to %v; stdjson.Marshal parses to %v", v, got, gotV, wantV)
 		}
 	})
 }
 
-// jsonDecodedEqual compares two json.Unmarshal results (plain float64
+// jsonDecodedEqual compares two stdjson.Unmarshal results (plain float64
 // numbers — the parser erases int/float distinctions) and compares
-// float64s bitwise. The hc package mirrors this in
+// float64s bitwise. The unolog package mirrors this in
 // property_test.go's jsonSemanticEqual, which additionally
-// accepts json.Number from UseNumber decoders; the helpers cannot be
+// accepts stdjson.Number from UseNumber decoders; the helpers cannot be
 // shared because test-only code is package-private.
 func jsonDecodedEqual(a, b any) bool {
 	switch av := a.(type) {
@@ -127,16 +127,16 @@ func TestAppendInterfaceMarshalerEdgeCases(t *testing.T) {
 		t.Fatalf("panicking marshaler rendered %s, want marshaling-error string", got)
 	}
 	var back string
-	if err := json.Unmarshal([]byte(got), &back); err != nil {
+	if err := stdjson.Unmarshal([]byte(got), &back); err != nil {
 		t.Fatalf("fallback not a valid JSON string: %v (%s)", err, got)
 	}
 
 	// a nil-receiver MarshalJSON (valid but unusual) must marshal like
 	// stdlib: the method is callable on a nil *T, stdlib calls it, so
-	// the fallback must match json.Marshal's bytes
+	// the fallback must match stdjson.Marshal's bytes
 	val := (*nilReceiverMarshaler)(nil)
 	got = string(Encoder{}.AppendInterface(nil, val))
-	want, err := json.Marshal(val)
+	want, err := stdjson.Marshal(val)
 	if err != nil {
 		t.Fatal(err)
 	}

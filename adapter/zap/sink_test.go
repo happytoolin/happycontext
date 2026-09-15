@@ -1,4 +1,4 @@
-package zapadapter
+package zap
 
 import (
 	"context"
@@ -8,17 +8,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/happytoolin/happycontext"
-	"go.uber.org/zap"
+	"github.com/happytoolin/unolog"
+	gozap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
 
-func emit(t *testing.T, sink hc.Sink, mutate func(ctx context.Context)) *observer.ObservedLogs {
+func emit(t *testing.T, sink unolog.Sink, mutate func(ctx context.Context)) *observer.ObservedLogs {
 	t.Helper()
 	core, logs := observer.New(zapcore.DebugLevel)
-	rt := hc.MustCompile(hc.Config{Sink: New(zap.New(core)), SamplingRate: 1})
-	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
+	rt := unolog.MustCompile(unolog.Config{Sink: New(gozap.New(core)), SamplingRate: 1})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "t"})
 	if mutate != nil {
 		mutate(op.Context())
 	}
@@ -29,16 +29,16 @@ func emit(t *testing.T, sink hc.Sink, mutate func(ctx context.Context)) *observe
 func emitErr(t *testing.T, err error) *observer.ObservedLogs {
 	t.Helper()
 	core, logs := observer.New(zapcore.DebugLevel)
-	rt := hc.MustCompile(hc.Config{Sink: New(zap.New(core)), SamplingRate: 1})
-	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
+	rt := unolog.MustCompile(unolog.Config{Sink: New(gozap.New(core)), SamplingRate: 1})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "t"})
 	op.End(&err)
 	return logs
 }
 
 func TestSinkWriteMapsLevelAndMessage(t *testing.T) {
 	logs := emit(t, nil, func(ctx context.Context) {
-		hc.Add(ctx, "http.status", 500, "user_id", "u_1")
-		hc.SetLevel(ctx, hc.LevelError)
+		unolog.Add(ctx, "http.status", 500, "user_id", "u_1")
+		unolog.SetLevel(ctx, unolog.LevelError)
 	})
 
 	if logs.Len() != 1 {
@@ -48,7 +48,7 @@ func TestSinkWriteMapsLevelAndMessage(t *testing.T) {
 	if entry.Level != zapcore.ErrorLevel {
 		t.Fatalf("expected error level, got %v", entry.Level)
 	}
-	if entry.Message != hc.DefaultOperationMessage {
+	if entry.Message != unolog.DefaultOperationMessage {
 		t.Fatalf("expected default message, got %q", entry.Message)
 	}
 	if got := entry.ContextMap()["http.status"]; got != int64(500) {
@@ -66,8 +66,8 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 		err    error
 		want   zapcore.Level
 	}{
-		{name: "debug", mutate: func(ctx context.Context) { hc.SetLevel(ctx, hc.LevelDebug) }, want: zapcore.InfoLevel},
-		{name: "warn", mutate: func(ctx context.Context) { hc.SetLevel(ctx, hc.LevelWarn) }, want: zapcore.WarnLevel},
+		{name: "debug", mutate: func(ctx context.Context) { unolog.SetLevel(ctx, unolog.LevelDebug) }, want: zapcore.InfoLevel},
+		{name: "warn", mutate: func(ctx context.Context) { unolog.SetLevel(ctx, unolog.LevelWarn) }, want: zapcore.WarnLevel},
 	}
 
 	for _, tt := range tests {
@@ -88,10 +88,10 @@ func TestSinkWriteMapsAllKnownLevels(t *testing.T) {
 
 func TestSinkTypedFieldsAndOrder(t *testing.T) {
 	core, logs := observer.New(zapcore.DebugLevel)
-	rt := hc.MustCompile(hc.Config{Sink: New(zap.New(core)), SamplingRate: 1})
-	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
-	hc.Add(op.Context(), "s", "v", "i", 7, "b", true, "d", time.Second)
-	hc.Add(op.Context(), "k", "first", "k", "second")
+	rt := unolog.MustCompile(unolog.Config{Sink: New(gozap.New(core)), SamplingRate: 1})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "t"})
+	unolog.Add(op.Context(), "s", "v", "i", 7, "b", true, "d", time.Second)
+	unolog.Add(op.Context(), "k", "first", "k", "second")
 	op.End(nil)
 
 	entry := logs.All()[0]
@@ -114,13 +114,13 @@ func TestSinkTypedFieldsAndOrder(t *testing.T) {
 
 // TestSinkFloat32AndRawWireFidelity pins the v0 shapes: float32 renders
 // 32-bit precision (0.1, not the widened double digits); raw bytes
-// render via zap.Any (base64), never null.
+// render via gozap.Any (base64), never null.
 func TestSinkFloat32AndRawWireFidelity(t *testing.T) {
 	core, logs := observer.New(zapcore.DebugLevel)
-	rt := hc.MustCompile(hc.Config{Sink: New(zap.New(core)), SamplingRate: 1})
-	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
-	hc.Add(op.Context(), "f", float32(0.1))
-	hc.Add(op.Context(), "meta", json.RawMessage(`{"raw":true}`))
+	rt := unolog.MustCompile(unolog.Config{Sink: New(gozap.New(core)), SamplingRate: 1})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "t"})
+	unolog.Add(op.Context(), "f", float32(0.1))
+	unolog.Add(op.Context(), "meta", json.RawMessage(`{"raw":true}`))
 	op.End(nil)
 
 	ctxMap := logs.All()[0].ContextMap()
@@ -152,8 +152,8 @@ func TestSinkWriteNilSafety(t *testing.T) {
 
 func TestSinkSkipsDisabledEvent(t *testing.T) {
 	core, logs := observer.New(zapcore.WarnLevel) // debug/info disabled
-	rt := hc.MustCompile(hc.Config{Sink: New(zap.New(core)), SamplingRate: 1})
-	op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "t"})
+	rt := unolog.MustCompile(unolog.Config{Sink: New(gozap.New(core)), SamplingRate: 1})
+	op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "t"})
 	op.End(nil) // success -> info -> filtered
 
 	if logs.Len() != 0 {
@@ -163,7 +163,7 @@ func TestSinkSkipsDisabledEvent(t *testing.T) {
 
 func TestSinkConcurrentWrites(t *testing.T) {
 	core, logs := observer.New(zapcore.DebugLevel)
-	rt := hc.MustCompile(hc.Config{Sink: New(zap.New(core)), SamplingRate: 1})
+	rt := unolog.MustCompile(unolog.Config{Sink: New(gozap.New(core)), SamplingRate: 1})
 
 	var wg sync.WaitGroup
 	for w := range 8 {
@@ -171,8 +171,8 @@ func TestSinkConcurrentWrites(t *testing.T) {
 		go func(w int) {
 			defer wg.Done()
 			for i := range 100 {
-				op := hc.Start(context.Background(), rt, hc.OperationStart{Domain: hc.DomainJob, Name: "w"})
-				hc.Add(op.Context(), "w", w, "i", i)
+				op := unolog.Start(context.Background(), rt, unolog.OperationStart{Domain: unolog.DomainJob, Name: "w"})
+				unolog.Add(op.Context(), "w", w, "i", i)
 				op.End(nil)
 			}
 		}(w)

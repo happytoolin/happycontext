@@ -1,4 +1,4 @@
-package zapadapter
+package zap
 
 // goleak integration: every test in this module runs under
 // goleak.VerifyTestMain, failing the suite on any leaked goroutine.

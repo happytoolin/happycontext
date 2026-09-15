@@ -6,17 +6,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/happytoolin/happycontext"
-	sloghc "github.com/happytoolin/happycontext/adapter/slog"
+	"github.com/happytoolin/unolog"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
 )
 
 func TestSamplingCustomSampler(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	sink := sloghc.New(logger)
+	sink := uslog.New(logger)
 
 	// Create a custom sampler that keeps errors and slow requests
-	customSampler := func(in hc.SampleInput) bool {
+	customSampler := func(in unolog.SampleInput) bool {
 		// Keep all errors
 		if in.HasError || in.Code >= 500 {
 			return true
@@ -29,7 +29,7 @@ func TestSamplingCustomSampler(t *testing.T) {
 		return in.Code%10 == 0
 	}
 
-	cfg := hc.Config{
+	cfg := unolog.Config{
 		Sink:    sink,
 		Sampler: customSampler,
 		Message: "custom sampling test",
@@ -38,14 +38,14 @@ func TestSamplingCustomSampler(t *testing.T) {
 	// Test with various inputs
 	testCases := []struct {
 		name     string
-		input    hc.SampleInput
+		input    unolog.SampleInput
 		expected bool
 	}{
 		{
 			name: "error should be sampled",
-			input: hc.SampleInput{
-				Domain:   hc.DomainHTTP,
-				Outcome:  hc.OutcomeFailure,
+			input: unolog.SampleInput{
+				Domain:   unolog.DomainHTTP,
+				Outcome:  unolog.OutcomeFailure,
 				Code:     200,
 				HasError: true,
 			},
@@ -53,18 +53,18 @@ func TestSamplingCustomSampler(t *testing.T) {
 		},
 		{
 			name: "5xx error should be sampled",
-			input: hc.SampleInput{
-				Domain:  hc.DomainHTTP,
-				Outcome: hc.OutcomeFailure,
+			input: unolog.SampleInput{
+				Domain:  unolog.DomainHTTP,
+				Outcome: unolog.OutcomeFailure,
 				Code:    500,
 			},
 			expected: true,
 		},
 		{
 			name: "slow request should be sampled",
-			input: hc.SampleInput{
-				Domain:   hc.DomainHTTP,
-				Outcome:  hc.OutcomeSuccess,
+			input: unolog.SampleInput{
+				Domain:   unolog.DomainHTTP,
+				Outcome:  unolog.OutcomeSuccess,
 				Code:     200,
 				Duration: 150 * time.Millisecond,
 			},
