@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/gofiber/fiber/v3 v3.0.0-rc.3
-	github.com/happytoolin/unolog v0.5.0 // x-release-please-version
+	github.com/happytoolin/unolog v1.0.0 // x-release-please-version
 )
 
 require (
