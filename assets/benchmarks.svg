@@ -1,0 +1,48 @@
+<svg width="1200" height="600" viewBox="0 0 1200 600" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Logger alone vs logger with unolog</title>
+  <desc id="desc">Same 12 fields, output discarded: slog, zap, and zerolog alone, and the same loggers end to end through unolog. Base bars are the logger-alone floor; the mint cap is what unolog adds.</desc>
+  <rect width="1200" height="600" fill="#0A0C10"/>
+
+  <text x="60" y="78" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="28" font-weight="700" fill="#F4F6F8">Logger alone vs logger + unolog</text>
+  <text x="60" y="108" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" fill="#8B94A1">Same 12 fields, output discarded · Apple M4 · Go 1.27 · lower is better.</text>
+
+  <rect x="880" y="91" width="12" height="12" rx="3" fill="#4A5568"/>
+  <text x="900" y="101" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#8B94A1">logger alone</text>
+  <rect x="1020" y="91" width="12" height="12" rx="3" fill="#7CFFB2"/>
+  <text x="1040" y="101" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12.5" fill="#8B94A1">unolog added</text>
+
+  <rect x="60" y="140" width="1080" height="410" rx="14" fill="#10151C" stroke="#1B222B"/>
+  <line x1="100" y1="480" x2="1100" y2="480" stroke="#1B222B"/>
+
+  <!-- slog: alone 1175 (+ unolog 451) = 1626 -->
+  <path d="M285 265 h110 v207 a8 8 0 0 1 -8 8 h-94 a8 8 0 0 1 -8 -8 z" fill="#4A5568"/>
+  <text x="340" y="376" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="11.5" fill="#E6EBF1">1175 ns</text>
+  <path d="M285 190 a8 8 0 0 1 8 -8 h94 a8 8 0 0 1 8 8 v75 h-110 z" fill="#7CFFB2"/>
+  <text x="340" y="228" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="12" font-weight="700" fill="#0A0C10">+451 ns</text>
+  <text x="340" y="158" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="12" fill="#F4F6F8">1626 ns</text>
+  <text x="340" y="173" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="10.5" fill="#6F7885">5 allocs</text>
+  <text x="340" y="514" text-anchor="middle" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#C5CDD8">slog · JSON</text>
+  <text x="340" y="538" text-anchor="middle" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" fill="#7CFFB2">+38%</text>
+
+  <!-- zap: alone 925 (+ unolog 710) = 1635 -->
+  <path d="M575 311 h110 v161 a8 8 0 0 1 -8 8 h-94 a8 8 0 0 1 -8 -8 z" fill="#4A5568"/>
+  <text x="630" y="399" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="11.5" fill="#E6EBF1">925 ns</text>
+  <path d="M575 188 a8 8 0 0 1 8 -8 h94 a8 8 0 0 1 8 8 v123 h-110 z" fill="#7CFFB2"/>
+  <text x="630" y="250" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="12" font-weight="700" fill="#0A0C10">+710 ns</text>
+  <text x="630" y="156" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="12" fill="#F4F6F8">1635 ns</text>
+  <text x="630" y="171" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="10.5" fill="#6F7885">5 allocs</text>
+  <text x="630" y="514" text-anchor="middle" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#C5CDD8">zap · JSON</text>
+  <text x="630" y="538" text-anchor="middle" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" fill="#7CFFB2">+77%</text>
+
+  <!-- zerolog: alone 245 (+ unolog 830) = 1075 -->
+  <path d="M865 436 h110 v36 a8 8 0 0 1 -8 8 h-94 a8 8 0 0 1 -8 -8 z" fill="#4A5568"/>
+  <text x="920" y="462" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="11.5" fill="#E6EBF1">245 ns</text>
+  <path d="M865 291 a8 8 0 0 1 8 -8 h94 a8 8 0 0 1 8 8 v145 h-110 z" fill="#7CFFB2"/>
+  <text x="920" y="364" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="12" font-weight="700" fill="#0A0C10">+830 ns</text>
+  <text x="920" y="259" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="12" fill="#F4F6F8">1075 ns</text>
+  <text x="920" y="274" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="10.5" fill="#6F7885">4 allocs</text>
+  <text x="920" y="514" text-anchor="middle" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#C5CDD8">zerolog</text>
+  <text x="920" y="538" text-anchor="middle" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" fill="#7CFFB2">+339%</text>
+
+  <text x="60" y="580" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" fill="#5B6472">Means of 50 runs (.bench/v2-bridges, Sep 2026). Mint is unolog's end-to-end share on top of each logger's own floor — core, bridge, and encoding for one reusable record.</text>
+</svg>

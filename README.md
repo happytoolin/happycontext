@@ -299,6 +299,69 @@ The wire format matches `zerolog.New(w).With().Timestamp().Logger()`
 through `adapter/zerolog`, so existing pipelines ingest it unchanged.
 Field order is insertion order — deterministic by construction, identical across every sink.
 
+## Performance
+
+Per-line loggers charge you per line: format, allocate, write — on every
+request, whether the line is kept or not. unolog has a different cost shape.
+Fields accumulate in a typed write-ahead log while the request runs; one record
+is materialized at `End`, sampled once, and handed to every sink. Nothing is
+formatted per line, and a sampled-out request never builds a record at all.
+
+![unolog benchmarks](./assets/benchmarks.svg)
+
+Logging the same 12 fields to a discarded output — each logger alone, and the
+same logger end to end through unolog (Apple M4 / Go 1.27, means of 50 runs):
+
+| Logger | alone | + unolog | added | allocs |
+|---|---:|---:|---:|---:|
+| `slog` JSON | 1175 ns | 1626 ns | +451 ns (+38%) | 1 → 5 |
+| `zap` JSON | 925 ns | 1635 ns | +710 ns (+77%) | 1 → 5 |
+| `zerolog` | 245 ns | 1075 ns | +830 ns (+339%) | 0 → 4 |
+
+That added slice is the entire unolog cost — `Start`, 12 `Add`s, one sampling
+decision, bridge, encode — and it buys a single reusable record that every sink
+and adapter shares. Your logger keeps doing its own work; unolog just never
+formats per line. With routing in the picture the shape flips: one unolog event
+through the std middleware costs 360 ns, less than one `slog` JSON line at
+520 ns, and a sampled-out request costs 141 ns with zero allocations.
+
+Then the unolog paths alone (`Start → Add ×12 → End → sink`, no router):
+
+| Path | ns/op | allocs/op |
+|---|---:|---:|
+| core only, discard sink | 277 | 2 |
+| first-party JSON sink, 12 fields | 879 | 4 |
+| zerolog adapter, 12 fields | 1075 | 4 |
+| slog adapter, 12 fields | 1626 | 5 |
+| zap adapter, 12 fields | 1635 | 5 |
+
+What that means:
+
+- The core pipeline is ~0.14–0.28 µs with two allocations; everything to its
+  right is the sink or host logger doing its own work.
+- **Sampled-out requests cost 141 ns and zero allocations** — less than most
+  loggers spend formatting a single line. Health traffic is effectively free.
+- Sampling runs before any sink work, and errors/panics bypass sampling
+  structurally — the cheap path can never hide a failure.
+- Twelve fields ride on one typed WAL slice: `Add` does not box per field, the
+  record is encoded once, and every sink and adapter reads that same record.
+- Adapters add no allocations of their own; their rows are mostly the host
+  logger's own encoding cost.
+
+Run the suites yourself:
+
+```bash
+just bench           # everything
+just bench-core      # lifecycle, sampler, WAL, encoder
+just bench-routers   # std, gin, echo, fiber, fiberv3
+just bench-adapters  # slog, zap, zerolog bridges
+```
+
+The head-to-head runs the logger directly in the handler and unolog through its
+std middleware on the same route with the same fields, both discarding output —
+no strawman baselines. `just bench` reproduces every suite; the 1.0.0
+performance gates and method notes live in [`V2_DESIGN.md`](./V2_DESIGN.md) §4.
+
 ## More Examples
 
 <details>
