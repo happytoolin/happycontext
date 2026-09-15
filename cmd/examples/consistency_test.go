@@ -14,22 +14,22 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gofiber/fiber/v2"
+	recoverv2 "github.com/gofiber/fiber/v2/middleware/recover"
+	fiberv3 "github.com/gofiber/fiber/v3"
+	recoverv3 "github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/happytoolin/unolog"
+	uslog "github.com/happytoolin/unolog/adapter/slog"
+	uzap "github.com/happytoolin/unolog/adapter/zap"
+	uzerolog "github.com/happytoolin/unolog/adapter/zerolog"
+	uecho "github.com/happytoolin/unolog/integration/echo"
+	ufiber "github.com/happytoolin/unolog/integration/fiber"
+	ufiberv3 "github.com/happytoolin/unolog/integration/fiberv3"
+	ugin "github.com/happytoolin/unolog/integration/gin"
 	"github.com/happytoolin/unolog/integration/std"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	fiberv3 "github.com/gofiber/fiber/v3"
-	recoverv2 "github.com/gofiber/fiber/v2/middleware/recover"
-	recoverv3 "github.com/gofiber/fiber/v3/middleware/recover"
-	uecho "github.com/happytoolin/unolog/integration/echo"
-	ufiber "github.com/happytoolin/unolog/integration/fiber"
-	ufiberv3 "github.com/happytoolin/unolog/integration/fiberv3"
-	ugin "github.com/happytoolin/unolog/integration/gin"
-	uslog "github.com/happytoolin/unolog/adapter/slog"
-	uzap "github.com/happytoolin/unolog/adapter/zap"
-	uzerolog "github.com/happytoolin/unolog/adapter/zerolog"
 )
 
 // Cross-bridge wire reality: the std middleware driven by the same
@@ -39,8 +39,6 @@ import (
 // agree on the canonical fields for identical requests. (The envelope
 // member names differ per host — msg/message — but the canonical and
 // user fields are shared, which is exactly the parity that matters.)
-
-
 
 var wireCases = []struct {
 	request   string

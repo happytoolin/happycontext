@@ -2,13 +2,12 @@ package json
 
 import (
 	"bytes"
+	stdjson "encoding/json"
 	"math"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
-	stdjson "encoding/json"
-
 )
 
 // float64Tests and float32Tests are ported from zerolog v1.35.0's
