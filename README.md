@@ -1,7 +1,6 @@
 # unolog
 
-> **This branch is a snapshot at v1.0.0.** Development and future
-> releases continue on [`v2`](https://github.com/happytoolin/unolog/tree/v2).
+> Snapshot of v1.0.0 — development continues on [`v2`](https://github.com/happytoolin/unolog/tree/v2).
 
 ![unolog banner](./assets/og-image.svg)
 
