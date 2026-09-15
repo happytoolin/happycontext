@@ -22,6 +22,7 @@ package unolog
 //      (M was the ad-hoc live-chaos runs; intentionally not a file here)
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -394,6 +395,46 @@ type retainingSink struct {
 func (r *retainingSink) Write(_ context.Context, rec *Record) {
 	rec.Encoded() // cache the bytes while the record is valid
 	r.records = append(r.records, rec)
+}
+
+// TestCrashRetainedEncodedSliceIsStable pins the strongest form of the
+// recycling guarantee: the []byte handed out during Write keeps its
+// bytes even after the record's event has been recycled and hundreds of
+// other events have been encoded. Reusing a pooled encode buffer would
+// fail this — the inline encoded buffer is deliberately per record.
+func TestCrashRetainedEncodedSliceIsStable(t *testing.T) {
+	retain := &sliceRetainingSink{}
+	rt := MustCompile(Config{Sink: retain, SamplingRate: 1})
+
+	for i := range 300 {
+		op := Start(context.Background(), rt, OperationStart{Domain: DomainJob, Name: "j"})
+		Add(op.Context(), "seq", i)
+		_ = op.End(nil)
+	}
+	if len(retain.entries) != 300 {
+		t.Fatalf("records = %d, want 300", len(retain.entries))
+	}
+	for i, e := range retain.entries {
+		if !bytes.Equal(e.retained, e.want) {
+			t.Fatalf("record %d retained slice mutated after recycling:\n got %s\nwant %s", i, e.retained, e.want)
+		}
+		if got := e.rec.Encoded(); !bytes.Equal(got, e.want) {
+			t.Fatalf("record %d re-encode drifted:\n got %s\nwant %s", i, got, e.want)
+		}
+	}
+}
+
+type retainedLine struct {
+	rec      *Record
+	retained []byte // the slice handed out during Write
+	want     []byte // its snapshot at that moment
+}
+
+type sliceRetainingSink struct{ entries []retainedLine }
+
+func (s *sliceRetainingSink) Write(_ context.Context, rec *Record) {
+	b := rec.Encoded()
+	s.entries = append(s.entries, retainedLine{rec: rec, retained: b, want: bytes.Clone(b)})
 }
 
 // One immutable Runtime shared by concurrent operations across every

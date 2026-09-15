@@ -23,7 +23,17 @@ type Record struct {
 	encoded atomic.Pointer[encodedLine]
 }
 
-type encodedLine struct{ b []byte }
+// encodedInline covers the canonical line for the common ≤12-field
+// event in the record's own node, so the encoder usually allocates one
+// object instead of two. Wider or unusually long lines still grow into
+// their own buffer. The node is never shared between records, so
+// retained bytes keep satisfying the recycling guarantee.
+const encodedInline = 448
+
+type encodedLine struct {
+	b   []byte
+	arr [encodedInline]byte
+}
 
 // Level returns the final severity.
 func (r *Record) Level() Level { return r.level }
@@ -65,7 +75,8 @@ func (r *Record) Encoded() []byte {
 	if e := r.encoded.Load(); e != nil {
 		return e.b
 	}
-	e := &encodedLine{b: r.encode()}
+	e := &encodedLine{}
+	e.b = r.encodeInto(e.arr[:0])
 	// The winner's publish wins the CAS; losers return the same buffer.
 	if !r.encoded.CompareAndSwap(nil, e) {
 		return r.encoded.Load().b
@@ -76,12 +87,17 @@ func (r *Record) Encoded() []byte {
 // encode builds the canonical line: level prefix, fields (deduped
 // last-write-wins), RFC3339 completion time, message — the exact field
 // order and shapes the v0.6 zerolog-parity JSON sink established.
-func (r *Record) encode() []byte {
+func (r *Record) encodeInto(b []byte) []byte {
 	// 96 covers the envelope (level + time + message ≈ 82 bytes at
 	// minimum); 24/field covers the common short-key/value shapes
 	// without a grow-and-copy (measured: the old 64-byte base forced
-	// one growth on every ≤12-field event).
-	b := make([]byte, 0, 96+len(r.fields)*24)
+	// one growth on every ≤12-field event). A line that outgrows the
+	// record's inline array falls back to a freshly sized buffer.
+	if need := 96 + len(r.fields)*24; cap(b) < need {
+		b = make([]byte, 0, need)
+	} else {
+		b = b[:0]
+	}
 	b = append(b, jsonLevelPrefix(r.level)...)
 	fields := r.fields
 	if needsFieldAliasing(fields) {
@@ -121,8 +137,9 @@ func aliasedFieldKey(key string) string {
 // needsFieldAliasing reports whether any field key collides with the
 // envelope.
 func needsFieldAliasing(fields []Field) bool {
-	for _, f := range fields {
-		if _, ok := aliasKey[f.key]; ok {
+	for i := range fields {
+		switch fields[i].key {
+		case "message", "time", "level":
 			return true
 		}
 	}
@@ -148,17 +165,37 @@ func aliasFields(fields []Field) []Field {
 // (pinned by the golden parity tests).
 const dedupeScanLimit = wire.NarrowLimit
 
+// keyDigest is a cheap, collision-tolerant fingerprint of a field key:
+// length plus three bytes. It only short-circuits the dedupe scan — a
+// digest hit still goes through the full string comparison — so any
+// collision is a (small) slowdown, never a behavior change.
+func keyDigest(key string) uint64 {
+	n := len(key)
+	if n == 0 {
+		return 0
+	}
+	return uint64(n)<<32 | uint64(key[0])<<16 | uint64(key[n-1])<<8 | uint64(key[n/2])
+}
+
 // appendDedupedFields emits each key once — its last value, at its last
 // position (amendment 3). Narrow events use the allocation-free scan;
 // wide events track seen keys in a stack array and fall back to a map
 // past its capacity, so allocation is tied to genuinely wide events.
 func appendDedupedFields(dst []byte, fields []Field) []byte {
 	if len(fields) <= dedupeScanLimit {
+		// The last-occurrence scan compares a cheap key digest first and
+		// only falls back to the full string compare on a digest hit, so
+		// digest collisions stay correct. Unique keys — the common case —
+		// never touch memequal.
+		var digests [dedupeScanLimit]uint64
+		for i := range fields {
+			digests[i] = keyDigest(fields[i].key)
+		}
 		for i := range fields {
 			f := fields[i]
 			last := true
 			for j := i + 1; j < len(fields); j++ {
-				if fields[j].key == f.key {
+				if digests[j] == digests[i] && fields[j].key == f.key {
 					last = false
 					break
 				}
