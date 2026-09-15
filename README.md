@@ -310,36 +310,40 @@ formatted per line, and a sampled-out request never builds a record at all.
 ![unolog benchmarks](./assets/benchmarks.svg)
 
 Logging the same 12 fields to a discarded output — each logger alone, and the
-same logger end to end through unolog (Apple M4 / Go 1.27, means of 50 runs):
+same logger end to end through unolog (Apple M4 / Go 1.27, means of 25 runs in
+one session):
 
 | Logger | alone | + unolog | added | allocs |
 |---|---:|---:|---:|---:|
-| `slog` JSON | 1175 ns | 1626 ns | +451 ns (+38%) | 1 → 5 |
-| `zap` JSON | 925 ns | 1635 ns | +710 ns (+77%) | 1 → 5 |
-| `zerolog` | 245 ns | 1075 ns | +830 ns (+339%) | 0 → 4 |
+| `slog` JSON | 801 ns | 1752 ns | +951 ns (+119%) | 1 → 4 |
+| `zap` JSON | 609 ns | 1589 ns | +980 ns (+161%) | 1 → 4 |
+| `zerolog` | 197 ns | 716 ns | +519 ns (+263%) | 0 → 3 |
 
 That added slice is the entire unolog cost — `Start`, 12 `Add`s, one sampling
 decision, bridge, encode — and it buys a single reusable record that every sink
 and adapter shares. Your logger keeps doing its own work; unolog just never
 formats per line. With routing in the picture the shape flips: one unolog event
-through the std middleware costs 360 ns, less than one `slog` JSON line at
-520 ns, and a sampled-out request costs 141 ns with zero allocations.
+through the std middleware costs 341 ns, less than one `slog` JSON line at
+486 ns, and a sampled-out request costs 123 ns with zero allocations.
+
+Compare pairs within a session: host-logger floors drift a few percent between
+recordings, so re-measure both rows together rather than mixing runs.
 
 Then the unolog paths alone (`Start → Add ×12 → End → sink`, no router):
 
 | Path | ns/op | allocs/op |
 |---|---:|---:|
-| core only, discard sink | 277 | 2 |
-| first-party JSON sink, 12 fields | 879 | 4 |
-| zerolog adapter, 12 fields | 1075 | 4 |
-| slog adapter, 12 fields | 1626 | 5 |
-| zap adapter, 12 fields | 1635 | 5 |
+| core only, discard sink | 255 | 2 |
+| first-party JSON sink, 12 fields | 704 | 3 |
+| zerolog adapter, 12 fields | 716 | 3 |
+| zap adapter, 12 fields | 1589 | 4 |
+| slog adapter, 12 fields | 1752 | 4 |
 
 What that means:
 
-- The core pipeline is ~0.14–0.28 µs with two allocations; everything to its
+- The core pipeline is ~0.12–0.26 µs with two allocations; everything to its
   right is the sink or host logger doing its own work.
-- **Sampled-out requests cost 141 ns and zero allocations** — less than most
+- **Sampled-out requests cost 123 ns and zero allocations** — less than most
   loggers spend formatting a single line. Health traffic is effectively free.
 - Sampling runs before any sink work, and errors/panics bypass sampling
   structurally — the cheap path can never hide a failure.
